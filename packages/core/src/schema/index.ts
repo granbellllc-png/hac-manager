@@ -50,3 +50,9 @@ export {
 } from './json-schema.js';
 export { renderConfigReference } from './reference.js';
 export { schemaToRows, type Row as ReferenceRow } from './reference.js';
+export {
+  exportSchemas,
+  renderModelineDocs,
+  type SchemaExportOptions,
+  type SchemaExportResult,
+} from './export.js';

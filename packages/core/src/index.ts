@@ -38,3 +38,4 @@ export * from './data-dir/index.js';
 export * from './merge/index.js';
 export * from './expr/index.js';
 export * from './tags/index.js';
+export * from './validate/index.js';
