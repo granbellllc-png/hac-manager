@@ -36,3 +36,4 @@ export * from './schema/index.js';
 export * from './yaml/index.js';
 export * from './data-dir/index.js';
 export * from './merge/index.js';
+export * from './expr/index.js';
