@@ -149,8 +149,9 @@ export class Evaluator {
               return -Number(val);
             case '+':
               return +Number(val);
+            default:
+              return undefined;
           }
-          break;
         }
 
         case 'binary': {
@@ -199,8 +200,9 @@ export class Evaluator {
               return (left as number) > (right as number);
             case '>=':
               return (left as number) >= (right as number);
+            default:
+              return undefined;
           }
-          break;
         }
 
         case 'conditional': {
