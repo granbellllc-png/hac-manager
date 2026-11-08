@@ -171,6 +171,19 @@ export const usersModule: FastifyPluginAsync<UsersPluginOptions> = async (
         user.id,
       );
 
+      await repos.auditLogs.append({
+        userId: request.user?.id,
+        username: request.user?.username,
+        action: 'user.create',
+        reason: 'manual',
+        diff: {
+          createdUserId: user.id,
+          username: user.username,
+          role: user.role,
+          grantedHosts: Array.from(assignedHosts),
+        },
+      });
+
       return reply.status(201).send({
         id: user.id,
         username: user.username,
@@ -246,6 +259,19 @@ export const usersModule: FastifyPluginAsync<UsersPluginOptions> = async (
       const updated = (await repos.users.getById(id))!;
       const assignedHosts = await repos.userHostAccess.getGrantedHostIds(id);
 
+      await repos.auditLogs.append({
+        userId: request.user?.id,
+        username: request.user?.username,
+        action: 'user.update',
+        reason: 'manual',
+        diff: {
+          updatedUserId: id,
+          role: updated.role,
+          autoGrantNewHosts: updated.autoGrantNewHosts,
+          grantedHosts: Array.from(assignedHosts),
+        },
+      });
+
       return {
         id: updated.id,
         username: updated.username,
@@ -313,6 +339,14 @@ export const usersModule: FastifyPluginAsync<UsersPluginOptions> = async (
         });
       }
 
+      await repos.auditLogs.append({
+        userId: request.user?.id,
+        username: request.user?.username,
+        action: 'user.delete',
+        reason: 'manual',
+        diff: { deletedUserId: id },
+      });
+
       return { message: 'User deleted successfully' };
     },
   );
@@ -363,6 +397,14 @@ export const usersModule: FastifyPluginAsync<UsersPluginOptions> = async (
       await repos.users.setTotpEnabled(id, false);
       await repos.users.setTotpSecret(id, null);
       await repos.recoveryCodes.deleteByUser(id);
+
+      await repos.auditLogs.append({
+        userId: request.user?.id,
+        username: request.user?.username,
+        action: 'user.totp_reset',
+        reason: 'manual',
+        diff: { targetUserId: id },
+      });
 
       return { message: 'Two-factor authentication reset successfully' };
     },

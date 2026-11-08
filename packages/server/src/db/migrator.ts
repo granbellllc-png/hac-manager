@@ -46,6 +46,20 @@ export const initialMigration: Migration = {
         created_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        username TEXT,
+        host_id TEXT,
+        vmid INTEGER,
+        action TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        job_id TEXT,
+        diff_json TEXT,
+        metadata_json TEXT,
+        created_at INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS user_host_access (
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         host_id TEXT NOT NULL,
@@ -69,6 +83,11 @@ export const initialMigration: Migration = {
       CREATE INDEX IF NOT EXISTS idx_user_host_access_user_id ON user_host_access(user_id);
       CREATE INDEX IF NOT EXISTS idx_user_host_access_host_id ON user_host_access(host_id);
       CREATE INDEX IF NOT EXISTS idx_recovery_codes_user_id ON recovery_codes(user_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_host_id ON audit_logs(host_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_vmid ON audit_logs(vmid);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_reason ON audit_logs(reason);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
     `);
   },
 };
@@ -102,9 +121,36 @@ export const totpMigration: Migration = {
   },
 };
 
+export const auditLogsMigration: Migration = {
+  id: '0003_audit_logs',
+  up: (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        username TEXT,
+        host_id TEXT,
+        vmid INTEGER,
+        action TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        job_id TEXT,
+        diff_json TEXT,
+        metadata_json TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_host_id ON audit_logs(host_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_vmid ON audit_logs(vmid);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_reason ON audit_logs(reason);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+    `);
+  },
+};
+
 export const allMigrations: readonly Migration[] = [
   initialMigration,
   totpMigration,
+  auditLogsMigration,
 ];
 
 export function runMigrations(

@@ -62,6 +62,29 @@ export const sessionsTable = sqliteTable('sessions', {
   userAgent: text('user_agent'),
 });
 
+export const auditLogsTable = sqliteTable('audit_logs', {
+  id: text('id').primaryKey(),
+  userId: text('user_id'),
+  username: text('username'),
+  hostId: text('host_id'),
+  vmid: integer('vmid'),
+  action: text('action').notNull(),
+  reason: text('reason', {
+    enum: [
+      'manual',
+      'drift_push',
+      'drift_pull',
+      'schedule',
+      'conflict_resolution',
+      'orphan_action',
+    ],
+  }).notNull(),
+  jobId: text('job_id'),
+  diffJson: text('diff_json'),
+  metadataJson: text('metadata_json'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
 export const migrationsTable = sqliteTable('__hacm_migrations', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull().unique(),
@@ -82,6 +105,9 @@ export type InsertUserHostAccessRow = typeof userHostAccessTable.$inferInsert;
 
 export type RecoveryCodeRow = typeof recoveryCodesTable.$inferSelect;
 export type InsertRecoveryCodeRow = typeof recoveryCodesTable.$inferInsert;
+
+export type AuditLogRow = typeof auditLogsTable.$inferSelect;
+export type InsertAuditLogRow = typeof auditLogsTable.$inferInsert;
 
 export type SessionRow = typeof sessionsTable.$inferSelect;
 export type InsertSessionRow = typeof sessionsTable.$inferInsert;

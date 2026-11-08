@@ -1,6 +1,7 @@
-import { eq, lte, and, isNull } from 'drizzle-orm';
+import { eq, lte, gte, and, isNull, inArray, desc, asc } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { randomUUID } from 'node:crypto';
+import { sanitizeAuditPayload } from '@hacm/core';
 import * as schema from '../schema.js';
 import { verifyRecoveryCodeMatch } from '../../auth/totp.js';
 import type {
@@ -8,6 +9,9 @@ import type {
   SettingsRepository,
   HostsCacheRepository,
   RecoveryCodesRepository,
+  AuditLogsRepository,
+  CreateAuditInput,
+  AuditFilter,
   SessionsRepository,
 } from './types.js';
 
@@ -358,12 +362,121 @@ export function createSqliteRepositories(
     },
   };
 
+  const auditLogs: AuditLogsRepository = {
+    async append(input: CreateAuditInput) {
+      const now = input.createdAt ?? new Date();
+      const id = input.id ?? randomUUID();
+
+      const sanitizedDiff =
+        input.diff !== undefined ? sanitizeAuditPayload(input.diff) : undefined;
+      const sanitizedMeta =
+        input.metadata !== undefined
+          ? sanitizeAuditPayload(input.metadata)
+          : undefined;
+
+      const diffJson =
+        sanitizedDiff !== undefined ? JSON.stringify(sanitizedDiff) : null;
+      const metadataJson =
+        sanitizedMeta !== undefined ? JSON.stringify(sanitizedMeta) : null;
+
+      const row: schema.InsertAuditLogRow = {
+        id,
+        userId: input.userId ?? null,
+        username: input.username ?? null,
+        hostId: input.hostId ?? null,
+        vmid: input.vmid ?? null,
+        action: input.action,
+        reason: input.reason,
+        jobId: input.jobId ?? null,
+        diffJson,
+        metadataJson,
+        createdAt: now,
+      };
+
+      db.insert(schema.auditLogsTable).values(row).run();
+      return row as schema.AuditLogRow;
+    },
+    async getById(id: string) {
+      const row = db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.id, id))
+        .get();
+      return row ?? null;
+    },
+    async search(filter: AuditFilter) {
+      const conditions = [];
+
+      if (filter.userId) {
+        conditions.push(eq(schema.auditLogsTable.userId, filter.userId));
+      }
+      if (filter.username) {
+        conditions.push(eq(schema.auditLogsTable.username, filter.username));
+      }
+      if (filter.hostId) {
+        conditions.push(eq(schema.auditLogsTable.hostId, filter.hostId));
+      } else if (filter.hostIds && filter.hostIds.length > 0) {
+        conditions.push(
+          inArray(schema.auditLogsTable.hostId, filter.hostIds as string[]),
+        );
+      }
+      if (filter.vmid !== undefined) {
+        conditions.push(eq(schema.auditLogsTable.vmid, filter.vmid));
+      }
+      if (filter.action) {
+        conditions.push(eq(schema.auditLogsTable.action, filter.action));
+      }
+      if (filter.reason) {
+        conditions.push(eq(schema.auditLogsTable.reason, filter.reason));
+      }
+      if (filter.from !== undefined) {
+        const fromDate =
+          typeof filter.from === 'number' ? new Date(filter.from) : filter.from;
+        conditions.push(gte(schema.auditLogsTable.createdAt, fromDate));
+      }
+      if (filter.to !== undefined) {
+        const toDate =
+          typeof filter.to === 'number' ? new Date(filter.to) : filter.to;
+        conditions.push(lte(schema.auditLogsTable.createdAt, toDate));
+      }
+
+      const whereClause =
+        conditions.length > 0 ? and(...conditions) : undefined;
+
+      const totalRows = db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(whereClause)
+        .all();
+      const total = totalRows.length;
+
+      const orderFn = filter.order === 'asc' ? asc : desc;
+      const limit = filter.limit ?? 50;
+      const offset = filter.offset ?? 0;
+
+      const items = db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(whereClause)
+        .orderBy(orderFn(schema.auditLogsTable.createdAt))
+        .limit(limit)
+        .offset(offset)
+        .all();
+
+      return {
+        items,
+        total,
+      };
+    },
+  };
+
   return {
     settings,
     hostsCache,
     users,
     userHostAccess,
     recoveryCodes,
+    auditLogs,
     sessions,
   };
 }

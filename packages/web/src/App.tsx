@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router-dom';
 import { Layout } from './components/layout';
 import { navItems } from './nav';
 import { PlaceholderPage } from './pages/placeholder';
+import { AuditPage } from './pages/audit';
 
 export function App() {
   return (
@@ -11,7 +12,13 @@ export function App() {
           <Route
             key={item.path}
             path={item.path}
-            element={<PlaceholderPage item={item} />}
+            element={
+              item.path === '/audit' ? (
+                <AuditPage />
+              ) : (
+                <PlaceholderPage item={item} />
+              )
+            }
           />
         ))}
         <Route

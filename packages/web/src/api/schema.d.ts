@@ -427,6 +427,177 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Search audit logs with optional filters and pagination (RBAC scoped) */
+        get: {
+            parameters: {
+                query?: {
+                    userId?: string;
+                    username?: string;
+                    hostId?: string;
+                    vmid?: number;
+                    action?: string;
+                    reason?: "manual" | "drift_push" | "drift_pull" | "schedule" | "conflict_resolution" | "orphan_action";
+                    from?: number;
+                    to?: number;
+                    limit?: number;
+                    offset?: number;
+                    order?: "asc" | "desc";
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: {
+                                id: string;
+                                userId: string | null;
+                                username: string | null;
+                                hostId: string | null;
+                                vmid: number | null;
+                                action: string;
+                                /** @enum {string} */
+                                reason: "manual" | "drift_push" | "drift_pull" | "schedule" | "conflict_resolution" | "orphan_action";
+                                jobId: string | null;
+                                diffJson: string | null;
+                                metadataJson: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                            }[];
+                            total: number;
+                            limit: number;
+                            offset: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audit/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Get a single audit log entry by ID */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            userId: string | null;
+                            username: string | null;
+                            hostId: string | null;
+                            vmid: number | null;
+                            action: string;
+                            /** @enum {string} */
+                            reason: "manual" | "drift_push" | "drift_pull" | "schedule" | "conflict_resolution" | "orphan_action";
+                            jobId: string | null;
+                            diffJson: string | null;
+                            metadataJson: string | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/status": {
         parameters: {
             query?: never;

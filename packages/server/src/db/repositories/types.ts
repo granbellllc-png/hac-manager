@@ -7,6 +7,7 @@ import type {
   SessionRow,
   InsertSessionRow,
   RecoveryCodeRow,
+  AuditLogRow,
 } from '../schema.js';
 
 export interface SettingsRepository {
@@ -66,11 +67,60 @@ export interface SessionsRepository {
   deleteByUserId(userId: string): Promise<number>;
 }
 
+export type AuditReason =
+  | 'manual'
+  | 'drift_push'
+  | 'drift_pull'
+  | 'schedule'
+  | 'conflict_resolution'
+  | 'orphan_action';
+
+export interface CreateAuditInput {
+  readonly id?: string | undefined;
+  readonly userId?: string | null | undefined;
+  readonly username?: string | null | undefined;
+  readonly hostId?: string | null | undefined;
+  readonly vmid?: number | null | undefined;
+  readonly action: string;
+  readonly reason: AuditReason;
+  readonly jobId?: string | null | undefined;
+  readonly diff?: unknown;
+  readonly metadata?: unknown;
+  readonly createdAt?: Date | undefined;
+}
+
+export interface AuditFilter {
+  readonly userId?: string | undefined;
+  readonly username?: string | undefined;
+  readonly hostId?: string | undefined;
+  readonly hostIds?: readonly string[] | undefined;
+  readonly vmid?: number | undefined;
+  readonly action?: string | undefined;
+  readonly reason?: AuditReason | undefined;
+  readonly from?: Date | number | undefined;
+  readonly to?: Date | number | undefined;
+  readonly limit?: number | undefined;
+  readonly offset?: number | undefined;
+  readonly order?: 'asc' | 'desc' | undefined;
+}
+
+export interface AuditSearchResult {
+  readonly items: readonly AuditLogRow[];
+  readonly total: number;
+}
+
+export interface AuditLogsRepository {
+  append(input: CreateAuditInput): Promise<AuditLogRow>;
+  search(filter: AuditFilter): Promise<AuditSearchResult>;
+  getById(id: string): Promise<AuditLogRow | null>;
+}
+
 export interface DatabaseRepositories {
   readonly settings: SettingsRepository;
   readonly hostsCache: HostsCacheRepository;
   readonly users: UsersRepository;
   readonly userHostAccess: UserHostAccessRepository;
   readonly recoveryCodes: RecoveryCodesRepository;
+  readonly auditLogs: AuditLogsRepository;
   readonly sessions: SessionsRepository;
 }
