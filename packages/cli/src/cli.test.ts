@@ -81,6 +81,53 @@ describe('CLI hacm', () => {
     expect(existsSync(resolve(tempSchemasDir, 'host.schema.json'))).toBe(true);
   });
 
+  it('scaffolds a new data directory with init and validates it', async () => {
+    const tempInitDir = resolve(__dirname, '../dist/temp-init');
+    if (existsSync(tempInitDir)) {
+      rmSync(tempInitDir, { recursive: true, force: true });
+    }
+
+    try {
+      // First run: creates files
+      const initCode = await runCli([
+        'init',
+        '--data-dir',
+        tempInitDir,
+        '--host',
+        'pve-cli',
+      ]);
+      expect(initCode).toBe(0);
+      expect(stdoutBuffer).toContain('Scaffolded HAC Manager data directory');
+      expect(existsSync(resolve(tempInitDir, 'hosts/pve-cli/host.yaml'))).toBe(
+        true,
+      );
+
+      // Validate newly scaffolded repo
+      const validateCode = await runCli([
+        'validate',
+        '--data-dir',
+        tempInitDir,
+      ]);
+      expect(validateCode).toBe(0);
+
+      // Second run: idempotent (skips)
+      stdoutBuffer = '';
+      const secondInitCode = await runCli([
+        'init',
+        '--data-dir',
+        tempInitDir,
+        '--host',
+        'pve-cli',
+      ]);
+      expect(secondInitCode).toBe(0);
+      expect(stdoutBuffer).toContain('skipped (already exists)');
+    } finally {
+      if (existsSync(tempInitDir)) {
+        rmSync(tempInitDir, { recursive: true, force: true });
+      }
+    }
+  });
+
   it('returns error code for unknown command', async () => {
     const code = await runCli(['unknown-command']);
     expect(code).toBe(1);

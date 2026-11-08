@@ -1,5 +1,6 @@
-import { runValidate } from './commands/validate.js';
+import { runInit } from './commands/init.js';
 import { runSchemaExport } from './commands/schema.js';
+import { runValidate } from './commands/validate.js';
 
 export function printHelp(): void {
   process.stdout.write(`hacm - Homelab as Code Manager CLI
@@ -8,8 +9,16 @@ Usage:
   hacm <command> [options]
 
 Commands:
+  init                     Scaffold a new data directory with layout and gitignore
   validate                 Validate data directory schemas, merge, tags and layout
   schema export            Export JSON Schemas and document yaml-language-server modeline
+
+Init Options:
+  -d, --data-dir <path>    Path to directory to scaffold (defaults to current directory)
+  --host <id>              First host identifier (default: pve-01)
+  --host-name <name>       First host display name
+  --host-ip <ip>           First host IP or hostname (default: 192.0.2.10)
+  --json                   Output machine-readable JSON
 
 Validate Options:
   -d, --data-dir <path>    Path to data directory (defaults to HACM_DATA_DIR or current directory)
@@ -39,6 +48,39 @@ export async function runCli(argv: string[]): Promise<number> {
   }
 
   const [command, ...args] = argv;
+
+  if (command === 'init') {
+    let dataDir: string | undefined;
+    let host: string | undefined;
+    let hostName: string | undefined;
+    let hostIp: string | undefined;
+    let json = false;
+
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i]!;
+      if (arg === '--json') {
+        json = true;
+      } else if (arg === '-d' || arg === '--data-dir') {
+        dataDir = args[++i];
+      } else if (arg.startsWith('--data-dir=')) {
+        dataDir = arg.slice('--data-dir='.length);
+      } else if (arg === '--host') {
+        host = args[++i];
+      } else if (arg.startsWith('--host=')) {
+        host = arg.slice('--host='.length);
+      } else if (arg === '--host-name') {
+        hostName = args[++i];
+      } else if (arg.startsWith('--host-name=')) {
+        hostName = arg.slice('--host-name='.length);
+      } else if (arg === '--host-ip') {
+        hostIp = args[++i];
+      } else if (arg.startsWith('--host-ip=')) {
+        hostIp = arg.slice('--host-ip='.length);
+      }
+    }
+
+    return runInit({ dataDir, host, hostName, hostIp, json });
+  }
 
   if (command === 'validate') {
     let dataDir: string | undefined;

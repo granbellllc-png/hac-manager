@@ -33,7 +33,17 @@ pnpm dev
 
 `pnpm dev` starts the API and the Vite dev server (port 5173, proxying `/api` to the API). Regenerate the typed web API client from the OpenAPI document with `pnpm api:generate`. `pnpm --filter web e2e` runs the Playwright smoke test at 360px and 1440px (run `pnpm --filter web exec playwright install chromium` once). The API defaults to `127.0.0.1:3000`; check `GET /api/health` and inspect `GET /api/openapi.json`. No connection to Proxmox is made by the skeleton. Package commands use `pnpm --filter server <script>`, `web`, `cli` or `@hacm/core`.
 
-Copy `examples/data` to a directory **outside this app checkout** to start your own infrastructure repo. Adjust fake connection details and supply secrets in untracked files. `hacm init` and `hacm validate` are planned in the configuration and secrets milestones. `.env.example` documents runtime configuration; development and production start scripts load the root `.env` when present. Required data and state paths are parsed at startup; the state dir must be outside the data dir. Invalid configuration aborts with field diagnostics without printing environment values.
+To bootstrap a new infrastructure repo outside this app checkout, run:
+
+```bash
+# Scaffold a new infrastructure data directory
+pnpm --filter cli exec hacm init --data-dir ../my-homelab --host pve-01
+
+# Validate syntax, schemas, VMID uniqueness, and tags
+pnpm --filter cli exec hacm validate --data-dir ../my-homelab
+```
+
+Adjust connection details in `hosts/<host>/host.yaml` and configure credentials in untracked `secrets.yaml` (automatically ignored by git). `.env.example` documents runtime configuration; development and production start scripts load the root `.env` when present. Required data and state paths are parsed at startup; the state dir must be outside the data dir. Invalid configuration aborts with field diagnostics without printing environment values.
 
 After `pnpm build`, run `pnpm --filter server start`. Set `HACM_WEB_DIR` to an absolute built SPA directory to serve it from the API; leaving it empty disables static serving. Deep UI links fall back to the SPA, while unknown API routes and missing assets return 404. SIGINT and SIGTERM close the listener gracefully. Regenerate the config reference (docs/reference/config.md) with pnpm docs:schema and export editor JSON Schemas to packages/core/dist/schemas with pnpm schema:export. Regenerate the checked-in OpenAPI document with `pnpm --filter server openapi:generate`.
 
