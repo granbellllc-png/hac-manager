@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { TagValue } from '../schema/common.js';
 import { loadYamlDocument, yamlDocumentToJS } from '../yaml/document.js';
@@ -10,6 +11,8 @@ import {
   Secret,
   type SecretProvider,
 } from './index.js';
+
+const testDataDir = resolve('/mock-data').replace(/\\/g, '/');
 
 describe('Lazy Tag Resolution Engine with Sandboxed !include', () => {
   const mockCmdProvider: CmdProvider = {
@@ -265,22 +268,22 @@ describe('Lazy Tag Resolution Engine with Sandboxed !include', () => {
 
   describe('Sandboxed !include Confinement & Security', () => {
     const memoryFiles: Record<string, string> = {
-      'D:/data/common/dns.yaml': `
+      [`${testDataDir}/common/dns.yaml`]: `
 nameservers:
   - 1.1.1.1
   - 8.8.8.8
 `,
-      'D:/data/nested/a.yaml': `
+      [`${testDataDir}/nested/a.yaml`]: `
 schema_version: 1
 data: !include b.yaml
 `,
-      'D:/data/nested/b.yaml': `
+      [`${testDataDir}/nested/b.yaml`]: `
 message: "hello from b"
 `,
-      'D:/data/cycle/first.yaml': `
+      [`${testDataDir}/cycle/first.yaml`]: `
 loop: !include second.yaml
 `,
-      'D:/data/cycle/second.yaml': `
+      [`${testDataDir}/cycle/second.yaml`]: `
 loop: !include first.yaml
 `,
     };
@@ -308,8 +311,8 @@ loop: !include first.yaml
     it('resolves valid relative !include inside dataDir', async () => {
       const res = await resolveSandboxedInclude(
         'common/dns.yaml',
-        'D:/data',
-        'D:/data',
+        testDataDir,
+        testDataDir,
         mockFs,
       );
 
@@ -324,8 +327,8 @@ loop: !include first.yaml
     it('rejects path traversal attempts with ..', async () => {
       const res = await resolveSandboxedInclude(
         '../etc/passwd',
-        'D:/data',
-        'D:/data',
+        testDataDir,
+        testDataDir,
         mockFs,
       );
 
@@ -337,10 +340,11 @@ loop: !include first.yaml
     });
 
     it('rejects absolute paths resolving outside dataDir', async () => {
+      const outsideDir = resolve('/outside-dir').replace(/\\/g, '/');
       const res = await resolveSandboxedInclude(
-        'C:/Windows/System32/drivers/etc/hosts',
-        'D:/data',
-        'D:/data',
+        'file.yaml',
+        testDataDir,
+        outsideDir,
         mockFs,
       );
 
@@ -351,11 +355,11 @@ loop: !include first.yaml
     });
 
     it('detects and rejects circular includes', async () => {
-      const visited = new Set(['D:/data/cycle/first.yaml']);
+      const visited = new Set([`${testDataDir}/cycle/first.yaml`]);
       const res = await resolveSandboxedInclude(
         'first.yaml',
-        'D:/data',
-        'D:/data/cycle',
+        testDataDir,
+        `${testDataDir}/cycle`,
         mockFs,
         visited,
       );
@@ -369,8 +373,8 @@ loop: !include first.yaml
     it('handles file read errors gracefully', async () => {
       const res = await resolveSandboxedInclude(
         'common/missing.yaml',
-        'D:/data',
-        'D:/data',
+        testDataDir,
+        testDataDir,
         mockFs,
       );
 
@@ -474,8 +478,8 @@ mac: !expr "mac('A2:B1:C1', host.index, net.index, vmid)"
 
     it('recursively resolves nested !includes', async () => {
       const memoryFiles: Record<string, string> = {
-        'D:/data/main.yaml': 'sub: !include sub.yaml',
-        'D:/data/sub.yaml': 'env_val: !env MY_ENV',
+        [`${testDataDir}/main.yaml`]: 'sub: !include sub.yaml',
+        [`${testDataDir}/sub.yaml`]: 'env_val: !env MY_ENV',
       };
 
       const mockFs: FileSystem = {
@@ -501,8 +505,8 @@ mac: !expr "mac('A2:B1:C1', host.index, net.index, vmid)"
       };
 
       const { data, report } = await resolveConfigTags(input, {
-        dataDir: 'D:/data',
-        currentFileDir: 'D:/data',
+        dataDir: testDataDir,
+        currentFileDir: testDataDir,
         env: { MY_ENV: 'nested-success' },
         fs: mockFs,
       });
@@ -525,7 +529,7 @@ mac: !expr "mac('A2:B1:C1', host.index, net.index, vmid)"
       };
 
       const { data, report } = await resolveConfigTags(input, {
-        dataDir: 'D:/data',
+        dataDir: testDataDir,
         env: { ENV_ITEM: 'resolved-item' },
       });
 
@@ -536,10 +540,12 @@ mac: !expr "mac('A2:B1:C1', host.index, net.index, vmid)"
         prim: 'string-val',
       });
 
-      const primResult = await resolveConfigTags(42, { dataDir: 'D:/data' });
+      const primResult = await resolveConfigTags(42, { dataDir: testDataDir });
       expect(primResult.data).toBe(42);
 
-      const nullResult = await resolveConfigTags(null, { dataDir: 'D:/data' });
+      const nullResult = await resolveConfigTags(null, {
+        dataDir: testDataDir,
+      });
       expect(nullResult.data).toBeNull();
     });
 
@@ -552,7 +558,7 @@ mac: !expr "mac('A2:B1:C1', host.index, net.index, vmid)"
 
       const res = await resolveTag(
         { tag: 'cmd', value: 'failing command' },
-        { dataDir: 'D:/data', cmdProvider: throwingCmdProvider },
+        { dataDir: testDataDir, cmdProvider: throwingCmdProvider },
       );
 
       expect(res.status).toBe('error');
@@ -563,7 +569,7 @@ mac: !expr "mac('A2:B1:C1', host.index, net.index, vmid)"
 
     it('handles absolute include path with leading slash inside dataDir', async () => {
       const memoryFiles: Record<string, string> = {
-        'D:/data/common/dns.yaml': 'server: 1.1.1.1',
+        [`${testDataDir}/common/dns.yaml`]: 'server: 1.1.1.1',
       };
       const mockFs: FileSystem = {
         readFile: (p: string) => {
@@ -585,8 +591,8 @@ mac: !expr "mac('A2:B1:C1', host.index, net.index, vmid)"
 
       const res = await resolveSandboxedInclude(
         '/common/dns.yaml',
-        'D:/data',
-        'D:/data',
+        testDataDir,
+        testDataDir,
         mockFs,
       );
 
@@ -595,20 +601,20 @@ mac: !expr "mac('A2:B1:C1', host.index, net.index, vmid)"
         expect(res.value).toEqual({ server: '1.1.1.1' });
       }
 
-      // Also test with Windows drive letter
-      const resDrive = await resolveSandboxedInclude(
-        'D:/data/common/dns.yaml',
-        'D:/data',
-        'D:/data',
+      // Also test with explicit absolute path matching testDataDir
+      const resExplicit = await resolveSandboxedInclude(
+        `${testDataDir}/common/dns.yaml`,
+        testDataDir,
+        testDataDir,
         mockFs,
       );
-      expect(resDrive.status).toBe('resolved');
+      expect(resExplicit.status).toBe('resolved');
     });
 
     it('handles cmd provider returning error status in resolveTag', async () => {
       const res = await resolveTag(
         { tag: 'cmd', value: 'faulty' },
-        { dataDir: 'D:/data', cmdProvider: mockCmdProvider },
+        { dataDir: testDataDir, cmdProvider: mockCmdProvider },
       );
       expect(res.status).toBe('error');
       if (res.status === 'error') {

@@ -37,16 +37,21 @@ export async function resolveSandboxedInclude(
   }
 
   // 2. Resolve absolute path
+  const absDataDir = resolve(dataDir);
+  const absCurrentDir = resolve(currentFileDir);
+
   let targetPath: string;
-  if (includePath.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(includePath)) {
-    // If given an absolute path, it must resolve inside dataDir
-    targetPath = resolve(dataDir, includePath.replace(/^[/\\]+/, ''));
+  if (includePath.startsWith('/') || includePath.startsWith('\\')) {
+    // Leading slash is relative to dataDir root (Home Assistant convention)
+    targetPath = resolve(absDataDir, includePath.replace(/^[/\\]+/, ''));
+  } else if (/^[a-zA-Z]:[/\\]/.test(includePath)) {
+    targetPath = resolve(includePath);
   } else {
-    targetPath = resolve(currentFileDir, includePath);
+    targetPath = resolve(absCurrentDir, includePath);
   }
 
   const normTarget = normalizePath(targetPath);
-  const normDataDir = normalizePath(dataDir);
+  const normDataDir = normalizePath(absDataDir);
 
   if (!isInsideDataDir(normTarget, normDataDir)) {
     return {
