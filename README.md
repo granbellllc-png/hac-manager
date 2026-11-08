@@ -10,7 +10,7 @@ Built for an owner who wants full control of their homelab, it brings together s
 
 ## Status and roadmap
 
-The project is under development. The initial workspace provides tooling and package boundaries; the runnable API and responsive UI arrive in issues [#4](https://github.com/alexandre-leites/hac-manager/issues/4) and [#5](https://github.com/alexandre-leites/hac-manager/issues/5). It is not ready to manage infrastructure.
+The project is under development. The workspace and API skeleton are available; the responsive UI arrives in issue [#5](https://github.com/alexandre-leites/hac-manager/issues/5). It is not ready to manage infrastructure.
 
 Follow the [v1 roadmap](https://github.com/alexandre-leites/hac-manager/issues/75) and [milestones](https://github.com/alexandre-leites/hac-manager/milestones). [FEATURES.md](docs/FEATURES.md) is authoritative. [FIRST_SPECIFICATION.md](docs/FIRST_SPECIFICATION.md) records the historical proposal; its superseded choices do not override FEATURES.md. Contributor guidance is in [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -31,9 +31,11 @@ cp .env.example .env
 pnpm dev
 ```
 
-`pnpm dev` currently watches the server and web package entry points; it will start the API and Vite UI when their skeletons land. No connection to Proxmox is made by the bootstrap workspace. Package commands use `pnpm --filter server <script>`, `web`, `cli` or `@hacm/core`.
+`pnpm dev` starts the API and watches the web package entry point until its Vite shell lands. The API defaults to `127.0.0.1:3000`; check `GET /api/health` and inspect `GET /api/openapi.json`. No connection to Proxmox is made by the skeleton. Package commands use `pnpm --filter server <script>`, `web`, `cli` or `@hacm/core`.
 
-Copy `examples/data` to a directory **outside this app checkout** to start your own infrastructure repo. Adjust fake connection details and supply secrets in untracked files. `hacm init` and `hacm validate` are planned in the configuration and secrets milestones. `.env.example` documents runtime configuration; environment loading will be implemented with the API skeleton.
+Copy `examples/data` to a directory **outside this app checkout** to start your own infrastructure repo. Adjust fake connection details and supply secrets in untracked files. `hacm init` and `hacm validate` are planned in the configuration and secrets milestones. `.env.example` documents runtime configuration; development and production start scripts load the root `.env` when present. Required data and state paths are parsed at startup; the state dir must be outside the data dir. Invalid configuration aborts with field diagnostics without printing environment values.
+
+After `pnpm build`, run `pnpm --filter server start`. Set `HACM_WEB_DIR` to an absolute built SPA directory to serve it from the API; leaving it empty disables static serving. Deep UI links fall back to the SPA, while unknown API routes and missing assets return 404. SIGINT and SIGTERM close the listener gracefully. Regenerate the checked-in OpenAPI document with `pnpm --filter server openapi:generate`.
 
 ## Architecture
 

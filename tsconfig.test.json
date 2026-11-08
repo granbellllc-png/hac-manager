@@ -2,6 +2,7 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": { "composite": false, "noEmit": true },
   "include": [
+    "packages/server/scripts/**/*.ts",
     "packages/*/src/**/*.ts",
     "packages/*/vitest.config.ts",
     "vitest.config.ts",
