@@ -40,8 +40,16 @@ export async function resolveSandboxedInclude(
   const absDataDir = resolve(dataDir);
   const absCurrentDir = resolve(currentFileDir);
 
+  const normInclude = normalizePath(includePath);
+  const normDataDir = normalizePath(absDataDir);
+
   let targetPath: string;
-  if (includePath.startsWith('/') || includePath.startsWith('\\')) {
+  if (
+    normInclude.toLowerCase() === normDataDir.toLowerCase() ||
+    normInclude.toLowerCase().startsWith(`${normDataDir.toLowerCase()}/`)
+  ) {
+    targetPath = resolve(includePath);
+  } else if (includePath.startsWith('/') || includePath.startsWith('\\')) {
     // Leading slash is relative to dataDir root (Home Assistant convention)
     targetPath = resolve(absDataDir, includePath.replace(/^[/\\]+/, ''));
   } else if (/^[a-zA-Z]:[/\\]/.test(includePath)) {
@@ -51,7 +59,6 @@ export async function resolveSandboxedInclude(
   }
 
   const normTarget = normalizePath(targetPath);
-  const normDataDir = normalizePath(absDataDir);
 
   if (!isInsideDataDir(normTarget, normDataDir)) {
     return {
