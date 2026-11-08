@@ -1,6 +1,12 @@
 import type { Document } from 'yaml';
 import { dumpYamlDocument, loadYamlDocument } from './document.js';
 
+export interface FileStat {
+  readonly mode: number;
+  isDirectory(): boolean;
+  isFile(): boolean;
+}
+
 export interface FileSystem {
   readFile(path: string, encoding: 'utf8'): Promise<string>;
   writeFile(
@@ -11,7 +17,8 @@ export interface FileSystem {
       readonly encoding?: 'utf8';
     },
   ): Promise<void>;
-  stat(path: string): Promise<{ readonly mode: number }>;
+  stat(path: string): Promise<FileStat>;
+  readdir(path: string): Promise<string[]>;
   rename(oldPath: string, newPath: string): Promise<void>;
   unlink(path: string): Promise<void>;
 }
@@ -28,6 +35,10 @@ export const defaultNodeFileSystem: FileSystem = {
   async stat(path) {
     const fs = await import('node:fs/promises');
     return fs.stat(path);
+  },
+  async readdir(path) {
+    const fs = await import('node:fs/promises');
+    return fs.readdir(path);
   },
   async rename(oldPath, newPath) {
     const fs = await import('node:fs/promises');

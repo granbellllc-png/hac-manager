@@ -275,7 +275,7 @@ network:
     expect(js.cpu).toBe(2);
     expect(isTagValue(js.secret)).toBe(true);
     expect(js.secret).toEqual({ tag: 'secret', value: 'my_sec' });
-    expect(js.network[0].mac).toEqual({ tag: 'expr', value: "mac('A', 1)" });
+    expect(js.network[0]!.mac).toEqual({ tag: 'expr', value: "mac('A', 1)" });
   });
 });
 

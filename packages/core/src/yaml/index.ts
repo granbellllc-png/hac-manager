@@ -14,8 +14,11 @@ export {
   removeFromList,
 } from './mutate.js';
 export {
+  defaultNodeFileSystem,
   readYamlFile,
   writeYamlFile,
+  type FileStat,
+  type FileSystem,
   type ReadYamlFileResult,
   type WriteYamlFileOptions,
 } from './file.js';
