@@ -4,7 +4,7 @@ export {
   dumpYamlDocument,
   yamlDocumentToJS,
 } from './document.js';
-export { normalizeYamlPath, type YamlPath } from './path.js';
+export { formatYamlPath, normalizeYamlPath, type YamlPath } from './path.js';
 export {
   getYamlNode,
   setScalar,

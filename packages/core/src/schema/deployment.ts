@@ -163,8 +163,18 @@ const identity = (type: 'lxc' | 'vm') => ({
 
 /** A fully merged guest: what the reconciler consumes. */
 export const guestDeploymentSchema = z.discriminatedUnion('type', [
-  z.strictObject({ ...identity('lxc'), ...commonShape, ...lxcShape }),
-  z.strictObject({ ...identity('vm'), ...commonShape, ...vmShape }),
+  z.strictObject({
+    schema_version: schemaVersionField.optional(),
+    ...identity('lxc'),
+    ...commonShape,
+    ...lxcShape,
+  }),
+  z.strictObject({
+    schema_version: schemaVersionField.optional(),
+    ...identity('vm'),
+    ...commonShape,
+    ...vmShape,
+  }),
 ]);
 
 /** One guest `deployment.yaml` before inheritance: only identity is required. */
