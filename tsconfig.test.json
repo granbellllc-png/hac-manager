@@ -11,6 +11,7 @@
   },
   "include": [
     "packages/server/scripts/**/*.ts",
+    "packages/core/scripts/**/*.ts",
     "packages/*/src/**/*.ts",
     "packages/*/src/**/*.tsx",
     "packages/web/vite.config.ts",

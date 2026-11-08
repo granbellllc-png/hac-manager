@@ -1,0 +1,14 @@
+schema_version: 1
+id: 112
+name: bad-guest
+type: lxc
+cpu: two
+ram: 2048
+disks:
+  - name: rootfs
+    storage: local-lvm
+    size_gb: -5
+network:
+  - index: 0
+    ip: not-an-ip
+    mac: !expr "mac('A2:B1:C1', host.index, net.index, vmid)"

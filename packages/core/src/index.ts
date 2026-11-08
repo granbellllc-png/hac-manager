@@ -32,3 +32,4 @@ export {
   type RecordedExecution,
   type Sanitizer,
 } from './transport/recording.js';
+export * from './schema/index.js';

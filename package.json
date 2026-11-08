@@ -22,6 +22,8 @@
     "format:check": "prettier --check .",
     "audit": "pnpm audit --audit-level low",
     "changeset": "changeset",
+    "schema:export": "pnpm --filter @hacm/core schema:export",
+    "docs:schema": "pnpm --filter @hacm/core schema:export --docs",
     "version-packages": "changeset version",
     "prepare": "simple-git-hooks"
   },

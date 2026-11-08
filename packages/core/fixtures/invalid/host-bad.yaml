@@ -1,0 +1,8 @@
+schema_version: 1
+id: Example_Host
+name: example
+type: proxmox
+index: 100
+connection:
+  ssh:
+    port: 70000

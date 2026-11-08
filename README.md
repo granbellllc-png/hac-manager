@@ -35,7 +35,7 @@ pnpm dev
 
 Copy `examples/data` to a directory **outside this app checkout** to start your own infrastructure repo. Adjust fake connection details and supply secrets in untracked files. `hacm init` and `hacm validate` are planned in the configuration and secrets milestones. `.env.example` documents runtime configuration; development and production start scripts load the root `.env` when present. Required data and state paths are parsed at startup; the state dir must be outside the data dir. Invalid configuration aborts with field diagnostics without printing environment values.
 
-After `pnpm build`, run `pnpm --filter server start`. Set `HACM_WEB_DIR` to an absolute built SPA directory to serve it from the API; leaving it empty disables static serving. Deep UI links fall back to the SPA, while unknown API routes and missing assets return 404. SIGINT and SIGTERM close the listener gracefully. Regenerate the checked-in OpenAPI document with `pnpm --filter server openapi:generate`.
+After `pnpm build`, run `pnpm --filter server start`. Set `HACM_WEB_DIR` to an absolute built SPA directory to serve it from the API; leaving it empty disables static serving. Deep UI links fall back to the SPA, while unknown API routes and missing assets return 404. SIGINT and SIGTERM close the listener gracefully. Regenerate the config reference (docs/reference/config.md) with pnpm docs:schema and export editor JSON Schemas to packages/core/dist/schemas with pnpm schema:export. Regenerate the checked-in OpenAPI document with `pnpm --filter server openapi:generate`.
 
 ## Architecture
 

@@ -8,3 +8,4 @@ test-results
 
 .tsc-out
 packages/web/src/api/schema.d.ts
+docs/reference/config.md

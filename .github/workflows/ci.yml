@@ -41,6 +41,15 @@ jobs:
         run: pnpm audit
       - name: Production build
         run: pnpm build
+      - name: Export JSON Schemas for editors
+        run: pnpm schema:export
+      - name: Upload JSON Schemas
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: json-schemas
+          path: packages/core/dist/schemas/
+          if-no-files-found: error
+          retention-days: 7
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
