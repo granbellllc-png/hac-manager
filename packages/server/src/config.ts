@@ -30,6 +30,7 @@ export const envSchema = z
       .default(300),
     HACM_HOST_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(2),
     HACM_SESSION_SECRET: z.string().min(32).optional(),
+    HACM_SECRET_KEY: z.string().min(32).optional(),
     HACM_COOKIE_SECURE: booleanSchema.default(true),
     HACM_PROTECTED_HOST_ID: z.string().optional(),
     HACM_PROTECTED_GUEST_ID: z.preprocess(

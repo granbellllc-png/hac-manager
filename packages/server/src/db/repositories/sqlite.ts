@@ -1,10 +1,13 @@
-import { eq, lte, and } from 'drizzle-orm';
+import { eq, lte, and, isNull } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import { randomUUID } from 'node:crypto';
 import * as schema from '../schema.js';
+import { verifyRecoveryCodeMatch } from '../../auth/totp.js';
 import type {
   DatabaseRepositories,
   SettingsRepository,
   HostsCacheRepository,
+  RecoveryCodesRepository,
   SessionsRepository,
 } from './types.js';
 
@@ -135,6 +138,22 @@ export function createSqliteRepositories(
         .run();
       return result.changes > 0;
     },
+    async setTotpSecret(id: string, totpSecret: string | null) {
+      const result = db
+        .update(schema.usersTable)
+        .set({ totpSecret, updatedAt: new Date() })
+        .where(eq(schema.usersTable.id, id))
+        .run();
+      return result.changes > 0;
+    },
+    async setTotpEnabled(id: string, enabled: boolean) {
+      const result = db
+        .update(schema.usersTable)
+        .set({ totpEnabled: enabled, updatedAt: new Date() })
+        .where(eq(schema.usersTable.id, id))
+        .run();
+      return result.changes > 0;
+    },
     async count() {
       const rows = db.select().from(schema.usersTable).all();
       return rows.length;
@@ -225,6 +244,79 @@ export function createSqliteRepositories(
     },
   };
 
+  const recoveryCodes: RecoveryCodesRepository = {
+    async setCodes(userId: string, codeHashes: readonly string[]) {
+      db.transaction((tx) => {
+        tx.delete(schema.recoveryCodesTable)
+          .where(eq(schema.recoveryCodesTable.userId, userId))
+          .run();
+        const now = new Date();
+        for (const codeHash of codeHashes) {
+          tx.insert(schema.recoveryCodesTable)
+            .values({
+              id: randomUUID(),
+              userId,
+              codeHash,
+              usedAt: null,
+              createdAt: now,
+            })
+            .run();
+        }
+      });
+    },
+    async listByUser(userId: string) {
+      return db
+        .select()
+        .from(schema.recoveryCodesTable)
+        .where(eq(schema.recoveryCodesTable.userId, userId))
+        .all();
+    },
+    async useCode(userId: string, rawCode: string) {
+      const unusedCodes = db
+        .select()
+        .from(schema.recoveryCodesTable)
+        .where(
+          and(
+            eq(schema.recoveryCodesTable.userId, userId),
+            isNull(schema.recoveryCodesTable.usedAt),
+          ),
+        )
+        .all();
+
+      for (const record of unusedCodes) {
+        if (verifyRecoveryCodeMatch(rawCode, record.codeHash)) {
+          const result = db
+            .update(schema.recoveryCodesTable)
+            .set({ usedAt: new Date() })
+            .where(eq(schema.recoveryCodesTable.id, record.id))
+            .run();
+          return result.changes > 0;
+        }
+      }
+      return false;
+    },
+    async countRemaining(userId: string) {
+      const unused = db
+        .select()
+        .from(schema.recoveryCodesTable)
+        .where(
+          and(
+            eq(schema.recoveryCodesTable.userId, userId),
+            isNull(schema.recoveryCodesTable.usedAt),
+          ),
+        )
+        .all();
+      return unused.length;
+    },
+    async deleteByUser(userId: string) {
+      const result = db
+        .delete(schema.recoveryCodesTable)
+        .where(eq(schema.recoveryCodesTable.userId, userId))
+        .run();
+      return result.changes;
+    },
+  };
+
   const sessions: SessionsRepository = {
     async get(id: string) {
       const row = db
@@ -271,6 +363,7 @@ export function createSqliteRepositories(
     hostsCache,
     users,
     userHostAccess,
+    recoveryCodes,
     sessions,
   };
 }

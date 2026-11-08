@@ -5,6 +5,15 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseRepositories } from '../db/repositories/types.js';
 import type { ServerConfig } from '../config.js';
 import { hashPassword, verifyPassword } from './password.js';
+import { resolveAppKey, encryptSecret, decryptSecret } from './encryption.js';
+import {
+  generateTotpSecret,
+  generateTotpUri,
+  generateTotpQrCode,
+  verifyTotp,
+  generateRecoveryCodes,
+  hashRecoveryCode,
+} from './totp.js';
 import {
   SessionService,
   SESSION_COOKIE_NAME,
@@ -36,6 +45,7 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
   const sessionService =
     options.sessionService ?? new SessionService(repos, config);
   const rateLimiter = options.rateLimiter ?? new LoginRateLimiter();
+  const appKey = resolveAppKey(config);
 
   // Authentication & CSRF Hook
   fastify.addHook('onRequest', async (request, reply) => {
@@ -110,6 +120,7 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
                 id: z.string(),
                 username: z.string(),
                 role: z.string(),
+                totpEnabled: z.boolean(),
               })
               .nullable(),
           }),
@@ -125,6 +136,7 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
               id: request.user.id,
               username: request.user.username,
               role: request.user.role,
+              totpEnabled: Boolean(request.user.totpEnabled),
             }
           : null,
       };
@@ -207,15 +219,20 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
         body: z.object({
           username: z.string().trim().min(1),
           password: z.string().min(1),
+          totpCode: z.string().trim().optional(),
+          recoveryCode: z.string().trim().optional(),
         }),
         response: {
           200: z.object({
             message: z.string(),
-            user: z.object({
-              id: z.string(),
-              username: z.string(),
-              role: z.string(),
-            }),
+            totpRequired: z.boolean().optional(),
+            user: z
+              .object({
+                id: z.string(),
+                username: z.string(),
+                role: z.string(),
+              })
+              .optional(),
           }),
           401: z.object({
             statusCode: z.number(),
@@ -231,7 +248,7 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
       },
     },
     async (request, reply) => {
-      const { username, password } = request.body;
+      const { username, password, totpCode, recoveryCode } = request.body;
       const rateKey = `${request.ip}:${username.toLowerCase()}`;
 
       if (rateLimiter.isLocked(rateKey)) {
@@ -271,11 +288,79 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
         });
       }
 
+      if (user.totpEnabled) {
+        if (!totpCode && !recoveryCode) {
+          return {
+            message: 'Two-factor authentication code required',
+            totpRequired: true,
+          };
+        }
+
+        if (totpCode) {
+          if (!user.totpSecret) {
+            return reply.status(401).send({
+              statusCode: 401,
+              error: 'Unauthorized',
+              message: 'Two-factor authentication secret missing',
+            });
+          }
+
+          let secretPlain: string;
+          try {
+            secretPlain = decryptSecret(user.totpSecret, appKey);
+          } catch {
+            return reply.status(401).send({
+              statusCode: 401,
+              error: 'Unauthorized',
+              message: 'Failed to decrypt two-factor authentication secret',
+            });
+          }
+
+          const validTotp = verifyTotp(secretPlain, totpCode);
+          if (!validTotp) {
+            const { locked } = rateLimiter.recordFailure(rateKey);
+            if (locked) {
+              return reply.status(429).send({
+                statusCode: 429,
+                error: 'Too Many Requests',
+                message:
+                  'Too many failed login attempts. Account temporarily locked.',
+              });
+            }
+            return reply.status(401).send({
+              statusCode: 401,
+              error: 'Unauthorized',
+              message: 'Invalid two-factor authentication code',
+            });
+          }
+        } else if (recoveryCode) {
+          const used = await repos.recoveryCodes.useCode(user.id, recoveryCode);
+          if (!used) {
+            const { locked } = rateLimiter.recordFailure(rateKey);
+            if (locked) {
+              return reply.status(429).send({
+                statusCode: 429,
+                error: 'Too Many Requests',
+                message:
+                  'Too many failed login attempts. Account temporarily locked.',
+              });
+            }
+            return reply.status(401).send({
+              statusCode: 401,
+              error: 'Unauthorized',
+              message: 'Invalid recovery code',
+            });
+          }
+        }
+      }
+
       rateLimiter.recordSuccess(rateKey);
       await sessionService.createSession(user, request, reply);
 
       return {
-        message: 'Logged in successfully',
+        message: recoveryCode
+          ? 'Logged in successfully with recovery code'
+          : 'Logged in successfully',
         user: {
           id: user.id,
           username: user.username,
@@ -405,6 +490,314 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
       await repos.users.updatePassword(user.id, newHash);
 
       return { message: 'Password updated successfully' };
+    },
+  );
+
+  // GET /api/auth/totp/status: Get current user 2FA status
+  typedFastify.get(
+    '/api/auth/totp/status',
+    {
+      schema: {
+        description: 'Get current user two-factor authentication status',
+        tags: ['auth'],
+        response: {
+          200: z.object({
+            enabled: z.boolean(),
+            remainingRecoveryCodes: z.number(),
+          }),
+          401: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!request.user) {
+        return reply.status(401).send({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'Authentication required',
+        });
+      }
+      const user = await repos.users.getById(request.user.id);
+      const remainingRecoveryCodes = await repos.recoveryCodes.countRemaining(
+        request.user.id,
+      );
+      return {
+        enabled: Boolean(user?.totpEnabled),
+        remainingRecoveryCodes,
+      };
+    },
+  );
+
+  // POST /api/auth/totp/setup: Initiate enrollment (generates secret, QR code, and recovery codes)
+  typedFastify.post(
+    '/api/auth/totp/setup',
+    {
+      schema: {
+        description:
+          'Initialize two-factor authentication setup for current user',
+        tags: ['auth'],
+        response: {
+          200: z.object({
+            secret: z.string(),
+            uri: z.string(),
+            qrCode: z.string(),
+            recoveryCodes: z.array(z.string()),
+          }),
+          401: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!request.user) {
+        return reply.status(401).send({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'Authentication required',
+        });
+      }
+
+      const secret = generateTotpSecret();
+      const uri = generateTotpUri(request.user.username, secret);
+      const qrCode = await generateTotpQrCode(uri);
+      const recoveryCodes = generateRecoveryCodes(8);
+
+      const encryptedSecret = encryptSecret(secret, appKey);
+      const hashedCodes = recoveryCodes.map((code) => hashRecoveryCode(code));
+
+      await repos.users.setTotpSecret(request.user.id, encryptedSecret);
+      await repos.recoveryCodes.setCodes(request.user.id, hashedCodes);
+
+      return {
+        secret,
+        uri,
+        qrCode,
+        recoveryCodes,
+      };
+    },
+  );
+
+  // POST /api/auth/totp/enable: Verify code and activate 2FA
+  typedFastify.post(
+    '/api/auth/totp/enable',
+    {
+      schema: {
+        description:
+          'Confirm and enable two-factor authentication with initial verification code',
+        tags: ['auth'],
+        body: z.object({
+          code: z.string().trim().min(6).max(8),
+        }),
+        response: {
+          200: z.object({
+            message: z.string(),
+          }),
+          400: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          401: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!request.user) {
+        return reply.status(401).send({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'Authentication required',
+        });
+      }
+
+      const user = await repos.users.getById(request.user.id);
+      if (!user || !user.totpSecret) {
+        return reply.status(400).send({
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'Two-factor authentication setup not initiated',
+        });
+      }
+
+      let secretPlain: string;
+      try {
+        secretPlain = decryptSecret(user.totpSecret, appKey);
+      } catch {
+        return reply.status(400).send({
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'Failed to decrypt two-factor authentication secret',
+        });
+      }
+
+      const valid = verifyTotp(secretPlain, request.body.code);
+      if (!valid) {
+        return reply.status(400).send({
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'Invalid verification code',
+        });
+      }
+
+      await repos.users.setTotpEnabled(request.user.id, true);
+
+      return {
+        message: 'Two-factor authentication enabled successfully',
+      };
+    },
+  );
+
+  // POST /api/auth/totp/disable: Disable 2FA with password confirmation
+  typedFastify.post(
+    '/api/auth/totp/disable',
+    {
+      schema: {
+        description:
+          'Disable two-factor authentication with user password confirmation',
+        tags: ['auth'],
+        body: z.object({
+          password: z.string().min(1),
+        }),
+        response: {
+          200: z.object({
+            message: z.string(),
+          }),
+          400: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          401: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!request.user) {
+        return reply.status(401).send({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'Authentication required',
+        });
+      }
+
+      const user = await repos.users.getById(request.user.id);
+      if (!user) {
+        return reply.status(401).send({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'User not found',
+        });
+      }
+
+      const validPassword = await verifyPassword(
+        user.passwordHash,
+        request.body.password,
+      );
+      if (!validPassword) {
+        return reply.status(400).send({
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'Password does not match',
+        });
+      }
+
+      await repos.users.setTotpEnabled(request.user.id, false);
+      await repos.users.setTotpSecret(request.user.id, null);
+      await repos.recoveryCodes.deleteByUser(request.user.id);
+
+      return {
+        message: 'Two-factor authentication disabled successfully',
+      };
+    },
+  );
+
+  // POST /api/auth/totp/recovery-codes: Regenerate recovery codes
+  typedFastify.post(
+    '/api/auth/totp/recovery-codes',
+    {
+      schema: {
+        description: 'Regenerate recovery codes with password verification',
+        tags: ['auth'],
+        body: z.object({
+          password: z.string().min(1),
+        }),
+        response: {
+          200: z.object({
+            recoveryCodes: z.array(z.string()),
+          }),
+          400: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          401: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!request.user) {
+        return reply.status(401).send({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'Authentication required',
+        });
+      }
+
+      const user = await repos.users.getById(request.user.id);
+      if (!user) {
+        return reply.status(401).send({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'User not found',
+        });
+      }
+
+      if (!user.totpEnabled) {
+        return reply.status(400).send({
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'Two-factor authentication is not enabled',
+        });
+      }
+
+      const validPassword = await verifyPassword(
+        user.passwordHash,
+        request.body.password,
+      );
+      if (!validPassword) {
+        return reply.status(400).send({
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'Password does not match',
+        });
+      }
+
+      const newCodes = generateRecoveryCodes(8);
+      const hashedCodes = newCodes.map((code) => hashRecoveryCode(code));
+      await repos.recoveryCodes.setCodes(request.user.id, hashedCodes);
+
+      return {
+        recoveryCodes: newCodes,
+      };
     },
   );
 };

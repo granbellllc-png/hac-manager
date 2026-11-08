@@ -26,6 +26,7 @@ interface UserResponse {
   username: string;
   role: 'admin' | 'operator' | 'viewer';
   autoGrantNewHosts: boolean;
+  totpEnabled: boolean;
   grantedHosts: string[];
   createdAt: number;
   updatedAt: number;

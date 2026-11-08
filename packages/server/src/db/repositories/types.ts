@@ -6,6 +6,7 @@ import type {
   InsertUserRow,
   SessionRow,
   InsertSessionRow,
+  RecoveryCodeRow,
 } from '../schema.js';
 
 export interface SettingsRepository {
@@ -32,9 +33,19 @@ export interface UsersRepository {
     autoGrantNewHosts?: boolean,
   ): Promise<boolean>;
   updatePassword(id: string, passwordHash: string): Promise<boolean>;
+  setTotpSecret(id: string, totpSecret: string | null): Promise<boolean>;
+  setTotpEnabled(id: string, enabled: boolean): Promise<boolean>;
   count(): Promise<number>;
   list(): Promise<readonly UserRow[]>;
   delete(id: string): Promise<boolean>;
+}
+
+export interface RecoveryCodesRepository {
+  setCodes(userId: string, codeHashes: readonly string[]): Promise<void>;
+  listByUser(userId: string): Promise<readonly RecoveryCodeRow[]>;
+  useCode(userId: string, rawCode: string): Promise<boolean>;
+  countRemaining(userId: string): Promise<number>;
+  deleteByUser(userId: string): Promise<number>;
 }
 
 export interface UserHostAccessRepository {
@@ -60,5 +71,6 @@ export interface DatabaseRepositories {
   readonly hostsCache: HostsCacheRepository;
   readonly users: UsersRepository;
   readonly userHostAccess: UserHostAccessRepository;
+  readonly recoveryCodes: RecoveryCodesRepository;
   readonly sessions: SessionsRepository;
 }

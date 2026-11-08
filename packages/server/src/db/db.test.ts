@@ -198,6 +198,59 @@ describe('Database foundation', () => {
     }
   });
 
+  it('supports RecoveryCodesRepository and TOTP user operations', async () => {
+    const handle = createDatabase({ path: ':memory:' });
+    try {
+      const repos = createSqliteRepositories(handle.db);
+      const user = await repos.users.create({
+        id: 'u-totp-test',
+        username: 'user_totp',
+        passwordHash: 'hash',
+        role: 'operator',
+        autoGrantNewHosts: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      expect(user.totpEnabled).toBe(false);
+      expect(user.totpSecret).toBeNull();
+
+      await repos.users.setTotpSecret(user.id, 'encrypted-secret-v1');
+      await repos.users.setTotpEnabled(user.id, true);
+
+      const updated = await repos.users.getById(user.id);
+      expect(updated?.totpSecret).toBe('encrypted-secret-v1');
+      expect(updated?.totpEnabled).toBe(true);
+
+      // Recovery codes
+      const rawCode = 'a1b2c3-d4e5f6';
+      const { hashRecoveryCode } = await import('../auth/totp.js');
+      const hashed = hashRecoveryCode(rawCode);
+
+      await repos.recoveryCodes.setCodes(user.id, [hashed]);
+      expect(await repos.recoveryCodes.countRemaining(user.id)).toBe(1);
+
+      const list = await repos.recoveryCodes.listByUser(user.id);
+      expect(list).toHaveLength(1);
+      expect(list[0]?.usedAt).toBeNull();
+
+      // Use valid code
+      const used = await repos.recoveryCodes.useCode(user.id, rawCode);
+      expect(used).toBe(true);
+      expect(await repos.recoveryCodes.countRemaining(user.id)).toBe(0);
+
+      // Cannot reuse
+      const secondUse = await repos.recoveryCodes.useCode(user.id, rawCode);
+      expect(secondUse).toBe(false);
+
+      // Delete by user
+      await repos.recoveryCodes.deleteByUser(user.id);
+      expect(await repos.recoveryCodes.listByUser(user.id)).toHaveLength(0);
+    } finally {
+      handle.close();
+    }
+  });
+
   it('creates disk database file and sets WAL mode', () => {
     const dbPath = resolve(import.meta.dirname, '../../dist/test-db.sqlite');
     if (existsSync(dbPath)) {

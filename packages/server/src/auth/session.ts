@@ -17,6 +17,7 @@ export interface AuthenticatedUser {
   readonly username: string;
   readonly role: string;
   readonly autoGrantNewHosts: boolean;
+  readonly totpEnabled?: boolean;
 }
 
 export interface SessionContext {
@@ -114,6 +115,7 @@ export class SessionService {
         username: user.username,
         role: user.role,
         autoGrantNewHosts: user.autoGrantNewHosts,
+        totpEnabled: user.totpEnabled,
       },
     };
   }

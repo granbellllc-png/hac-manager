@@ -9,6 +9,8 @@ coverage/
 *.db
 *.db-*
 /state/
+state/
+**/state/
 /data/
 secrets.yaml
 .DS_Store

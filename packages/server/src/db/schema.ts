@@ -24,8 +24,22 @@ export const usersTable = sqliteTable('users', {
   autoGrantNewHosts: integer('auto_grant_new_hosts', { mode: 'boolean' })
     .notNull()
     .default(false),
+  totpSecret: text('totp_secret'),
+  totpEnabled: integer('totp_enabled', { mode: 'boolean' })
+    .notNull()
+    .default(false),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+export const recoveryCodesTable = sqliteTable('recovery_codes', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => usersTable.id, { onDelete: 'cascade' }),
+  codeHash: text('code_hash').notNull(),
+  usedAt: integer('used_at', { mode: 'timestamp_ms' }),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
 export const userHostAccessTable = sqliteTable('user_host_access', {
@@ -65,6 +79,9 @@ export type InsertUserRow = typeof usersTable.$inferInsert;
 
 export type UserHostAccessRow = typeof userHostAccessTable.$inferSelect;
 export type InsertUserHostAccessRow = typeof userHostAccessTable.$inferInsert;
+
+export type RecoveryCodeRow = typeof recoveryCodesTable.$inferSelect;
+export type InsertRecoveryCodeRow = typeof recoveryCodesTable.$inferInsert;
 
 export type SessionRow = typeof sessionsTable.$inferSelect;
 export type InsertSessionRow = typeof sessionsTable.$inferInsert;

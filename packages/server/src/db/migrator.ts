@@ -32,8 +32,18 @@ export const initialMigration: Migration = {
         password_hash TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'viewer',
         auto_grant_new_hosts INTEGER NOT NULL DEFAULT 0,
+        totp_secret TEXT,
+        totp_enabled INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS recovery_codes (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        code_hash TEXT NOT NULL,
+        used_at INTEGER,
+        created_at INTEGER NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS user_host_access (
@@ -58,11 +68,44 @@ export const initialMigration: Migration = {
       CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
       CREATE INDEX IF NOT EXISTS idx_user_host_access_user_id ON user_host_access(user_id);
       CREATE INDEX IF NOT EXISTS idx_user_host_access_host_id ON user_host_access(host_id);
+      CREATE INDEX IF NOT EXISTS idx_recovery_codes_user_id ON recovery_codes(user_id);
     `);
   },
 };
 
-export const allMigrations: readonly Migration[] = [initialMigration];
+export const totpMigration: Migration = {
+  id: '0002_totp_2fa',
+  up: (db) => {
+    // Check if columns exist before adding (in case 0001 created them)
+    const columns = db.pragma('table_info(users)') as { name: string }[];
+    const columnNames = new Set(columns.map((c) => c.name));
+
+    if (!columnNames.has('totp_secret')) {
+      db.exec('ALTER TABLE users ADD COLUMN totp_secret TEXT;');
+    }
+    if (!columnNames.has('totp_enabled')) {
+      db.exec(
+        'ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0;',
+      );
+    }
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS recovery_codes (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        code_hash TEXT NOT NULL,
+        used_at INTEGER,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_recovery_codes_user_id ON recovery_codes(user_id);
+    `);
+  },
+};
+
+export const allMigrations: readonly Migration[] = [
+  initialMigration,
+  totpMigration,
+];
 
 export function runMigrations(
   sqlite: Database.Database,

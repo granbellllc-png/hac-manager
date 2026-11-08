@@ -56,6 +56,7 @@ export const usersModule: FastifyPluginAsync<UsersPluginOptions> = async (
               username: z.string(),
               role: z.string(),
               autoGrantNewHosts: z.boolean(),
+              totpEnabled: z.boolean(),
               grantedHosts: z.array(z.string()),
               createdAt: z.date(),
             }),
@@ -83,6 +84,7 @@ export const usersModule: FastifyPluginAsync<UsersPluginOptions> = async (
           username: u.username,
           role: u.role,
           autoGrantNewHosts: u.autoGrantNewHosts,
+          totpEnabled: Boolean(u.totpEnabled),
           grantedHosts: Array.from(grantedHosts),
           createdAt: u.createdAt,
         });
@@ -312,6 +314,57 @@ export const usersModule: FastifyPluginAsync<UsersPluginOptions> = async (
       }
 
       return { message: 'User deleted successfully' };
+    },
+  );
+
+  // POST /api/users/:id/totp/reset: Reset 2FA for a user (Admin only)
+  typedFastify.post(
+    '/api/users/:id/totp/reset',
+    {
+      schema: {
+        description: 'Reset two-factor authentication for a user (Admin only)',
+        tags: ['users'],
+        params: z.object({
+          id: z.string(),
+        }),
+        response: {
+          200: z.object({
+            message: z.string(),
+          }),
+          404: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          401: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          403: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const user = await repos.users.getById(id);
+      if (!user) {
+        return reply.status(404).send({
+          statusCode: 404,
+          error: 'Not Found',
+          message: 'User not found',
+        });
+      }
+
+      await repos.users.setTotpEnabled(id, false);
+      await repos.users.setTotpSecret(id, null);
+      await repos.recoveryCodes.deleteByUser(id);
+
+      return { message: 'Two-factor authentication reset successfully' };
     },
   );
 };
