@@ -33,3 +33,4 @@ export {
   type Sanitizer,
 } from './transport/recording.js';
 export * from './schema/index.js';
+export * from './yaml/index.js';

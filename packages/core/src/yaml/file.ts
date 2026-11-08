@@ -1,0 +1,100 @@
+import type { Document } from 'yaml';
+import { dumpYamlDocument, loadYamlDocument } from './document.js';
+
+export interface FileSystem {
+  readFile(path: string, encoding: 'utf8'): Promise<string>;
+  writeFile(
+    path: string,
+    content: string,
+    options?: {
+      readonly mode?: number | undefined;
+      readonly encoding?: 'utf8';
+    },
+  ): Promise<void>;
+  stat(path: string): Promise<{ readonly mode: number }>;
+  rename(oldPath: string, newPath: string): Promise<void>;
+  unlink(path: string): Promise<void>;
+}
+
+export const defaultNodeFileSystem: FileSystem = {
+  async readFile(path, encoding) {
+    const fs = await import('node:fs/promises');
+    return fs.readFile(path, encoding);
+  },
+  async writeFile(path, content, options) {
+    const fs = await import('node:fs/promises');
+    return fs.writeFile(path, content, options);
+  },
+  async stat(path) {
+    const fs = await import('node:fs/promises');
+    return fs.stat(path);
+  },
+  async rename(oldPath, newPath) {
+    const fs = await import('node:fs/promises');
+    return fs.rename(oldPath, newPath);
+  },
+  async unlink(path) {
+    const fs = await import('node:fs/promises');
+    return fs.unlink(path);
+  },
+};
+
+export interface ReadYamlFileResult {
+  readonly document: Document;
+  readonly raw: string;
+  readonly eol: '\n' | '\r\n';
+  readonly mode: number;
+}
+
+export async function readYamlFile(
+  filePath: string,
+  fs: FileSystem = defaultNodeFileSystem,
+): Promise<ReadYamlFileResult> {
+  const [raw, fileStat] = await Promise.all([
+    fs.readFile(filePath, 'utf8'),
+    fs.stat(filePath),
+  ]);
+  const eol: '\n' | '\r\n' = raw.includes('\r\n') ? '\r\n' : '\n';
+  const document = loadYamlDocument(raw);
+  return { document, raw, eol, mode: fileStat.mode };
+}
+
+export interface WriteYamlFileOptions {
+  readonly atomic?: boolean;
+  readonly eol?: '\n' | '\r\n';
+  readonly mode?: number;
+  readonly fs?: FileSystem;
+}
+
+export async function writeYamlFile(
+  filePath: string,
+  document: Document,
+  options?: WriteYamlFileOptions,
+): Promise<void> {
+  const dumpOptions =
+    options?.eol !== undefined ? { eol: options.eol } : undefined;
+  const content = dumpYamlDocument(document, dumpOptions);
+  const atomic = options?.atomic ?? true;
+  const fs = options?.fs ?? defaultNodeFileSystem;
+
+  if (!atomic) {
+    await fs.writeFile(filePath, content, {
+      mode: options?.mode,
+      encoding: 'utf8',
+    });
+    return;
+  }
+
+  const tempFile = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 10)}`;
+
+  try {
+    await fs.writeFile(tempFile, content, {
+      mode: options?.mode,
+      encoding: 'utf8',
+    });
+    await fs.rename(tempFile, filePath);
+  } catch (error) {
+    await fs.unlink(tempFile).catch(() => undefined);
+    throw error;
+  }
+}

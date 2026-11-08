@@ -9,5 +9,9 @@ export default defineConfig({
     port: 5173,
     proxy: { '/api': 'http://127.0.0.1:3000' },
   },
-  build: { outDir: 'dist', emptyOutDir: true },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    rollupOptions: { external: [/^node:/] },
+  },
 });

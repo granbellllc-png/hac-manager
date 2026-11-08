@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { parse } from 'yaml';
+import { loadYamlDocument, yamlDocumentToJS } from '../index.js';
 import { describe, expect, it } from 'vitest';
 import {
   allEditorJsonSchemas,
@@ -13,20 +13,13 @@ import {
   parseConfig,
   renderConfigReference,
   schemaToRows,
-  tagNames,
   toEditorJsonSchema,
   type ConfigKind,
   type Migration,
 } from '../index.js';
 
-/** Minimal tag-aware YAML reader for tests; the real loader lands with the CST layer. */
 function loadYaml(text: string): unknown {
-  return parse(text, {
-    customTags: tagNames.map((name) => ({
-      tag: `!${name}`,
-      resolve: (value: string) => ({ tag: name, value }),
-    })),
-  });
+  return yamlDocumentToJS(loadYamlDocument(text));
 }
 
 const root = resolve(import.meta.dirname, '../../../..');
