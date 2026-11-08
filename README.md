@@ -1,5 +1,7 @@
 # HAC Manager
 
+[![CI](https://github.com/alexandre-leites/hac-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/alexandre-leites/hac-manager/actions/workflows/ci.yml)
+
 **HAC means Homelab as Code.** HAC Manager is a self-hosted web app and backend for managing standalone Proxmox VE hosts and their LXC containers and QEMU VMs from local, Git-versioned YAML files.
 
 Built for an owner who wants full control of their homelab, it brings together safe bind-mount handling, bidirectional drift reconciliation, comment-preserving YAML editing, file sync, provisioning, backups and durable jobs in a mobile-friendly UI. Docker hosts are a future extension.
