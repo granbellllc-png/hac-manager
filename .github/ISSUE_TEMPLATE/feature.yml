@@ -1,0 +1,21 @@
+name: Feature request
+description: Propose a change with its use case and safety implications.
+title: 'feat: '
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / use case
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior and alternatives
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope, dependencies and safety considerations
+      description: Reference relevant FEATURES.md decisions and roadmap issues.

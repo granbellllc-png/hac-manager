@@ -1,0 +1,20 @@
+schema_version: 1
+id: 212
+name: example-vm
+type: vm
+cpu: 4
+ram: 4096
+disks:
+  - name: scsi0
+    storage: local-lvm
+    size_gb: 32
+network:
+  - index: 0
+    ip: 192.0.2.212/24
+    mac: A2:B1:C1:01:E0:AA
+installation:
+  type: clone
+  template_id: 9000
+guest_agent: true
+identity_checks:
+  - test -f /etc/os-release

@@ -1,0 +1,11 @@
+packages:
+  - packages/*
+
+saveExact: true
+engineStrict: true
+minimumReleaseAge: 1440
+onlyBuiltDependencies:
+  - esbuild
+  - simple-git-hooks
+overrides:
+  minimatch: 11.0.5

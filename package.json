@@ -1,0 +1,49 @@
+{
+  "name": "hac-manager",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "packageManager": "pnpm@10.34.9",
+  "engines": {
+    "node": ">=22.23.4 <23",
+    "pnpm": "10.34.9"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,web \"pnpm --filter server dev\" \"pnpm --filter web dev\"",
+    "build": "tsc -b",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc -b && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "audit": "pnpm audit --audit-level low",
+    "prepare": "simple-git-hooks"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.5",
+    "@vitest/coverage-v8": "5.1.0",
+    "concurrently": "10.0.7",
+    "eslint": "10.14.0",
+    "lint-staged": "17.6.0",
+    "prettier": "3.9.10",
+    "simple-git-hooks": "2.14.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "5.1.0"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm exec lint-staged"
+  },
+  "lint-staged": {
+    "*.{js,mjs,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,yaml,yml,md,css,html}": "prettier --write"
+  }
+}

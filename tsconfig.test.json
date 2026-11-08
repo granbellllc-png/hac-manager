@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": { "composite": false, "noEmit": true },
+  "include": [
+    "packages/*/src/**/*.ts",
+    "packages/*/vitest.config.ts",
+    "vitest.config.ts",
+    "vitest.shared.ts"
+  ]
+}

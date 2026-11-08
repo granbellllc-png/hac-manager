@@ -1,0 +1,7 @@
+schema_version: 1
+mappings:
+  - type: file
+    source: appdata/example.conf
+    destination: /etc/example.conf
+    mode: '0644'
+    conflict: prompt

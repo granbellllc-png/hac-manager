@@ -1,0 +1,30 @@
+name: Bug report
+description: Report a reproducible problem using fake data.
+title: 'bug: '
+body:
+  - type: markdown
+    attributes:
+      value: 'Do not include secrets or real host details. Report security vulnerabilities privately using SECURITY.md.'
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include minimal fake YAML and relevant redacted logs.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS, Node version and deployment method

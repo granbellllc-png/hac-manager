@@ -1,0 +1,5 @@
+schema_version: 1
+tasks:
+  - name: Inspect Proxmox version
+    run: pveversion
+    timeout: 30

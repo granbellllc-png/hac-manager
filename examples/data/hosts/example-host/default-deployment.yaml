@@ -1,0 +1,14 @@
+schema_version: 1
+cpu: 2
+ram: 2048
+protection: true
+network:
+  - index: 0
+    name: eth0
+    bridge: vmbr0
+    gateway: !env EXAMPLE_GATEWAY
+ssh:
+  enabled: true
+  password: !secret example_guest_password
+  authorized_keys:
+    - !secret example_guest_public_key

@@ -1,0 +1,5 @@
+schema_version: 1
+tasks:
+  - name: Inspect operating system
+    run: cat /etc/os-release
+    timeout: 30

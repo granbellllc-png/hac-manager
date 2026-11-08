@@ -1,0 +1,18 @@
+schema_version: 1
+id: 112
+name: example-lxc
+type: lxc
+unprivileged: true
+disks:
+  - name: rootfs
+    storage: local-lvm
+    size_gb: 10
+network:
+  - index: 0
+    ip: 192.0.2.112/24
+    mac: !expr "mac('A2:B1:C1', host.index, net.index, vmid)"
+installation:
+  type: template
+  template: local:vztmpl/example-template.tar.zst
+identity_checks:
+  - test -f /etc/os-release

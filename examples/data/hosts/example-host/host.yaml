@@ -1,0 +1,18 @@
+schema_version: 1
+id: example-host
+name: example-host
+type: proxmox
+index: 1
+connection:
+  ssh:
+    host: 192.0.2.10
+    port: 22
+    username: root
+    private_key: !env EXAMPLE_SSH_PRIVATE_KEY
+    fingerprint: SHA256:FAKE-FINGERPRINT-FOR-DOCUMENTATION-ONLY
+  api:
+    url: https://192.0.2.10:8006
+    token_id: example@pve!hacm
+    token_secret: !env EXAMPLE_API_TOKEN
+    ca_file: !env EXAMPLE_API_CA_FILE
+ignored_guests: []
