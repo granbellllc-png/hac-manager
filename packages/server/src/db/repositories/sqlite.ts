@@ -1,4 +1,4 @@
-import { eq, lte } from 'drizzle-orm';
+import { eq, lte, and } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import * as schema from '../schema.js';
 import type {
@@ -108,6 +108,25 @@ export function createSqliteRepositories(
       }
       return created;
     },
+    async updateRole(id: string, role: string, autoGrantNewHosts?: boolean) {
+      const updateData: {
+        role: string;
+        updatedAt: Date;
+        autoGrantNewHosts?: boolean;
+      } = {
+        role,
+        updatedAt: new Date(),
+      };
+      if (autoGrantNewHosts !== undefined) {
+        updateData.autoGrantNewHosts = autoGrantNewHosts;
+      }
+      const result = db
+        .update(schema.usersTable)
+        .set(updateData)
+        .where(eq(schema.usersTable.id, id))
+        .run();
+      return result.changes > 0;
+    },
     async updatePassword(id: string, passwordHash: string) {
       const result = db
         .update(schema.usersTable)
@@ -129,6 +148,80 @@ export function createSqliteRepositories(
         .where(eq(schema.usersTable.id, id))
         .run();
       return result.changes > 0;
+    },
+  };
+
+  const userHostAccess = {
+    async getGrantedHostIds(userId: string) {
+      const rows = db
+        .select()
+        .from(schema.userHostAccessTable)
+        .where(eq(schema.userHostAccessTable.userId, userId))
+        .all();
+      return rows.map((r) => r.hostId);
+    },
+    async grant(userId: string, hostId: string) {
+      const now = new Date();
+      db.insert(schema.userHostAccessTable)
+        .values({ userId, hostId, grantedAt: now })
+        .onConflictDoNothing()
+        .run();
+    },
+    async revoke(userId: string, hostId: string) {
+      const result = db
+        .delete(schema.userHostAccessTable)
+        .where(
+          and(
+            eq(schema.userHostAccessTable.userId, userId),
+            eq(schema.userHostAccessTable.hostId, hostId),
+          ),
+        )
+        .run();
+      return result.changes > 0;
+    },
+    async setGrantedHosts(userId: string, hostIds: readonly string[]) {
+      const now = new Date();
+      db.transaction(() => {
+        db.delete(schema.userHostAccessTable)
+          .where(eq(schema.userHostAccessTable.userId, userId))
+          .run();
+        for (const hostId of hostIds) {
+          db.insert(schema.userHostAccessTable)
+            .values({ userId, hostId, grantedAt: now })
+            .run();
+        }
+      });
+    },
+    async hasAccess(userId: string, hostId: string) {
+      const row = db
+        .select()
+        .from(schema.userHostAccessTable)
+        .where(
+          and(
+            eq(schema.userHostAccessTable.userId, userId),
+            eq(schema.userHostAccessTable.hostId, hostId),
+          ),
+        )
+        .get();
+      return !!row;
+    },
+    async autoGrantHostToEligibleUsers(hostId: string) {
+      const eligibleUsers = db
+        .select()
+        .from(schema.usersTable)
+        .where(eq(schema.usersTable.autoGrantNewHosts, true))
+        .all();
+      const now = new Date();
+      let grantedCount = 0;
+      for (const u of eligibleUsers) {
+        const result = db
+          .insert(schema.userHostAccessTable)
+          .values({ userId: u.id, hostId, grantedAt: now })
+          .onConflictDoNothing()
+          .run();
+        if (result.changes > 0) grantedCount++;
+      }
+      return grantedCount;
     },
   };
 
@@ -177,6 +270,7 @@ export function createSqliteRepositories(
     settings,
     hostsCache,
     users,
+    userHostAccess,
     sessions,
   };
 }

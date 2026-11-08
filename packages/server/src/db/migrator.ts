@@ -36,6 +36,13 @@ export const initialMigration: Migration = {
         updated_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS user_host_access (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        host_id TEXT NOT NULL,
+        granted_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, host_id)
+      );
+
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -49,6 +56,8 @@ export const initialMigration: Migration = {
       CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
       CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+      CREATE INDEX IF NOT EXISTS idx_user_host_access_user_id ON user_host_access(user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_host_access_host_id ON user_host_access(host_id);
     `);
   },
 };

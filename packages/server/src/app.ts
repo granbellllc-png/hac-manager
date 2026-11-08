@@ -14,6 +14,7 @@ import {
 import type { ServerConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { healthModule } from './modules/health/index.js';
+import { usersModule } from './modules/users/index.js';
 import { authModule } from './auth/module.js';
 import {
   SessionService,
@@ -109,9 +110,6 @@ export async function buildApp(
     repositories = createSqliteRepositories(dbHandle.db);
   }
 
-  // Register Modules
-  await app.register(healthModule);
-
   const sessionService = new SessionService(repositories, config);
   const rateLimiter = new LoginRateLimiter();
 
@@ -165,6 +163,10 @@ export async function buildApp(
       }
     }
   });
+
+  // Register Modules
+  await app.register(healthModule);
+  await app.register(usersModule, { repos: repositories });
 
   await app.register(authModule, {
     repos: repositories,

@@ -26,10 +26,24 @@ export interface UsersRepository {
   getById(id: string): Promise<UserRow | null>;
   getByUsername(username: string): Promise<UserRow | null>;
   create(row: InsertUserRow): Promise<UserRow>;
+  updateRole(
+    id: string,
+    role: string,
+    autoGrantNewHosts?: boolean,
+  ): Promise<boolean>;
   updatePassword(id: string, passwordHash: string): Promise<boolean>;
   count(): Promise<number>;
   list(): Promise<readonly UserRow[]>;
   delete(id: string): Promise<boolean>;
+}
+
+export interface UserHostAccessRepository {
+  getGrantedHostIds(userId: string): Promise<readonly string[]>;
+  grant(userId: string, hostId: string): Promise<void>;
+  revoke(userId: string, hostId: string): Promise<boolean>;
+  setGrantedHosts(userId: string, hostIds: readonly string[]): Promise<void>;
+  hasAccess(userId: string, hostId: string): Promise<boolean>;
+  autoGrantHostToEligibleUsers(hostId: string): Promise<number>;
 }
 
 export interface SessionsRepository {
@@ -45,5 +59,6 @@ export interface DatabaseRepositories {
   readonly settings: SettingsRepository;
   readonly hostsCache: HostsCacheRepository;
   readonly users: UsersRepository;
+  readonly userHostAccess: UserHostAccessRepository;
   readonly sessions: SessionsRepository;
 }

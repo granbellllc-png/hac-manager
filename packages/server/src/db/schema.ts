@@ -28,6 +28,14 @@ export const usersTable = sqliteTable('users', {
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
+export const userHostAccessTable = sqliteTable('user_host_access', {
+  userId: text('user_id')
+    .notNull()
+    .references(() => usersTable.id, { onDelete: 'cascade' }),
+  hostId: text('host_id').notNull(),
+  grantedAt: integer('granted_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
 export const sessionsTable = sqliteTable('sessions', {
   id: text('id').primaryKey(),
   userId: text('user_id')
@@ -54,6 +62,9 @@ export type InsertHostCacheRow = typeof hostsCacheTable.$inferInsert;
 
 export type UserRow = typeof usersTable.$inferSelect;
 export type InsertUserRow = typeof usersTable.$inferInsert;
+
+export type UserHostAccessRow = typeof userHostAccessTable.$inferSelect;
+export type InsertUserHostAccessRow = typeof userHostAccessTable.$inferInsert;
 
 export type SessionRow = typeof sessionsTable.$inferSelect;
 export type InsertSessionRow = typeof sessionsTable.$inferInsert;
