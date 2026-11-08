@@ -1,0 +1,11 @@
+[
+  {
+    "node": "example-host",
+    "status": "online",
+    "cpu": 0.02,
+    "maxcpu": 8,
+    "mem": 4294967296,
+    "maxmem": 34359738368,
+    "uptime": 86400
+  }
+]
