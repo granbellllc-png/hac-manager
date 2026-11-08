@@ -1,4 +1,5 @@
-export { Secret } from './secret.js';
+export { Secret, compareSecretValues } from './secret.js';
+
 export {
   type CmdProvider,
   type CmdProviderResult,

@@ -86,3 +86,20 @@ export class Secret {
     return '[Secret: ***]';
   }
 }
+
+/**
+ * Hash-based comparison helper for drift detection on secret fields (D-15).
+ * Compares two values without exposing their plaintext.
+ */
+export function compareSecretValues(a: unknown, b: unknown): boolean {
+  if (a instanceof Secret && b instanceof Secret) {
+    return a.hash === b.hash;
+  }
+  if (a instanceof Secret && typeof b === 'string') {
+    return a.hash === new Secret(b).hash;
+  }
+  if (typeof a === 'string' && b instanceof Secret) {
+    return new Secret(a).hash === b.hash;
+  }
+  return a === b;
+}

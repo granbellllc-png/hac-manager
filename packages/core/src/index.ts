@@ -41,3 +41,4 @@ export * from './tags/index.js';
 export * from './validate/index.js';
 export * from './writeback/index.js';
 export * from './secrets/index.js';
+export * from './redaction/index.js';
