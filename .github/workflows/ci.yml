@@ -49,3 +49,29 @@ jobs:
           path: coverage/
           if-no-files-found: warn
           retention-days: 7
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build image
+        run: docker build -t hacm:ci .
+      - name: Serve the UI from the image with mounted data and state dirs
+        run: |
+          mkdir -p "$RUNNER_TEMP/data" "$RUNNER_TEMP/state"
+          chmod 777 "$RUNNER_TEMP/data" "$RUNNER_TEMP/state"
+          docker run -d --name hacm -p 3000:3000 \
+            -v "$RUNNER_TEMP/data:/data" -v "$RUNNER_TEMP/state:/state" hacm:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:3000/api/health && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/api/health
+          curl -fsS -H 'Accept: text/html' http://127.0.0.1:3000/ | grep -q '<div id="root">'
+      - name: Container logs
+        if: failure()
+        run: docker logs hacm

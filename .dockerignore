@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+**/dist
+**/.tsc-out
+coverage
+.git
+.github
+.env*
+!.env.example
+data
+state
+*.sqlite*
+secrets.yaml
+packages/web/playwright-report
+packages/web/test-results

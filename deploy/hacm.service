@@ -1,0 +1,26 @@
+[Unit]
+Description=HAC Manager (Homelab as Code)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hacm
+Group=hacm
+WorkingDirectory=/opt/hac-manager/packages/server
+EnvironmentFile=/etc/hacm/hacm.env
+ExecStart=/usr/bin/node bin/server.mjs
+Restart=on-failure
+RestartSec=5
+# Hardening: the service needs only the data and state directories.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/hacm /srv/hacm-data
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

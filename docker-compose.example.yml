@@ -1,0 +1,20 @@
+# Example deployment. Copy next to your own data and state directories.
+# External secret CLIs (op, bw) are not bundled: extend the image
+# (FROM ghcr.io/alexandre-leites/hac-manager) or run HAC Manager on a host
+# where they are installed. See docs/DEPLOYMENT.md.
+services:
+  hacm:
+    image: ghcr.io/alexandre-leites/hac-manager:latest
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:3000:3000'
+    environment:
+      HACM_LOG_LEVEL: info
+      # Set to false only when serving over plain HTTP on a trusted network.
+      HACM_COOKIE_SECURE: 'true'
+      HACM_SESSION_SECRET: ${HACM_SESSION_SECRET:?generate a random value of at least 32 characters}
+    volumes:
+      # Your infrastructure repo (declarative state, edited by you and Git).
+      - ./data:/data
+      # Runtime state only (SQLite, caches). Never commit this.
+      - ./state:/state
