@@ -31,7 +31,7 @@ cp .env.example .env
 pnpm dev
 ```
 
-`pnpm dev` starts the API and watches the web package entry point until its Vite shell lands. The API defaults to `127.0.0.1:3000`; check `GET /api/health` and inspect `GET /api/openapi.json`. No connection to Proxmox is made by the skeleton. Package commands use `pnpm --filter server <script>`, `web`, `cli` or `@hacm/core`.
+`pnpm dev` starts the API and the Vite dev server (port 5173, proxying `/api` to the API). Regenerate the typed web API client from the OpenAPI document with `pnpm api:generate`. `pnpm --filter web e2e` runs the Playwright smoke test at 360px and 1440px (run `pnpm --filter web exec playwright install chromium` once). The API defaults to `127.0.0.1:3000`; check `GET /api/health` and inspect `GET /api/openapi.json`. No connection to Proxmox is made by the skeleton. Package commands use `pnpm --filter server <script>`, `web`, `cli` or `@hacm/core`.
 
 Copy `examples/data` to a directory **outside this app checkout** to start your own infrastructure repo. Adjust fake connection details and supply secrets in untracked files. `hacm init` and `hacm validate` are planned in the configuration and secrets milestones. `.env.example` documents runtime configuration; development and production start scripts load the root `.env` when present. Required data and state paths are parsed at startup; the state dir must be outside the data dir. Invalid configuration aborts with field diagnostics without printing environment values.
 

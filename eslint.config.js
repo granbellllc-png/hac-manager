@@ -6,6 +6,8 @@ export default tseslint.config(
     ignores: [
       '**/dist/**',
       '**/coverage/**',
+      '**/.tsc-out/**',
+      'packages/web/src/api/schema.d.ts',
       '**/node_modules/**',
       'playwright-report/**',
       'test-results/**',

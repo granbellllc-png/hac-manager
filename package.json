@@ -11,7 +11,8 @@
   },
   "scripts": {
     "dev": "concurrently -k -n server,web \"pnpm --filter server dev\" \"pnpm --filter web dev\"",
-    "build": "tsc -b",
+    "build": "tsc -b && pnpm --filter web bundle",
+    "api:generate": "pnpm --filter server openapi:generate && pnpm --filter web api:generate",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc -b && tsc -p tsconfig.test.json",
     "test": "vitest run",

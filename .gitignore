@@ -17,3 +17,5 @@ secrets.yaml
 *.log
 playwright-report/
 test-results/
+
+.tsc-out/

@@ -1,9 +1,21 @@
 {
   "extends": "./tsconfig.base.json",
-  "compilerOptions": { "composite": false, "noEmit": true },
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["node"]
+  },
   "include": [
     "packages/server/scripts/**/*.ts",
     "packages/*/src/**/*.ts",
+    "packages/*/src/**/*.tsx",
+    "packages/web/vite.config.ts",
+    "packages/web/playwright.config.ts",
+    "packages/web/e2e/**/*.ts",
     "packages/*/vitest.config.ts",
     "vitest.config.ts",
     "vitest.shared.ts"

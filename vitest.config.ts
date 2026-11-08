@@ -5,8 +5,13 @@ export default defineConfig({
     projects: ['packages/*/vitest.config.ts'],
     coverage: {
       provider: 'v8',
-      include: ['packages/*/src/**/*.ts'],
-      exclude: ['**/*.test.ts'],
+      include: ['packages/*/src/**/*.{ts,tsx}'],
+      exclude: [
+        '**/*.test.{ts,tsx}',
+        '**/test-setup.ts',
+        'packages/web/src/api/schema.d.ts',
+        'packages/web/src/main.tsx',
+      ],
       reporter: ['text', 'lcov', 'json-summary'],
       thresholds: {
         lines: 90,

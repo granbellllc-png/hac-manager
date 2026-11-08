@@ -5,3 +5,6 @@ pnpm-lock.yaml
 *.tsbuildinfo
 playwright-report
 test-results
+
+.tsc-out
+packages/web/src/api/schema.d.ts
