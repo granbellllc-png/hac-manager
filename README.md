@@ -35,6 +35,8 @@ Copy `examples/data` to a directory **outside this app checkout** to start your 
 
 ## Architecture
 
+The [architecture decision index](docs/adr/README.md) explains the stack, state ownership, security boundaries and execution model.
+
 ```text
 React SPA / CLI ── REST + SSE ── Fastify API
                                    ├─ auth, RBAC, audit
