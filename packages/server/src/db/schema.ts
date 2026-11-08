@@ -16,9 +16,23 @@ export const hostsCacheTable = sqliteTable('hosts', {
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
+export const usersTable = sqliteTable('users', {
+  id: text('id').primaryKey(),
+  username: text('username').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  role: text('role').notNull().default('viewer'),
+  autoGrantNewHosts: integer('auto_grant_new_hosts', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
 export const sessionsTable = sqliteTable('sessions', {
   id: text('id').primaryKey(),
-  userId: text('user_id').notNull(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => usersTable.id, { onDelete: 'cascade' }),
   expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull(),
@@ -37,6 +51,9 @@ export type InsertSettingRow = typeof settingsTable.$inferInsert;
 
 export type HostCacheRow = typeof hostsCacheTable.$inferSelect;
 export type InsertHostCacheRow = typeof hostsCacheTable.$inferInsert;
+
+export type UserRow = typeof usersTable.$inferSelect;
+export type InsertUserRow = typeof usersTable.$inferInsert;
 
 export type SessionRow = typeof sessionsTable.$inferSelect;
 export type InsertSessionRow = typeof sessionsTable.$inferInsert;

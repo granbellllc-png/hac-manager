@@ -15,9 +15,14 @@
     "openapi:generate": "tsx scripts/openapi.ts"
   },
   "dependencies": {
+    "@fastify/cookie": "11.1.5",
+    "@fastify/csrf-protection": "8.0.2",
+    "@fastify/helmet": "13.2.0",
+    "@fastify/rate-limit": "11.2.2",
     "@fastify/static": "10.1.10",
     "@fastify/swagger": "9.9.3",
     "@hacm/core": "workspace:*",
+    "argon2": "0.45.2",
     "better-sqlite3": "13.0.3",
     "drizzle-orm": "0.45.4",
     "fastify": "5.12.8",

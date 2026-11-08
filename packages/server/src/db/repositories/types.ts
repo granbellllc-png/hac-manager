@@ -2,6 +2,8 @@ import type {
   SettingRow,
   HostCacheRow,
   InsertHostCacheRow,
+  UserRow,
+  InsertUserRow,
   SessionRow,
   InsertSessionRow,
 } from '../schema.js';
@@ -20,6 +22,16 @@ export interface HostsCacheRepository {
   list(): Promise<readonly HostCacheRow[]>;
 }
 
+export interface UsersRepository {
+  getById(id: string): Promise<UserRow | null>;
+  getByUsername(username: string): Promise<UserRow | null>;
+  create(row: InsertUserRow): Promise<UserRow>;
+  updatePassword(id: string, passwordHash: string): Promise<boolean>;
+  count(): Promise<number>;
+  list(): Promise<readonly UserRow[]>;
+  delete(id: string): Promise<boolean>;
+}
+
 export interface SessionsRepository {
   get(id: string): Promise<SessionRow | null>;
   create(row: InsertSessionRow): Promise<void>;
@@ -32,5 +44,6 @@ export interface SessionsRepository {
 export interface DatabaseRepositories {
   readonly settings: SettingsRepository;
   readonly hostsCache: HostsCacheRepository;
+  readonly users: UsersRepository;
   readonly sessions: SessionsRepository;
 }

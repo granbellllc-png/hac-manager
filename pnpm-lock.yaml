@@ -72,6 +72,18 @@ importers:
 
   packages/server:
     dependencies:
+      '@fastify/cookie':
+        specifier: 11.1.5
+        version: 11.1.5
+      '@fastify/csrf-protection':
+        specifier: 8.0.2
+        version: 8.0.2
+      '@fastify/helmet':
+        specifier: 13.2.0
+        version: 13.2.0
+      '@fastify/rate-limit':
+        specifier: 11.2.2
+        version: 11.2.2
       '@fastify/static':
         specifier: 10.1.10
         version: 10.1.10
@@ -81,6 +93,9 @@ importers:
       '@hacm/core':
         specifier: workspace:*
         version: link:../core
+      argon2:
+        specifier: 0.45.2
+        version: 0.45.2
       better-sqlite3:
         specifier: 13.0.3
         version: 13.0.3
@@ -288,6 +303,9 @@ packages:
   '@clack/prompts@1.8.1':
     resolution: {integrity: sha512-dlT1m5e/0yUL0kRNcQn7yGLVThkgbB0Ga/1AmfDDC/8ik6AIiSf2QLQO2zPYvefsHP0aFgxO93cVLCCfDp7kzQ==}
     engines: {node: '>= 20.12.0'}
+
+  '@epic-web/invariant@1.0.0':
+    resolution: {integrity: sha512-lrTPqgvfFQtR/eY/qkIzp98OGdNJu0m5ji3q/nJI8v3SXkRKEnWiOxMmbvcSoAIzv/cGiuvRy57k4suKQSAdwA==}
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -499,6 +517,15 @@ packages:
   '@fastify/ajv-compiler@4.0.7':
     resolution: {integrity: sha512-VP0yIfwlc1ohj733keYDqyHm1VWeP9VQxYomunhr90jkC4aNNibbkrRiaNgPgqj1ORxUenILR4qzA/ppYBNAtQ==}
 
+  '@fastify/cookie@11.1.5':
+    resolution: {integrity: sha512-hs7e0otf7n/lJMpt63EFdQb5/u8kO6DeexEtLPVTybSdItC6SwJ1O0vtTyWvKNR70LZcHLlsUr/y3jFpqtyWRA==}
+
+  '@fastify/csrf-protection@8.0.2':
+    resolution: {integrity: sha512-5EiY9fodwg0xvtSUrUaYZ4a2TFWpR+n+v9JRnFAJ1GIGwmfImZdqI286w9u7iK65Uq+hHU76tJqnAl8lN7sDZw==}
+
+  '@fastify/csrf@8.1.1':
+    resolution: {integrity: sha512-PWsrdJsT87+wda4M30XAOT34cpMP82rIklTYP3uAZ5VPUAa1I3vfBW1k1UfwuxdOBJaxezuqz6tzeoiXrWKqVA==}
+
   '@fastify/deepmerge@3.2.4':
     resolution: {integrity: sha512-kc8GQq5gX9RRhw0rov3DMrN8wS8yRlxJRdDzsYwwdBV/wazuVgc/1K7CKL90tlvu3RlHan6Y0R0aE3nJtBz2eQ==}
 
@@ -511,11 +538,17 @@ packages:
   '@fastify/forwarded@3.1.2':
     resolution: {integrity: sha512-89WiRG+hW3VQSfCwg4Hb8b43PeyEX15K5+lEfsZ4EUth/FyOjS/lv8HsVuswUNXWiSnxMGNouE/fq/0w3VumHQ==}
 
+  '@fastify/helmet@13.2.0':
+    resolution: {integrity: sha512-2u41U5hR9o1u3HUHLT3Njp7vWuWw+XXw8qCBwVY17pRQAN179YYKiU9f7/qEn1ITabgNTkq/Yk6gmrYPSraagA==}
+
   '@fastify/merge-json-schemas@0.2.2':
     resolution: {integrity: sha512-d/gx9sRbUCVgGRGzma46wLcwiY8noTqO2Nmjg/vbTARxHRE5bdh5PIL8s97Lt1X7ScRWRW52eVYxwIoPwIdVUA==}
 
   '@fastify/proxy-addr@5.1.2':
     resolution: {integrity: sha512-uqB4QsgVoro0XDC+DIftIMGXHdBPn+lK6Ek3xXAIxPMCJfqxnbtyEoMCm2KPUVOuIosd7Cyw9HawEqMFM/UA+g==}
+
+  '@fastify/rate-limit@11.2.2':
+    resolution: {integrity: sha512-Ynxk9BU82Y5Ux7NOk9NqyZpTMdFes8EY8quXrN6ePDsbtG4G9Afb3l9mD8Vw2nv0hXg0iFjV+gkdABReFPlShw==}
 
   '@fastify/send@4.2.1':
     resolution: {integrity: sha512-zOB8L9z444PnGbd1Nd7gNXPz/7bnDR8Z4KNTNSwLVQuE3cTGsU9qUj1N4SjXKK0Tq4cauZYTwB+tqvlqosuKsw==}
@@ -592,6 +625,10 @@ packages:
 
   '@oxc-project/types@0.156.0':
     resolution: {integrity: sha512-1Duyg48TdJNdyhEB8Xn1L36bT9Pv6GUtlKjHxOys8xkaF/rQq3XJE+bAurSK/AgIz5mGFsb77cn9Pb20+WCScw==}
+
+  '@phc/format@1.0.0':
+    resolution: {integrity: sha512-m7X9U6BG2+J+R1lSOdCiITLLrxm+cWlNI3HUFA92oLO77ObGNzaKdh8pMLqdZcshtkKuV84olNNXDfMc4FezBQ==}
+    engines: {node: '>=10'}
 
   '@pinojs/redact@0.4.0':
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
@@ -1061,6 +1098,10 @@ packages:
     resolution: {integrity: sha512-4Dj6M28JB+oAH8kFkTLUo+a2jwOFkuqb3yucU0CANcRRUbxS0cP0nZYCGjcc3BNXwRIsUVmDGgzawme7zvJHvg==}
     engines: {node: '>=12'}
 
+  argon2@0.45.2:
+    resolution: {integrity: sha512-41gOiSQBpQf+7H7HyLZbUqRZxrNk5ps39TsJKILjWuOyAOialUkztuIVL/Y/l+n5iSA2C4/jFg3FUYso/cX7TA==}
+    engines: {node: '>=16.17.0'}
+
   argparse@2.0.1:
     resolution: {integrity: sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==}
 
@@ -1151,6 +1192,11 @@ packages:
   cookie@2.0.2:
     resolution: {integrity: sha512-SL0cVuEdETEp7pN0FuZb01toc3vnODEfVUCooxG1SJN0yIirh7JMb9X9bvfCFf0vzzbT68RdbKDHYTiWy7a7iw==}
     engines: {node: '>=22'}
+
+  cross-env@10.1.0:
+    resolution: {integrity: sha512-GsYosgnACZTADcmEyJctkJIoqAhHjttw7RsFrVoJNXbsWWqaq6Ym+7kZjq6mS45O0jij6vtiReppKQEtqWy6Dw==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -1481,6 +1527,10 @@ packages:
     resolution: {integrity: sha512-iZyKG96/JwPz1N55vj2Ie2vXbhu440zfUfJvSwEqEbeLluk7NnapfGqa7LH0mOsnDxTF85Mx8/dyR6HfqcbmbQ==}
     engines: {node: '>=20'}
 
+  helmet@8.3.0:
+    resolution: {integrity: sha512-Qgpiaws3Sm30Av8Eah6sjMCZZwjlBu+E68rhpCWBshY1lb09HtLwj5GviX0OyQIn+ulUS0iX0AxN5n3tLZzz1w==}
+    engines: {node: '>=18.0.0'}
+
   hookified@1.15.1:
     resolution: {integrity: sha512-MvG/clsADq1GPM2KGo2nyfaWVyn9naPiXrqIe4jYjXNZQt238kWyOGrsyc/DmRAQ+Re6yeo6yX/yoNCG5KAEVg==}
 
@@ -1528,6 +1578,10 @@ packages:
 
   inherits@2.0.4:
     resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
+
+  ip-address@10.7.6:
+    resolution: {integrity: sha512-00LYkM6byILa9eQIx6qoaXCM40xTLd56AZ4vyaPW3YTyb49VZYPo5xsiAq4tuQ54GH4R7gVdYScJ1B7B77PuTg==}
+    engines: {node: '>= 12'}
 
   ipaddr.js@2.5.0:
     resolution: {integrity: sha512-aq+t5NAc+cS6rZQQVWC2x98CPqGtKKTMDd4Gaodv0wShnItdKg/51djkGJ1hqH+Oy0ivDftCbSLCQob8zso01w==}
@@ -1755,6 +1809,10 @@ packages:
   node-addon-api@8.9.2:
     resolution: {integrity: sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==}
     engines: {node: ^18 || ^20 || >= 21}
+
+  node-gyp-build@4.8.4:
+    resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
+    hasBin: true
 
   obug@3.0.0:
     resolution: {integrity: sha512-5vvB5+W7ePv+p3uqxi+RcW1XAzLW0/hxt3/4X4Lc4qHudzOhmBiBwOY6DRob4WnanAEGvNcLjF+KNOufrUoEQw==}
@@ -2444,6 +2502,8 @@ snapshots:
       fast-wrap-ansi: 0.2.2
       sisteransi: 1.0.5
 
+  '@epic-web/invariant@1.0.0': {}
+
   '@esbuild/aix-ppc64@0.28.2':
     optional: true
 
@@ -2566,6 +2626,19 @@ snapshots:
       ajv-formats: 3.0.1(ajv@8.20.0)
       fast-uri: 4.2.3
 
+  '@fastify/cookie@11.1.5':
+    dependencies:
+      cookie: 2.0.2
+      fastify-plugin: 6.0.1
+
+  '@fastify/csrf-protection@8.0.2':
+    dependencies:
+      '@fastify/csrf': 8.1.1
+      '@fastify/error': 4.2.1
+      fastify-plugin: 6.0.1
+
+  '@fastify/csrf@8.1.1': {}
+
   '@fastify/deepmerge@3.2.4': {}
 
   '@fastify/error@4.2.1': {}
@@ -2576,6 +2649,11 @@ snapshots:
 
   '@fastify/forwarded@3.1.2': {}
 
+  '@fastify/helmet@13.2.0':
+    dependencies:
+      fastify-plugin: 6.0.1
+      helmet: 8.3.0
+
   '@fastify/merge-json-schemas@0.2.2':
     dependencies:
       dequal: 2.0.3
@@ -2584,6 +2662,13 @@ snapshots:
     dependencies:
       '@fastify/forwarded': 3.1.2
       ipaddr.js: 2.5.0
+
+  '@fastify/rate-limit@11.2.2':
+    dependencies:
+      '@lukeed/ms': 2.0.2
+      fastify-plugin: 6.0.1
+      ip-address: 10.7.6
+      toad-cache: 3.7.4
 
   '@fastify/send@4.2.1':
     dependencies:
@@ -2676,6 +2761,8 @@ snapshots:
       yaml: 2.9.1
 
   '@oxc-project/types@0.156.0': {}
+
+  '@phc/format@1.0.0': {}
 
   '@pinojs/redact@0.4.0': {}
 
@@ -3076,6 +3163,13 @@ snapshots:
 
   ansi-styles@6.2.3: {}
 
+  argon2@0.45.2:
+    dependencies:
+      '@phc/format': 1.0.0
+      cross-env: 10.1.0
+      node-addon-api: 8.9.2
+      node-gyp-build: 4.8.4
+
   argparse@2.0.1: {}
 
   aria-query@5.3.0:
@@ -3161,6 +3255,11 @@ snapshots:
   cookie@1.1.1: {}
 
   cookie@2.0.2: {}
+
+  cross-env@10.1.0:
+    dependencies:
+      '@epic-web/invariant': 1.0.0
+      cross-spawn: 7.0.6
 
   cross-spawn@7.0.6:
     dependencies:
@@ -3443,6 +3542,8 @@ snapshots:
     dependencies:
       hookified: 1.15.1
 
+  helmet@8.3.0: {}
+
   hookified@1.15.1: {}
 
   hookified@2.2.0: {}
@@ -3483,6 +3584,8 @@ snapshots:
   index-to-position@1.2.0: {}
 
   inherits@2.0.4: {}
+
+  ip-address@10.7.6: {}
 
   ipaddr.js@2.5.0: {}
 
@@ -3682,6 +3785,8 @@ snapshots:
   natural-compare@1.4.0: {}
 
   node-addon-api@8.9.2: {}
+
+  node-gyp-build@4.8.4: {}
 
   obug@3.0.0: {}
 

@@ -123,6 +123,25 @@ describe('Database foundation', () => {
       const past = new Date(now.getTime() - 10000);
       const future = new Date(now.getTime() + 60000);
 
+      // Create users first to satisfy foreign key constraints
+      await repos.users.create({
+        id: 'admin-1',
+        username: 'admin1',
+        passwordHash: 'hash1',
+        role: 'admin',
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await repos.users.create({
+        id: 'user-2',
+        username: 'user2',
+        passwordHash: 'hash2',
+        role: 'viewer',
+        createdAt: now,
+        updatedAt: now,
+      });
+
       await repos.sessions.create({
         id: 'sess-active',
         userId: 'admin-1',

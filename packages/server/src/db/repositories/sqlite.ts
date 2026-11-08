@@ -79,6 +79,59 @@ export function createSqliteRepositories(
     },
   };
 
+  const users = {
+    async getById(id: string) {
+      const row = db
+        .select()
+        .from(schema.usersTable)
+        .where(eq(schema.usersTable.id, id))
+        .get();
+      return row ?? null;
+    },
+    async getByUsername(username: string) {
+      const row = db
+        .select()
+        .from(schema.usersTable)
+        .where(eq(schema.usersTable.username, username))
+        .get();
+      return row ?? null;
+    },
+    async create(row: schema.InsertUserRow) {
+      db.insert(schema.usersTable).values(row).run();
+      const created = db
+        .select()
+        .from(schema.usersTable)
+        .where(eq(schema.usersTable.id, row.id))
+        .get();
+      if (!created) {
+        throw new Error(`Failed to create user with id ${row.id}`);
+      }
+      return created;
+    },
+    async updatePassword(id: string, passwordHash: string) {
+      const result = db
+        .update(schema.usersTable)
+        .set({ passwordHash, updatedAt: new Date() })
+        .where(eq(schema.usersTable.id, id))
+        .run();
+      return result.changes > 0;
+    },
+    async count() {
+      const rows = db.select().from(schema.usersTable).all();
+      return rows.length;
+    },
+    async list() {
+      return db.select().from(schema.usersTable).all();
+    },
+    async delete(id: string) {
+      const result = db
+        .delete(schema.usersTable)
+        .where(eq(schema.usersTable.id, id))
+        .run();
+      return result.changes > 0;
+    },
+  };
+
   const sessions: SessionsRepository = {
     async get(id: string) {
       const row = db
@@ -123,6 +176,7 @@ export function createSqliteRepositories(
   return {
     settings,
     hostsCache,
+    users,
     sessions,
   };
 }
