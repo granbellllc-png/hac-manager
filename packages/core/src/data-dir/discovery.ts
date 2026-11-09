@@ -11,12 +11,13 @@ import type {
   DiscoveredTaskFile,
 } from './types.js';
 
-function normalizeSlash(path: string): string {
-  return path.replaceAll('\\', '/');
+function normalizeSlash(path: string | undefined): string {
+  return path ? path.replaceAll('\\', '/') : '';
 }
 
-function joinPath(...parts: string[]): string {
+function joinPath(...parts: (string | undefined)[]): string {
   return parts
+    .filter((p): p is string => Boolean(p))
     .map((part) => normalizeSlash(part).replace(/\/+$/, ''))
     .filter(Boolean)
     .join('/');

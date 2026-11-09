@@ -1,4 +1,15 @@
-import { resolveConfigTags, SecretManager, type HostFile } from '@hacm/core';
+import {
+  resolveConfigTags,
+  Secret,
+  SecretManager,
+  type HostFile,
+} from '@hacm/core';
+
+function unwrapSecret(val: unknown): string | undefined {
+  if (val === undefined || val === null) return undefined;
+  if (val instanceof Secret) return val.unwrap();
+  return String(val);
+}
 import type { HostRegistry } from '../hosts/registry.js';
 import { SshPool } from '../ssh/pool.js';
 import type { SshHostConfig } from '../ssh/types.js';
@@ -77,12 +88,8 @@ export class ConnectionManager {
         username: resolvedConn.ssh.username
           ? String(resolvedConn.ssh.username)
           : 'root',
-        privateKey: resolvedConn.ssh.private_key
-          ? String(resolvedConn.ssh.private_key)
-          : undefined,
-        password: resolvedConn.ssh.password
-          ? String(resolvedConn.ssh.password)
-          : undefined,
+        privateKey: unwrapSecret(resolvedConn.ssh.private_key),
+        password: unwrapSecret(resolvedConn.ssh.password),
         fingerprint: resolvedConn.ssh.fingerprint,
         readyTimeoutMs: 3000,
       };
@@ -99,13 +106,13 @@ export class ConnectionManager {
         auth: isToken
           ? {
               type: 'token',
-              tokenId: String(resolvedConn.api.token_id),
-              tokenSecret: String(resolvedConn.api.token_secret),
+              tokenId: unwrapSecret(resolvedConn.api.token_id)!,
+              tokenSecret: unwrapSecret(resolvedConn.api.token_secret)!,
             }
           : {
               type: 'ticket',
               username: String(resolvedConn.ssh?.username ?? 'root@pam'),
-              password: String(resolvedConn.ssh?.password ?? ''),
+              password: unwrapSecret(resolvedConn.ssh?.password) ?? '',
             },
         pinnedFingerprint: resolvedConn.api.fingerprint,
         caCertificate: resolvedConn.api.ca_file

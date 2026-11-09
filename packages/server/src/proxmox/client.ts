@@ -51,6 +51,7 @@ export class ProxmoxClient {
       this.dispatcher = new Agent({
         connect: {
           ca: options.caCertificate,
+          rejectUnauthorized: Boolean(options.caCertificate),
           checkServerIdentity: (hostname, cert) => {
             if (options.pinnedFingerprint) {
               const expected = normalizeFingerprint(options.pinnedFingerprint);
