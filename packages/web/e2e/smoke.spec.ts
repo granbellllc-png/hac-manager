@@ -58,6 +58,36 @@ test('renders SSH-only host detail and connection test feedback', async ({
   });
 });
 
+test('browses resources and preserves YAML comments and tags', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/resources');
+  await expect(page.getByRole('heading', { name: 'Resources' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Example LXC' }),
+  ).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('1 live guest has');
+  await page.getByLabel('Type').selectOption('lxc');
+  await expect(
+    page.getByRole('heading', { name: 'Unmanaged VM' }),
+  ).toBeHidden();
+  await page.screenshot({
+    path: testInfo.outputPath('resources.png'),
+    fullPage: true,
+  });
+  await page.getByRole('link', { name: 'View guest' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Example LXC' }),
+  ).toBeVisible();
+  const yaml = page.getByLabel('Example LXC deployment YAML');
+  await expect(yaml).toContainText('Fixture comment must remain visible');
+  await expect(yaml).toContainText('host.index + 1');
+  await page.screenshot({
+    path: testInfo.outputPath('guest-detail.png'),
+    fullPage: true,
+  });
+});
+
 test('signs in with a recovery code and signs out', async ({
   page,
 }, testInfo) => {

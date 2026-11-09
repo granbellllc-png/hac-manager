@@ -10,6 +10,11 @@ import {
 } from '@hacm/core';
 import type { LiveInventoryService } from '../../inventory/service.js';
 import type { HostRegistry } from '../../hosts/registry.js';
+import {
+  getConfiguredGuestFromIndex,
+  indexConfiguredGuests,
+  readGuestConfiguration,
+} from '../../inventory/configuration.js';
 
 export interface InventoryModuleOptions {
   readonly inventoryService: LiveInventoryService;
@@ -38,6 +43,34 @@ const liveGuestSummarySchema = z.object({
   lock: z.string().optional(),
   tags: z.array(z.string()).readonly().optional(),
 });
+
+const resourceGuestSummarySchema = liveGuestSummarySchema.extend({
+  configuration: z.discriminatedUnion('status', [
+    z.object({ status: z.literal('orphan') }),
+    z.object({
+      status: z.literal('configured'),
+      relativePath: z.string(),
+    }),
+  ]),
+});
+
+const guestConfigurationDetailSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('orphan') }),
+  z.object({
+    status: z.literal('configured'),
+    relativePath: z.string(),
+    rawYaml: z.string(),
+    hash: z.string(),
+    config: z.record(z.string(), z.unknown()).optional(),
+    issues: z.array(
+      z.object({
+        path: z.string(),
+        message: z.string(),
+        code: z.string(),
+      }),
+    ),
+  }),
+]);
 
 const hostInventorySummarySchema = z.object({
   hostId: z.string(),
@@ -104,7 +137,7 @@ export const inventoryModule: FastifyPluginAsyncZod<
         }),
         response: {
           200: z.object({
-            guests: z.array(liveGuestSummarySchema),
+            guests: z.array(resourceGuestSummarySchema),
           }),
           403: z.object({
             statusCode: z.number(),
@@ -133,7 +166,27 @@ export const inventoryModule: FastifyPluginAsyncZod<
         ...(status ? { status } : {}),
       });
 
-      const filteredGuests = guests.filter((g) => allowedIds.has(g.hostId));
+      const configuredGuests = await indexConfiguredGuests(
+        hostRegistry.dataDir,
+      );
+      const filteredGuests = guests
+        .filter((g) => allowedIds.has(g.hostId))
+        .map((guest) => {
+          const configured = getConfiguredGuestFromIndex(
+            configuredGuests,
+            guest.hostId,
+            guest.vmid,
+          );
+          return {
+            ...guest,
+            configuration: configured
+              ? {
+                  status: 'configured' as const,
+                  relativePath: configured.relativePath,
+                }
+              : { status: 'orphan' as const },
+          };
+        });
 
       return { guests: filteredGuests };
     },
@@ -158,6 +211,7 @@ export const inventoryModule: FastifyPluginAsyncZod<
             rawConfig: z.string(),
             canonicalConfig: z.record(z.string(), z.unknown()),
             source: z.enum(['api', 'ssh']),
+            configuration: guestConfigurationDetailSchema,
           }),
           403: z.object({
             statusCode: z.number(),
@@ -191,11 +245,31 @@ export const inventoryModule: FastifyPluginAsyncZod<
           vmid,
           request.query.type,
         );
+        const configuration = await readGuestConfiguration(
+          hostRegistry.dataDir,
+          hostId,
+          vmid,
+        );
         return {
           summary: detail.summary,
           rawConfig: detail.rawConfig,
           canonicalConfig: detail.canonicalConfig as Record<string, unknown>,
           source: detail.source,
+          configuration:
+            configuration.status === 'configured'
+              ? {
+                  status: configuration.status,
+                  relativePath: configuration.relativePath,
+                  rawYaml: configuration.rawYaml,
+                  hash: configuration.hash,
+                  issues: [...configuration.issues],
+                  ...(configuration.config
+                    ? {
+                        config: configuration.config as Record<string, unknown>,
+                      }
+                    : {}),
+                }
+              : configuration,
         };
       } catch (err) {
         return reply.code(404).send({

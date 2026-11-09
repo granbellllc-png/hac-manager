@@ -2344,6 +2344,35 @@
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "configuration": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "status": {
+                                    "type": "string",
+                                    "enum": ["orphan"]
+                                  }
+                                },
+                                "required": ["status"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "status": {
+                                    "type": "string",
+                                    "enum": ["configured"]
+                                  },
+                                  "relativePath": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["status", "relativePath"],
+                                "additionalProperties": false
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -2352,7 +2381,8 @@
                           "name",
                           "type",
                           "status",
-                          "node"
+                          "node",
+                          "configuration"
                         ],
                         "additionalProperties": false
                       }
@@ -2500,13 +2530,81 @@
                     "source": {
                       "type": "string",
                       "enum": ["api", "ssh"]
+                    },
+                    "configuration": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": ["orphan"]
+                            }
+                          },
+                          "required": ["status"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": ["configured"]
+                            },
+                            "relativePath": {
+                              "type": "string"
+                            },
+                            "rawYaml": {
+                              "type": "string"
+                            },
+                            "hash": {
+                              "type": "string"
+                            },
+                            "config": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            },
+                            "issues": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "code": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["path", "message", "code"],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "relativePath",
+                            "rawYaml",
+                            "hash",
+                            "issues"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
                     }
                   },
                   "required": [
                     "summary",
                     "rawConfig",
                     "canonicalConfig",
-                    "source"
+                    "source",
+                    "configuration"
                   ],
                   "additionalProperties": false
                 }

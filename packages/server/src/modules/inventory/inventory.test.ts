@@ -35,7 +35,9 @@ describe('Inventory API endpoints', () => {
     const stateDir = await mkdtemp(join(tmpdir(), 'hacm-inv-state-test-'));
     const hostsDir = join(tempDir, 'hosts');
     const h1Dir = join(hostsDir, 'pve-01');
+    const configuredGuestDir = join(h1Dir, '112-adguard-lxc');
     await mkdir(h1Dir, { recursive: true });
+    await mkdir(configuredGuestDir, { recursive: true });
 
     await writeFile(
       join(h1Dir, 'host.yaml'),
@@ -50,6 +52,19 @@ connection:
     port: 22
     username: root
 `,
+      'utf8',
+    );
+
+    const configuredYaml = `# This comment and tag must reach the read-only editor unchanged.
+schema_version: 1
+id: 112
+name: adguard-lxc
+type: lxc
+cpu: !expr "host.index + 1"
+`;
+    await writeFile(
+      join(configuredGuestDir, 'deployment.yaml'),
+      configuredYaml,
       'utf8',
     );
 
@@ -173,6 +188,21 @@ connection:
       expect(guestsRes.statusCode).toBe(200);
       const guestsJson = guestsRes.json();
       expect(guestsJson.guests).toHaveLength(2);
+      expect(guestsJson.guests).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            vmid: 112,
+            configuration: expect.objectContaining({
+              status: 'configured',
+              relativePath: 'hosts/pve-01/112-adguard-lxc/deployment.yaml',
+            }),
+          }),
+          expect.objectContaining({
+            vmid: 212,
+            configuration: { status: 'orphan' },
+          }),
+        ]),
+      );
 
       // 3. GET /api/inventory/guests with filter
       const filteredRes = await app.inject({
@@ -196,6 +226,15 @@ connection:
       expect(detailJson.canonicalConfig.cpu).toBe(2);
       expect(detailJson.canonicalConfig.ram).toBe(1024);
       expect(detailJson.source).toBe('ssh');
+      expect(detailJson.configuration).toMatchObject({
+        status: 'configured',
+        rawYaml: configuredYaml,
+        config: { id: 112, type: 'lxc' },
+        issues: [],
+      });
+
+      // The remaining import assertions exercise an unmanaged guest.
+      await rm(configuredGuestDir, { recursive: true, force: true });
 
       // 5. POST /api/inventory/refresh
       const refreshRes = await app.inject({

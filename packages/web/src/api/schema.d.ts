@@ -1241,6 +1241,14 @@ export interface paths {
                                 uptime?: number;
                                 lock?: string;
                                 readonly tags?: string[];
+                                configuration: {
+                                    /** @enum {string} */
+                                    status: "orphan";
+                                } | {
+                                    /** @enum {string} */
+                                    status: "configured";
+                                    relativePath: string;
+                                };
                             }[];
                         };
                     };
@@ -1319,6 +1327,24 @@ export interface paths {
                             };
                             /** @enum {string} */
                             source: "api" | "ssh";
+                            configuration: {
+                                /** @enum {string} */
+                                status: "orphan";
+                            } | {
+                                /** @enum {string} */
+                                status: "configured";
+                                relativePath: string;
+                                rawYaml: string;
+                                hash: string;
+                                config?: {
+                                    [key: string]: unknown;
+                                };
+                                issues: {
+                                    path: string;
+                                    message: string;
+                                    code: string;
+                                }[];
+                            };
                         };
                     };
                 };

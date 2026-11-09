@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { Layout } from './components/layout';
 import { navItems } from './nav';
@@ -8,6 +9,21 @@ import { HostDetailPage } from './pages/host-detail';
 import { AuthProvider } from './auth/auth-context';
 import { AuthGate } from './auth/AuthGate';
 
+const ResourcesPage = lazy(() =>
+  import('./pages/resources').then((module) => ({
+    default: module.ResourcesPage,
+  })),
+);
+const GuestDetailPage = lazy(() =>
+  import('./pages/guest-detail').then((module) => ({
+    default: module.GuestDetailPage,
+  })),
+);
+
+export function RouteLoading() {
+  return <p className="text-sm text-muted-foreground">Loading page…</p>;
+}
+
 export function App() {
   return (
     <AuthProvider>
@@ -16,8 +32,24 @@ export function App() {
           <Route element={<Layout />}>
             <Route path="/" element={<HostsPage />} />
             <Route path="/hosts/:id" element={<HostDetailPage />} />
+            <Route
+              path="/resources"
+              element={
+                <Suspense fallback={<RouteLoading />}>
+                  <ResourcesPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/resources/:hostId/:vmid"
+              element={
+                <Suspense fallback={<RouteLoading />}>
+                  <GuestDetailPage />
+                </Suspense>
+              }
+            />
             {navItems
-              .filter((item) => item.path !== '/')
+              .filter((item) => item.path !== '/' && item.path !== '/resources')
               .map((item) => (
                 <Route
                   key={item.path}

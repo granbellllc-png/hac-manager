@@ -2,6 +2,8 @@ import type { Page } from '@playwright/test';
 import {
   fixtureHost,
   fixtureHostDetail,
+  fixtureGuestDetail,
+  fixtureGuests,
   fixtureProbe,
 } from '../fixtures/hosts';
 
@@ -54,6 +56,9 @@ export async function installFixtureApi(
           },
         ],
       };
+    else if (path === '/api/inventory/guests') body = { guests: fixtureGuests };
+    else if (path === '/api/inventory/guests/fixture-host/112')
+      body = fixtureGuestDetail;
     else if (path.endsWith('/test-connection'))
       body = {
         ok: true,

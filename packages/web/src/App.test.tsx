@@ -3,9 +3,14 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { App } from './App';
+import { App, RouteLoading } from './App';
 import { navItems } from './nav';
 import { ThemeProvider, useTheme } from './theme';
+import {
+  fixtureGuestDetail,
+  fixtureGuests,
+  fixtureHost,
+} from '../fixtures/hosts';
 
 async function renderApp(path = '/') {
   const client = new QueryClient({
@@ -41,7 +46,16 @@ function mockApi(reply: () => Promise<Response>) {
 }
 
 function mockMatchMedia(dark: boolean) {
-  vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: dark }));
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockReturnValue({
+      matches: dark,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }),
+  );
 }
 
 beforeEach(() => {
@@ -98,6 +112,45 @@ describe('application shell', () => {
     expect(
       screen.getByRole('heading', { name: 'Not found' }),
     ).toBeInTheDocument();
+  });
+
+  it('renders the lazy resource list and guest detail routes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (request: Request) => {
+        const path = new URL(request.url).pathname;
+        if (path === '/api/auth/status')
+          return Response.json({
+            setupNeeded: false,
+            user: { id: 'fixture-admin', username: 'admin', role: 'admin' },
+          });
+        if (path === '/api/health')
+          return Response.json({ status: 'ok', service: 'HAC Manager' });
+        if (path === '/api/inventory/guests')
+          return Response.json({ guests: fixtureGuests });
+        if (path === '/api/hosts')
+          return Response.json({ hosts: [fixtureHost] });
+        if (path === '/api/inventory/guests/fixture-host/112')
+          return Response.json(fixtureGuestDetail);
+        return Response.json({}, { status: 404 });
+      }),
+    );
+
+    const resourcesView = await renderApp('/resources');
+    expect(
+      await screen.findByRole('heading', { name: 'Resources' }),
+    ).toBeInTheDocument();
+    resourcesView.unmount();
+
+    await renderApp('/resources/fixture-host/112?type=lxc');
+    expect(
+      await screen.findByRole('heading', { name: 'Example LXC' }),
+    ).toBeInTheDocument();
+  });
+
+  it('renders the route loading fallback', () => {
+    render(<RouteLoading />);
+    expect(screen.getByText('Loading page…')).toBeInTheDocument();
   });
 
   it('opens and closes the mobile drawer, closing on navigation', async () => {
