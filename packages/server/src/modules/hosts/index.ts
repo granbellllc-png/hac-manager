@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { HostRegistry } from '../../hosts/registry.js';
 import type { DatabaseRepositories } from '../../db/repositories/types.js';
 import type { ConnectionManager } from '../../router/manager.js';
+import { HostProber } from '../../probe/prober.js';
 
 export interface HostsModuleOptions {
   readonly hostRegistry: HostRegistry;
@@ -69,6 +70,29 @@ const hostDetailSchema = hostSummarySchema.extend({
       filemappings: z.string().optional(),
     })
     .optional(),
+});
+
+const hostProbeResultSchema = z.object({
+  hostId: z.string(),
+  pveVersion: z.string(),
+  isCluster: z.boolean(),
+  clusterName: z.string().optional(),
+  storages: z
+    .array(
+      z.object({
+        name: z.string(),
+        type: z.string(),
+        content: z.array(z.string()).readonly(),
+        total: z.number().optional(),
+        used: z.number().optional(),
+        avail: z.number().optional(),
+        shared: z.boolean(),
+      }),
+    )
+    .readonly(),
+  tools: z.record(z.string(), z.boolean()),
+  warnings: z.array(z.string()).readonly(),
+  probedAt: z.string(),
 });
 
 export const hostsModule: FastifyPluginAsyncZod<HostsModuleOptions> = async (
@@ -279,6 +303,141 @@ export const hostsModule: FastifyPluginAsyncZod<HostsModuleOptions> = async (
 
       const result = await connectionManager.testConnection(id);
       return result;
+    },
+  );
+
+  const prober = new HostProber();
+
+  app.post(
+    '/api/hosts/:id/probe',
+    {
+      schema: {
+        tags: ['Hosts'],
+        summary: 'Run capability probe on host',
+        params: z.object({
+          id: z.string(),
+        }),
+        response: {
+          200: hostProbeResultSchema,
+          403: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          404: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          500: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const host = await hostRegistry.getHost(id, request.user);
+
+      if (!host) {
+        const raw = hostRegistry.getRawHost(id);
+        if (raw) {
+          return reply.status(403).send({
+            statusCode: 403,
+            error: 'Forbidden',
+            message: `Access denied to host '${id}'`,
+          });
+        }
+        return reply.status(404).send({
+          statusCode: 404,
+          error: 'Not Found',
+          message: `Host '${id}' not found`,
+        });
+      }
+
+      if (!connectionManager) {
+        return reply.status(500).send({
+          statusCode: 500,
+          error: 'Internal Server Error',
+          message: 'Connection manager is not initialized',
+        });
+      }
+
+      const router = await connectionManager.getRouter(id);
+      const probeResult = await prober.probe(id, router);
+
+      if (probeResult.warnings.length > 0) {
+        hostRegistry.updateRuntimeStatus(id, {
+          issues: [...host.runtime.issues, ...probeResult.warnings],
+        });
+      }
+
+      return probeResult;
+    },
+  );
+
+  app.get(
+    '/api/hosts/:id/probe',
+    {
+      schema: {
+        tags: ['Hosts'],
+        summary: 'Get capability probe results for host',
+        params: z.object({
+          id: z.string(),
+        }),
+        response: {
+          200: hostProbeResultSchema,
+          403: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          404: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          500: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const host = await hostRegistry.getHost(id, request.user);
+
+      if (!host) {
+        const raw = hostRegistry.getRawHost(id);
+        if (raw) {
+          return reply.status(403).send({
+            statusCode: 403,
+            error: 'Forbidden',
+            message: `Access denied to host '${id}'`,
+          });
+        }
+        return reply.status(404).send({
+          statusCode: 404,
+          error: 'Not Found',
+          message: `Host '${id}' not found`,
+        });
+      }
+
+      if (!connectionManager) {
+        return reply.status(500).send({
+          statusCode: 500,
+          error: 'Internal Server Error',
+          message: 'Connection manager is not initialized',
+        });
+      }
+
+      const router = await connectionManager.getRouter(id);
+      const probeResult = await prober.probe(id, router);
+      return probeResult;
     },
   );
 };
