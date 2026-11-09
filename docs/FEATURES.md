@@ -202,7 +202,7 @@ Goal: persistent app data lives on the host at `/opt/server-data/<host>/<guest>/
 
 **D-44. Zero-shadowing attachment.** For template-based LXCs `mp0` is attached at `pct create` before first boot. `mp0` is **never hot-applied**: stop, attach, start, and verify `[PENDING]` is empty. _M9._
 
-**D-45. Rootfs-to-host migration is non-destructive and resumable.** For script-created CTs: stop, backup or snapshot first, `pct mount`, `rsync -aAXH` to the host directory, shift UIDs, **rename** the old `/opt` to `/opt.migrated-<timestamp>` (not wiped), attach `mp0`, start, verify. Deleting the displaced copy is a separate, explicit, later action. _M9._
+**D-45. Rootfs-to-host migration is non-destructive and resumable.** For script-created CTs: take a `vzdump` snapshot first, stop, `pct mount`, `rsync -aAXH --numeric-ids` to the host directory, shift UIDs by the guest idmap, **rename** the old `/opt` to `/opt.migrated-<timestamp>` (not wiped), unmount, attach `mp0` while stopped, start, verify that `[PENDING]` is empty and the host directory has the planned ownership. Deleting the displaced copy is a separate, explicit, later action. UID/GID shifting is idempotent, refuses an idmap whose base overlaps its size, and refuses a host destination that overlaps the mounted rootfs or a host system path. _M9._
 
 **D-46. Invariant check is storage-agnostic (replaces `debugfs`).** The raw rootfs `/opt` is inspected by entering the CT's mount namespace (`nsenter -t <pid> -m`) and making a non-recursive bind mount of `/`, which works on LVM, ZFS, btrfs and directory storage. Also verified: `findmnt` inside the CT and `/proc/<pid>/mountinfo` for long-running daemons. Runs before file sync and stack starts. _M9._
 

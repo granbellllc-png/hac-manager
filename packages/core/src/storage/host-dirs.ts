@@ -232,10 +232,10 @@ function aclGuidance(hostPath: string): Error {
  * minimal permissions before mp0 is attached. `world_writable` is the only
  * path that adds default ACLs, and it verifies that setfacl exists first.
  */
-export function createHostDirectorySteps(
-  guest: GuestDeployment,
-): readonly JournaledStep<undefined>[] {
-  return planHostDirectories(guest).map((plan) => ({
+export function createHostDirectoryStep(
+  plan: HostDirectoryPlan,
+): JournaledStep<undefined> {
+  return {
     name: `prepare host directory ${plan.hostPath}`,
     check: async ({ transport }) => {
       if (plan.defaultAcl) {
@@ -290,7 +290,15 @@ export function createHostDirectorySteps(
       return { stat };
     },
     rollbackHint: `Inspect '${plan.hostPath}' manually. It is never deleted automatically.`,
-  }));
+  };
+}
+
+export function createHostDirectorySteps(
+  guest: GuestDeployment,
+): readonly JournaledStep<undefined>[] {
+  return planHostDirectories(guest).map((plan) =>
+    createHostDirectoryStep(plan),
+  );
 }
 
 /** Read-only probe used by plans and later invariant checks. */
