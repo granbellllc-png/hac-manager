@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,6 +9,7 @@ import { createDatabase, createSqliteRepositories } from '../../db/index.js';
 import { HostRegistry } from '../../hosts/registry.js';
 import { ConnectionManager } from '../../router/manager.js';
 import { HostConnectionRouter } from '../../router/router.js';
+import { HostProber } from '../../probe/prober.js';
 import type { SshTransport } from '../../ssh/types.js';
 import {
   SESSION_COOKIE_NAME,
@@ -95,6 +96,7 @@ connection:
         }) as unknown as SshTransport,
       }),
     );
+    const probeSpy = vi.spyOn(HostProber.prototype, 'probe');
 
     const app = await buildApp({
       config,
@@ -244,7 +246,39 @@ connection:
       expect(testConnRes.statusCode).toBe(200);
       const testJson = testConnRes.json();
       expect(testJson.ssh).toBeDefined();
+
+      // Probe results are cached: a cold GET probes once, a warm GET reuses
+      // the cached result, and POST forces a fresh probe.
+      const firstProbe = await app.inject({
+        method: 'GET',
+        url: '/api/hosts/pve-01/probe',
+        cookies: { [SESSION_COOKIE_NAME]: adminCookie! },
+      });
+      expect(firstProbe.statusCode).toBe(200);
+      const secondProbe = await app.inject({
+        method: 'GET',
+        url: '/api/hosts/pve-01/probe',
+        cookies: { [SESSION_COOKIE_NAME]: adminCookie! },
+      });
+      expect(secondProbe.statusCode).toBe(200);
+      expect(secondProbe.json().probedAt).toBe(firstProbe.json().probedAt);
+      expect(probeSpy).toHaveBeenCalledTimes(1);
+
+      const forcedProbe = await app.inject({
+        method: 'POST',
+        url: '/api/hosts/pve-01/probe',
+        cookies: {
+          [SESSION_COOKIE_NAME]: adminCookie!,
+          [CSRF_COOKIE_NAME]: adminCsrf!,
+        },
+        headers: {
+          [CSRF_HEADER_NAME]: adminCsrf!,
+        },
+      });
+      expect(forcedProbe.statusCode).toBe(200);
+      expect(probeSpy).toHaveBeenCalledTimes(2);
     } finally {
+      probeSpy.mockRestore();
       await app.close();
       dbHandle.close();
       await rm(tempDir, { recursive: true, force: true });

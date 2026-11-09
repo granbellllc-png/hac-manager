@@ -22,14 +22,20 @@ export interface HostDetailData {
   readonly status: string;
   readonly runtime: {
     readonly overall: string;
-    readonly ssh: { readonly status: string; readonly error?: string };
+    readonly ssh: {
+      readonly status: string;
+      readonly error?: string;
+      readonly lastCheckedAt?: string;
+    };
     readonly api: {
       readonly configured: boolean;
       readonly status: string;
       readonly error?: string;
+      readonly lastCheckedAt?: string;
     };
     readonly vault: { readonly status: string };
     readonly queue: { readonly status: string; readonly activeJobId?: string };
+    readonly lastSeenAt?: string;
     readonly issues: readonly string[];
   };
   readonly connection: {
@@ -83,53 +89,68 @@ export function HostDetailPage() {
   const [host, setHost] = useState<HostDetailData | null>(null);
   const [probe, setProbe] = useState<ProbeResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [probeLoading, setProbeLoading] = useState(true);
   const [probing, setProbing] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<TestResultData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const fetchHostDetail = useCallback(async () => {
-    if (!id) {
-      setError('Host not found.');
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error: apiErr } = await apiClient.GET('/api/hosts/{id}', {
-        params: { path: { id } },
-      });
-
-      if (apiErr || !data) {
-        setError('Host not found or access denied.');
+  const fetchHostDetail = useCallback(
+    async (quiet = false) => {
+      if (!id) {
+        setError('Host not found.');
+        setLoading(false);
         return;
       }
-
-      setHost(data.host as HostDetailData);
-
-      // Attempt to load existing probe data
+      if (!quiet) setLoading(true);
+      setError(null);
       try {
-        const probeRes = await apiClient.GET('/api/hosts/{id}/probe', {
+        const { data, error: apiErr } = await apiClient.GET('/api/hosts/{id}', {
           params: { path: { id } },
         });
-        if (probeRes.data) {
-          setProbe(probeRes.data as unknown as ProbeResult);
+
+        if (apiErr || !data) {
+          setError('Host not found or access denied.');
+          return;
         }
-      } catch {
-        // Probe is optional on initial load
+
+        setHost(data.host as HostDetailData);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (!quiet) setLoading(false);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    },
+    [id],
+  );
+
+  const loadProbe = useCallback(async () => {
+    if (!id) {
+      setProbeLoading(false);
+      return;
+    }
+    setProbeLoading(true);
+    try {
+      const probeRes = await apiClient.GET('/api/hosts/{id}/probe', {
+        params: { path: { id } },
+      });
+      if (probeRes.data) {
+        setProbe(probeRes.data as unknown as ProbeResult);
+      }
+    } catch {
+      // Probe data is optional; keep the rest of the page usable.
     } finally {
-      setLoading(false);
+      setProbeLoading(false);
     }
   }, [id]);
 
   useEffect(() => {
+    // Render the host detail immediately. Capability probing can take a
+    // while over SSH, so it loads in the background and never blocks the page.
     void fetchHostDetail();
-  }, [fetchHostDetail]);
+    void loadProbe();
+  }, [fetchHostDetail, loadProbe]);
 
   const handleTestConnection = async () => {
     if (!id) return;
@@ -146,6 +167,9 @@ export function HostDetailPage() {
         setActionError('Unable to test the host connection.');
       } else {
         setTestResult(data);
+        // The backend persists the channel status. Refresh the detail quietly
+        // so the saved runtime block reflects the result immediately.
+        void fetchHostDetail(true);
       }
     } catch {
       setActionError('Unable to test the host connection.');
@@ -208,6 +232,9 @@ export function HostDetailPage() {
     );
   }
 
+  const lastCheckedAt =
+    host.runtime.ssh.lastCheckedAt ?? host.runtime.api.lastCheckedAt;
+
   return (
     <div className="space-y-6">
       {/* Back Button & Header */}
@@ -231,31 +258,40 @@ export function HostDetailPage() {
           <p className="text-xs font-mono text-muted-foreground">{host.id}</p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={testingConnection}
-            onClick={handleTestConnection}
-            className="flex items-center gap-1.5"
-          >
-            <RefreshCw
-              className={`w-3.5 h-3.5 ${testingConnection ? 'animate-spin' : ''}`}
-            />
-            {testingConnection ? 'Testing...' : 'Test Connection'}
-          </Button>
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={testingConnection}
+              onClick={handleTestConnection}
+              title="Check SSH and Proxmox API connectivity now and save the result."
+              className="flex items-center gap-1.5"
+            >
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${testingConnection ? 'animate-spin' : ''}`}
+              />
+              {testingConnection ? 'Testing...' : 'Test Connection'}
+            </Button>
 
-          <Button
-            size="sm"
-            disabled={probing}
-            onClick={handleRunProbe}
-            className="flex items-center gap-1.5"
-          >
-            <Wrench
-              className={`w-3.5 h-3.5 ${probing ? 'animate-spin' : ''}`}
-            />
-            {probing ? 'Probing...' : 'Run Probe'}
-          </Button>
+            <Button
+              size="sm"
+              disabled={probing}
+              onClick={handleRunProbe}
+              title="Probe host capabilities: PVE version, installed tools, storage pools, and cluster membership."
+              className="flex items-center gap-1.5"
+            >
+              <Wrench
+                className={`w-3.5 h-3.5 ${probing ? 'animate-spin' : ''}`}
+              />
+              {probing ? 'Probing...' : 'Run Probe'}
+            </Button>
+          </div>
+          <p className="max-w-sm text-xs text-muted-foreground sm:text-right">
+            Run Probe refreshes host capabilities (PVE version, tools, storage
+            pools, cluster warnings). Results are cached for this server
+            process, and this page loads them automatically.
+          </p>
         </div>
       </div>
 
@@ -351,6 +387,59 @@ export function HostDetailPage() {
           <div className="flex items-center gap-2 border-b pb-3">
             <Terminal className="w-4 h-4 text-primary" />
             <h2 className="font-semibold text-base">Channel Configuration</h2>
+          </div>
+
+          {/* Last known channel status, persisted by the backend */}
+          <div className="rounded-md border bg-muted/30 p-3 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium">Saved runtime status</span>
+              <span className="font-mono uppercase text-muted-foreground">
+                {host.runtime.overall}
+              </span>
+            </div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">SSH</span>
+                <span
+                  className={
+                    host.runtime.ssh.status === 'connected'
+                      ? 'font-medium text-emerald-600 dark:text-emerald-400'
+                      : 'font-medium text-rose-600 dark:text-rose-400'
+                  }
+                >
+                  {host.runtime.ssh.status}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">API</span>
+                <span
+                  className={
+                    host.runtime.api.status === 'connected'
+                      ? 'font-medium text-emerald-600 dark:text-emerald-400'
+                      : 'font-medium text-rose-600 dark:text-rose-400'
+                  }
+                >
+                  {host.runtime.api.configured
+                    ? host.runtime.api.status
+                    : 'not configured'}
+                </span>
+              </div>
+            </div>
+            <p className="mt-2 text-muted-foreground">
+              {lastCheckedAt
+                ? `Last checked ${new Date(lastCheckedAt).toLocaleString()}`
+                : 'Not checked yet — run Test Connection once, then this survives restarts.'}
+            </p>
+            {host.runtime.ssh.error && (
+              <p className="mt-1 text-rose-600 dark:text-rose-400">
+                SSH: {host.runtime.ssh.error}
+              </p>
+            )}
+            {host.runtime.api.error && (
+              <p className="mt-1 text-rose-600 dark:text-rose-400">
+                API: {host.runtime.api.error}
+              </p>
+            )}
           </div>
 
           <div className="space-y-4 text-sm">
@@ -464,6 +553,12 @@ export function HostDetailPage() {
       </div>
 
       {/* Capability Probe Details (Storages & Tools) */}
+      {probeLoading && !probe && (
+        <div className="flex items-center gap-2 rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+          <RefreshCw className="h-4 w-4 animate-spin" aria-hidden />
+          Checking host capabilities (PVE version, tools, storage pools)…
+        </div>
+      )}
       {probe && (
         <div className="rounded-lg border bg-card text-card-foreground p-5 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b pb-3">

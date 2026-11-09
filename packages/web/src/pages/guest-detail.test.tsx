@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +8,7 @@ import {
   formatGuestConfigValue,
   formatGuestUptime,
   GuestDetailPage,
+  isTerminalJobEvent,
 } from './guest-detail';
 import { AuthProvider } from '../auth/auth-context';
 
@@ -91,6 +92,84 @@ function installDetailApi(
   return fetchFn;
 }
 
+const orphanDetail = {
+  summary: {
+    ...fixtureGuests[1],
+    maxcpu: undefined,
+    maxmem: undefined,
+    mem: undefined,
+    uptime: 3600,
+  },
+  rawConfig: '',
+  canonicalConfig: {
+    id: 212,
+    name: 'Unmanaged VM',
+    type: 'vm',
+    cpu: 4,
+    ram: 4096,
+    disks: [],
+    network: [],
+  },
+  source: 'api',
+  configuration: { status: 'orphan' },
+};
+
+class FakeEventSource {
+  public static readonly instances: FakeEventSource[] = [];
+  public static readonly OPEN = 1;
+  public readyState = 1;
+  private readonly listeners = new Map<string, Set<(event: Event) => void>>();
+
+  public constructor(public readonly url: string) {
+    FakeEventSource.instances.push(this);
+  }
+
+  public addEventListener(type: string, listener: (event: Event) => void) {
+    const set = this.listeners.get(type) ?? new Set();
+    set.add(listener);
+    this.listeners.set(type, set);
+  }
+
+  public close() {}
+
+  public emit(type: string, data: unknown) {
+    const event = { data: JSON.stringify(data) } as MessageEvent<string>;
+    for (const listener of this.listeners.get(type) ?? []) listener(event);
+  }
+}
+
+function installOrphanApi(mode?: 'plan-fail' | 'apply-fail' | 'network') {
+  let detailCalls = 0;
+  const fetchFn = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+    const request = input as Request;
+    const path = new URL(request.url).pathname;
+    if (request.method === 'POST' && path === '/api/plans/guest-import') {
+      if (mode === 'network') throw new Error('fixture offline');
+      if (mode === 'plan-fail') {
+        return Response.json({ message: 'plan denied' }, { status: 409 });
+      }
+      return Response.json({ id: 'plan-import' }, { status: 201 });
+    }
+    if (request.method === 'POST' && path.endsWith('/apply')) {
+      if (mode === 'network') throw new Error('fixture offline');
+      if (mode === 'apply-fail') {
+        return Response.json({ message: 'apply denied' }, { status: 409 });
+      }
+      return Response.json(
+        {
+          plan: { id: 'plan-import', status: 'applying' },
+          job: { id: 'job-import' },
+        },
+        { status: 202 },
+      );
+    }
+    detailCalls += 1;
+    return Response.json(orphanDetail);
+  });
+  vi.stubGlobal('fetch', fetchFn);
+  return { fetchFn, detailCalls: () => detailCalls };
+}
+
 describe('guest detail helpers', () => {
   it('formats resource values and tagged configuration safely', () => {
     expect(formatGuestBytes(undefined)).toBe('Not reported');
@@ -106,6 +185,15 @@ describe('guest detail helpers', () => {
     expect(formatGuestConfigValue({ tag: 'secret' })).toBe('!secret');
     expect(formatGuestConfigValue({ nested: true })).toBe('{"nested":true}');
     expect(formatGuestConfigValue(false)).toBe('false');
+  });
+
+  it('detects only terminal job statuses safely', () => {
+    expect(isTerminalJobEvent(null)).toBe(false);
+    expect(isTerminalJobEvent('completed')).toBe(false);
+    expect(isTerminalJobEvent({ status: 1 })).toBe(false);
+    expect(isTerminalJobEvent({ status: 'running' })).toBe(false);
+    expect(isTerminalJobEvent({ status: 'completed' })).toBe(true);
+    expect(isTerminalJobEvent({ status: 'failed' })).toBe(true);
   });
 });
 
@@ -138,6 +226,8 @@ describe('GuestDetailPage', () => {
     expect(screen.getByText('17% current usage')).toBeVisible();
     expect(screen.getByText(/Fixture warning/)).toBeVisible();
     expect(screen.getAllByText('{"nested":true}')).toHaveLength(2);
+    expect(screen.getByText('pct config')).toBeVisible();
+    expect(screen.getByText(/not the HAC Manager/)).toBeVisible();
     const yaml = await screen.findByLabelText('Example LXC deployment YAML');
     expect(yaml).toHaveTextContent('Fixture comment must remain visible');
     expect(yaml).toHaveTextContent('host.index + 1');
@@ -146,34 +236,62 @@ describe('GuestDetailPage', () => {
   });
 
   it('shows an orphan warning and missing live metrics without rendering YAML', async () => {
-    installDetailApi({
-      summary: {
-        ...fixtureGuests[1],
-        maxcpu: undefined,
-        maxmem: undefined,
-        mem: undefined,
-        uptime: 3600,
-      },
-      rawConfig: '',
-      canonicalConfig: {
-        id: 212,
-        name: 'Unmanaged VM',
-        type: 'vm',
-        cpu: 4,
-        ram: 4096,
-        disks: [],
-        network: [],
-      },
-      source: 'api',
-      configuration: { status: 'orphan' },
-    });
+    installDetailApi(orphanDetail);
     renderDetail('/resources/fixture-host/212?type=not-a-type');
 
     expect(await screen.findByText('Unmanaged guest (orphan)')).toBeVisible();
     expect(screen.getAllByText('Not reported').length).toBeGreaterThan(0);
     expect(screen.getAllByText('No YAML')).toHaveLength(10);
     expect(screen.getByText('No raw configuration returned.')).toBeVisible();
+    expect(screen.getByText('qm config')).toBeVisible();
     expect(screen.queryByTestId('yaml-code-viewer')).toBeNull();
+  });
+
+  it('imports an orphan to YAML and refreshes when the job completes', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    FakeEventSource.instances.length = 0;
+    const api = installOrphanApi();
+    const user = userEvent.setup();
+    renderDetail('/resources/fixture-host/212?type=vm');
+
+    await screen.findByText('Unmanaged guest (orphan)');
+    await user.click(screen.getByRole('button', { name: 'Import to YAML' }));
+    expect(
+      await screen.findByText(/Import queued as job job-import/),
+    ).toBeVisible();
+    expect(FakeEventSource.instances).toHaveLength(1);
+
+    const before = api.detailCalls();
+    act(() => FakeEventSource.instances[0]!.emit('job', { status: 'running' }));
+    expect(api.detailCalls()).toBe(before);
+
+    act(() =>
+      FakeEventSource.instances[0]!.emit('job', { status: 'completed' }),
+    );
+    expect(await screen.findByText(/Queued job finished/)).toBeVisible();
+    await waitFor(() => expect(api.detailCalls()).toBeGreaterThan(before));
+  });
+
+  it.each([
+    ['plan-fail', 'Unable to create the import plan.'],
+    ['apply-fail', 'Unable to queue the import job.'],
+    ['network', 'Unable to import this guest.'],
+  ] as const)('reports %s orphan import failures', async (mode, message) => {
+    installOrphanApi(mode);
+    const user = userEvent.setup();
+    renderDetail('/resources/fixture-host/212?type=vm');
+    await screen.findByText('Unmanaged guest (orphan)');
+    await user.click(screen.getByRole('button', { name: 'Import to YAML' }));
+    expect(await screen.findByText(message)).toBeVisible();
+  });
+
+  it('keeps orphan import read-only for viewers', async () => {
+    installOrphanApi();
+    renderDetail('/resources/fixture-host/212?type=vm', 'viewer');
+    await screen.findByText('Unmanaged guest (orphan)');
+    expect(
+      screen.getByRole('button', { name: 'Import to YAML' }),
+    ).toBeDisabled();
   });
 
   it('opens the YAML editor, applies saved content, and keeps viewers read-only', async () => {

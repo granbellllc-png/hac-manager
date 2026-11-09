@@ -93,6 +93,7 @@ describe('Database foundation', () => {
       expect(retrieved).not.toBeNull();
       expect(retrieved?.name).toBe('Proxmox 01');
       expect(retrieved?.status).toBe('online');
+      expect(retrieved?.runtimeJson).toBeNull();
 
       // Update host cache
       await repos.hostsCache.upsert({
@@ -101,12 +102,14 @@ describe('Database foundation', () => {
         type: 'proxmox',
         status: 'degraded',
         cachedConfigJson: '{"id":"pve-01","updated":true}',
+        runtimeJson: '{"overall":"degraded"}',
         updatedAt: new Date(),
       });
 
       const updated = await repos.hostsCache.get('pve-01');
       expect(updated?.name).toBe('Proxmox Primary');
       expect(updated?.status).toBe('degraded');
+      expect(updated?.runtimeJson).toBe('{"overall":"degraded"}');
 
       const list = await repos.hostsCache.list();
       expect(list).toHaveLength(1);

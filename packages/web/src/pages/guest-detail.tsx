@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -19,9 +19,23 @@ import {
   type GuestYamlSnapshot,
 } from '../components/guest-yaml-editor';
 import { useAuth } from '../auth/auth-context';
+import { useJobEvents } from '../hooks/use-job-events';
 
 type GuestDetail =
   paths['/api/inventory/guests/{hostId}/{vmid}']['get']['responses']['200']['content']['application/json'];
+
+const TERMINAL_JOB_STATUSES = new Set([
+  'completed',
+  'failed',
+  'cancelled',
+  'interrupted',
+]);
+
+export function isTerminalJobEvent(event: unknown): boolean {
+  if (typeof event !== 'object' || event === null) return false;
+  const status = (event as { status?: unknown }).status;
+  return typeof status === 'string' && TERMINAL_JOB_STATUSES.has(status);
+}
 
 export function formatGuestBytes(value: number | undefined): string {
   if (value === undefined) return 'Not reported';
@@ -55,20 +69,24 @@ export function GuestDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [trackedJobId, setTrackedJobId] = useState<string | null>(null);
+  const [jobFeedback, setJobFeedback] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importFeedback, setImportFeedback] = useState<string | null>(null);
   const { user } = useAuth();
   const vmid = Number(vmidParam);
   const type = searchParams.get('type');
 
-  useEffect(() => {
-    if (!hostId || !Number.isInteger(vmid)) {
-      setError('Invalid guest route.');
-      setLoading(false);
-      return;
-    }
+  const loadDetail = useCallback(
+    async (quiet = false) => {
+      if (!hostId || !Number.isInteger(vmid)) {
+        setError('Invalid guest route.');
+        setLoading(false);
+        return;
+      }
 
-    let active = true;
-    const load = async () => {
-      setLoading(true);
+      if (!quiet) setLoading(true);
       setError(null);
       try {
         const result = await apiClient.GET(
@@ -80,28 +98,68 @@ export function GuestDetailPage() {
             },
           },
         );
-        if (!active) return;
         if (result.error || !result.data) {
           setError('Guest not found or access denied.');
           return;
         }
         setDetail(result.data);
       } catch (loadError) {
-        if (active) {
-          setError(
-            loadError instanceof Error ? loadError.message : String(loadError),
-          );
-        }
+        setError(
+          loadError instanceof Error ? loadError.message : String(loadError),
+        );
       } finally {
-        if (active) setLoading(false);
+        if (!quiet) setLoading(false);
       }
-    };
+    },
+    [hostId, type, vmid],
+  );
 
-    void load();
-    return () => {
-      active = false;
-    };
-  }, [hostId, type, vmid]);
+  useEffect(() => {
+    void loadDetail();
+  }, [loadDetail]);
+
+  useJobEvents(trackedJobId, {
+    onJob: (event: unknown) => {
+      if (!isTerminalJobEvent(event)) return;
+      setTrackedJobId(null);
+      setJobFeedback(
+        'Queued job finished. Live state refreshed from the host.',
+      );
+      void loadDetail(true);
+    },
+  });
+
+  const importOrphan = async () => {
+    if (!detail) return;
+    setImporting(true);
+    setImportError(null);
+    setImportFeedback(null);
+    try {
+      const plan = await apiClient.POST('/api/plans/guest-import', {
+        body: { hostId: detail.summary.hostId, vmid: detail.summary.vmid },
+      });
+      if (plan.error || !plan.data) {
+        setImportError('Unable to create the import plan.');
+        return;
+      }
+      const applied = await apiClient.POST('/api/plans/{planId}/apply', {
+        params: { path: { planId: plan.data.id } },
+        body: {},
+      });
+      if (applied.error || !applied.data) {
+        setImportError('Unable to queue the import job.');
+        return;
+      }
+      setImportFeedback(
+        `Import queued as job ${applied.data.job.id}. The page refreshes when it finishes.`,
+      );
+      setTrackedJobId(applied.data.job.id);
+    } catch {
+      setImportError('Unable to import this guest.');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -201,24 +259,70 @@ export function GuestDetailPage() {
         name={detail.summary.name}
         status={detail.summary.status}
         role={user?.role ?? 'viewer'}
+        onJobQueued={(jobId) => {
+          setTrackedJobId(jobId);
+          setJobFeedback(`Waiting for job ${jobId} to finish…`);
+        }}
       />
+
+      {jobFeedback && (
+        <div
+          role="status"
+          className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground"
+        >
+          {jobFeedback}
+        </div>
+      )}
 
       {configured.status === 'orphan' && (
         <div
           role="alert"
-          className="flex gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-4"
+          className="flex flex-col gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-4"
         >
-          <ShieldAlert
-            aria-hidden
-            className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400"
-          />
-          <div className="min-w-0">
-            <h2 className="font-semibold">Unmanaged guest (orphan)</h2>
-            <p className="text-sm text-muted-foreground">
-              This live guest has no deployment YAML. Import, ignore, and safe
-              delete actions will appear here after review workflows land.
-            </p>
+          <div className="flex gap-3">
+            <ShieldAlert
+              aria-hidden
+              className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400"
+            />
+            <div className="min-w-0">
+              <h2 className="font-semibold">Unmanaged guest (orphan)</h2>
+              <p className="text-sm text-muted-foreground">
+                This live guest has no deployment YAML. Import it to create a
+                deployment file from the current Proxmox configuration.
+              </p>
+            </div>
           </div>
+          <div>
+            <Button
+              size="sm"
+              disabled={importing || user?.role === 'viewer'}
+              title={
+                user?.role === 'viewer'
+                  ? 'Viewers have read-only access'
+                  : 'Create deployment YAML from this live guest'
+              }
+              onClick={() => void importOrphan()}
+            >
+              <FileCode2 aria-hidden className="h-4 w-4" />
+              {importing ? 'Importing…' : 'Import to YAML'}
+            </Button>
+          </div>
+          {importError && (
+            <p
+              role="alert"
+              className="rounded-md border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-700 dark:text-rose-300"
+            >
+              {importError}
+            </p>
+          )}
+          {importFeedback && (
+            <p
+              role="status"
+              className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300"
+            >
+              {importFeedback}
+            </p>
+          )}
         </div>
       )}
 
@@ -390,8 +494,13 @@ export function GuestDetailPage() {
         <div>
           <h2 className="font-semibold">Live Proxmox configuration</h2>
           <p className="text-sm text-muted-foreground">
-            Raw read-only data returned by the {detail.source.toUpperCase()}{' '}
-            channel.
+            Raw{' '}
+            <code>
+              {detail.summary.type === 'lxc' ? 'pct config' : 'qm config'}
+            </code>{' '}
+            output returned by the {detail.source.toUpperCase()} channel. This
+            is Proxmox&apos;s native key-value format, not the HAC Manager{' '}
+            <code>deployment.yaml</code> format.
           </p>
         </div>
         <pre className="max-h-80 overflow-auto rounded-md bg-muted p-4 font-mono text-xs whitespace-pre-wrap">

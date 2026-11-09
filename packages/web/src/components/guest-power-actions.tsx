@@ -62,12 +62,14 @@ export function GuestPowerActions({
   name,
   status,
   role,
+  onJobQueued,
 }: {
   readonly hostId: string;
   readonly vmid: number;
   readonly name: string;
   readonly status: string;
   readonly role: string;
+  readonly onJobQueued?: ((jobId: string) => void) | undefined;
 }) {
   const [pendingPlan, setPendingPlan] = useState<GuestPowerPlan | null>(null);
   const [confirmation, setConfirmation] = useState('');
@@ -97,6 +99,7 @@ export function GuestPowerActions({
     }
     setPendingPlan(null);
     setConfirmation('');
+    onJobQueued?.(result.data.job.id);
     setFeedback({
       tone: 'success',
       text: `${plan.summary} was queued as job ${result.data.job.id}. Open Jobs to follow its progress.`,

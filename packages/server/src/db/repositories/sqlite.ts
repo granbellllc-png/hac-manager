@@ -85,6 +85,7 @@ export function createSqliteRepositories(
             status: row.status,
             lastSeenAt: row.lastSeenAt,
             cachedConfigJson: row.cachedConfigJson,
+            runtimeJson: row.runtimeJson ?? null,
             updatedAt: row.updatedAt,
           },
         })

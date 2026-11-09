@@ -285,7 +285,7 @@ Task fields: `name`, `run`, `when`, `creates` (idempotency), `timeout`, `retries
 - **Audit log and Users.**
 - **Docker Compose Stacks:** future module.
 
-Host detail supports SSH-only connections. Connection tests, capability probes, registry resyncs and clipboard failures display an error and keep the page available for retry.
+Host detail supports SSH-only connections. Connection tests, capability probes, registry resyncs and clipboard failures display an error and keep the page available for retry. Last known SSH/API channel status is persisted in the state database, so it survives restarts without re-testing. Capability probes are cached per server process and load in the background, so host detail is usable immediately. Resources show a labelled search field and default to VMID order. Orphans can be imported to deployment YAML from their detail page. Guest state refreshes automatically when a queued power or import job finishes.
 
 _M5, M6, M8._
 

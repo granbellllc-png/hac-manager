@@ -5,7 +5,7 @@ import {
   createSqliteRepositories,
   runMigrations,
 } from './index.js';
-import { totpMigration } from './migrator.js';
+import { hostRuntimeMigration, totpMigration } from './migrator.js';
 import {
   sessionsTable,
   recoveryCodesTable,
@@ -33,6 +33,41 @@ describe('database migrations and boundary operations', () => {
         'totp_enabled',
       ]);
       expect(runMigrations(database.sqlite, [totpMigration])).toEqual([]);
+    } finally {
+      database.close();
+    }
+  });
+
+  it('adds the host runtime column once and remains idempotent', () => {
+    const database = createDatabase({
+      path: ':memory:',
+      migrate: false,
+      busyTimeout: 100,
+    });
+    try {
+      database.sqlite.exec('CREATE TABLE hosts (id TEXT PRIMARY KEY)');
+      expect(runMigrations(database.sqlite, [hostRuntimeMigration])).toEqual([
+        '0008_host_runtime',
+      ]);
+      const columns = database.sqlite.pragma('table_info(hosts)') as {
+        name: string;
+      }[];
+      expect(columns.map((column) => column.name)).toEqual([
+        'id',
+        'runtime_json',
+      ]);
+      // Running the migration against an already-upgraded table is a no-op.
+      hostRuntimeMigration.up(database.sqlite);
+      expect(
+        (
+          database.sqlite.pragma('table_info(hosts)') as {
+            name: string;
+          }[]
+        ).map((column) => column.name),
+      ).toEqual(['id', 'runtime_json']);
+      expect(runMigrations(database.sqlite, [hostRuntimeMigration])).toEqual(
+        [],
+      );
     } finally {
       database.close();
     }

@@ -83,7 +83,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderActions(status = 'running', role = 'admin') {
+function renderActions(
+  status = 'running',
+  role = 'admin',
+  onJobQueued?: (jobId: string) => void,
+) {
   return render(
     <GuestPowerActions
       hostId="pve-01"
@@ -91,6 +95,7 @@ function renderActions(status = 'running', role = 'admin') {
       name="Example LXC"
       status={status}
       role={role}
+      onJobQueued={onJobQueued}
     />,
   );
 }
@@ -126,8 +131,9 @@ describe('GuestPowerActions', () => {
 
   it('applies a non-destructive start immediately', async () => {
     const { applyCalls } = installPowerApi();
+    const onJobQueued = vi.fn();
     const user = userEvent.setup();
-    renderActions('stopped');
+    renderActions('stopped', 'admin', onJobQueued);
 
     expect(screen.getByRole('button', { name: 'Stop' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Start' }));
@@ -136,6 +142,7 @@ describe('GuestPowerActions', () => {
       'Start guest 112 was queued',
     );
     expect(applyCalls).toEqual([{ planId: 'plan-start', body: {} }]);
+    expect(onJobQueued).toHaveBeenCalledWith('job-1');
   });
 
   it('keeps viewers read-only and surfaces server errors', async () => {

@@ -142,6 +142,25 @@ describe('ResourcesPage', () => {
     },
   );
 
+  it('labels the search field and orders guests by VMID', async () => {
+    installApi({
+      guests: [
+        { ...fixtureGuests[0], vmid: 900, name: 'Zulu' },
+        { ...fixtureGuests[0], vmid: 100, name: 'Alpha' },
+        { ...fixtureGuests[0], vmid: 500, name: 'Mike' },
+      ],
+    });
+    renderResources();
+
+    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeVisible();
+    expect(screen.getByText('Search')).toBeVisible();
+    expect(
+      screen
+        .getAllByRole('heading', { level: 2 })
+        .map((node) => node.textContent),
+    ).toEqual(['Alpha', 'Mike', 'Zulu']);
+  });
+
   it('loads URL filters, refreshes inventory, and renders a singular orphan alert', async () => {
     const fetchFn = installApi({ guests: [fixtureGuests[1]!] });
     const user = userEvent.setup();

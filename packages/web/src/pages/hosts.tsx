@@ -65,8 +65,8 @@ export function HostsPage() {
     Record<string, ConnectionTestState>
   >({});
 
-  const fetchHosts = useCallback(async () => {
-    setLoading(true);
+  const fetchHosts = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     setError(null);
     try {
       const [hostsRes, invRes] = await Promise.all([
@@ -95,7 +95,7 @@ export function HostsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, []);
 
@@ -157,6 +157,9 @@ export function HostsPage() {
           result: data,
         },
       }));
+      // The backend persists the fresh channel status. Refresh quietly so the
+      // cards reflect what the server recorded without a loading skeleton.
+      void fetchHosts(true);
     } catch (err) {
       setTestStates((prev) => ({
         ...prev,
@@ -371,6 +374,8 @@ connection:
             const testState = testStates[host.id];
             const hasIssues =
               host.runtime.issues && host.runtime.issues.length > 0;
+            const lastCheckedAt =
+              host.runtime.ssh.lastCheckedAt ?? host.runtime.api.lastCheckedAt;
 
             return (
               <div
@@ -440,6 +445,13 @@ connection:
                       </div>
                     </div>
                   </div>
+
+                  {/* Last connection check (persisted by the backend) */}
+                  <p className="text-[11px] text-muted-foreground">
+                    {lastCheckedAt
+                      ? `Last checked ${new Date(lastCheckedAt).toLocaleString()}`
+                      : 'Not checked yet — run Test Connection once'}
+                  </p>
 
                   {/* Operational States: Vault & Queue */}
                   <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t">

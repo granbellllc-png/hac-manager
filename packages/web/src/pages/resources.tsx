@@ -88,22 +88,29 @@ export function ResourcesPage() {
 
   const filteredGuests = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return guests.filter((guest) => {
-      const matchesSearch =
-        needle.length === 0 ||
-        guest.name.toLowerCase().includes(needle) ||
-        String(guest.vmid).includes(needle) ||
-        guest.hostId.toLowerCase().includes(needle) ||
-        (hostNames.get(guest.hostId) ?? '').toLowerCase().includes(needle);
-      return (
-        matchesSearch &&
-        (!hostFilter || guest.hostId === hostFilter) &&
-        (!typeFilter || guest.type === typeFilter) &&
-        (!statusFilter || guest.status === statusFilter) &&
-        (!configurationFilter ||
-          guest.configuration.status === configurationFilter)
+    return guests
+      .filter((guest) => {
+        const matchesSearch =
+          needle.length === 0 ||
+          guest.name.toLowerCase().includes(needle) ||
+          String(guest.vmid).includes(needle) ||
+          guest.hostId.toLowerCase().includes(needle) ||
+          (hostNames.get(guest.hostId) ?? '').toLowerCase().includes(needle);
+        return (
+          matchesSearch &&
+          (!hostFilter || guest.hostId === hostFilter) &&
+          (!typeFilter || guest.type === typeFilter) &&
+          (!statusFilter || guest.status === statusFilter) &&
+          (!configurationFilter ||
+            guest.configuration.status === configurationFilter)
+        );
+      })
+      .sort(
+        (a, b) =>
+          a.vmid - b.vmid ||
+          a.hostId.localeCompare(b.hostId) ||
+          a.name.localeCompare(b.name),
       );
-    });
   }, [
     configurationFilter,
     guests,
@@ -199,21 +206,24 @@ export function ResourcesPage() {
         aria-label="Resource filters"
         className="grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-2 xl:grid-cols-5"
       >
-        <label className="relative sm:col-span-2 xl:col-span-1">
-          <span className="sr-only">Search resources</span>
-          <Search
-            aria-hidden
-            className="absolute top-2.5 left-3 h-4 w-4 text-muted-foreground"
-          />
-          <input
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Name, VMID, or host"
-            className="h-9 w-full rounded-md border border-border bg-background pr-3 pl-9 text-sm"
-          />
+        <label className="grid gap-1 text-xs font-medium text-muted-foreground sm:col-span-2 xl:col-span-1">
+          Search
+          <span className="relative">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-muted-foreground"
+            />
+            <input
+              aria-label="Search resources"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+              placeholder="Name, VMID, or host"
+              className="h-9 w-full rounded-md border border-border bg-background pr-3 pl-9 text-sm text-foreground"
+            />
+          </span>
         </label>
         <FilterSelect
           label="Host"

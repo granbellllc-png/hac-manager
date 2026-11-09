@@ -61,6 +61,19 @@ function sanitizeApiConnection(
   };
 }
 
+function parseCachedRuntime(
+  value: string | null | undefined,
+): HostRuntimeStatus | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value) as Partial<HostRuntimeStatus> | null;
+    if (!parsed || typeof parsed.overall !== 'string') return undefined;
+    return parsed as HostRuntimeStatus;
+  } catch {
+    return undefined;
+  }
+}
+
 export class HostRegistry extends EventEmitter {
   public readonly dataDir: string;
   private readonly repos: DatabaseRepositories;
@@ -105,6 +118,10 @@ export class HostRegistry extends EventEmitter {
         discoveredMap.set(host.id, host);
       }
 
+      const cachedHosts = new Map(
+        (await this.repos.hostsCache.list()).map((row) => [row.id, row]),
+      );
+
       let syncedCount = 0;
 
       for (const [hostId, discoveredHost] of discoveredMap.entries()) {
@@ -131,19 +148,25 @@ export class HostRegistry extends EventEmitter {
 
         const hasError = hostIssues.length > 0;
         const previous = this.hosts.get(hostId);
+        const persistedRuntime =
+          previous?.runtime ??
+          parseCachedRuntime(cachedHosts.get(hostId)?.runtimeJson);
+        const apiConfigured = parsedHostConfig
+          ? Boolean(parsedHostConfig.connection.api)
+          : (persistedRuntime?.api.configured ?? false);
 
         const runtimeStatus: HostRuntimeStatus = {
           overall: hasError
             ? 'error'
-            : (previous?.runtime.overall ?? 'unknown'),
-          ssh: previous?.runtime.ssh ?? { status: 'unknown' },
-          api: previous?.runtime.api ?? {
-            status: 'unknown',
-            configured: Boolean(parsedHostConfig?.connection?.api),
+            : (persistedRuntime?.overall ?? 'unknown'),
+          ssh: persistedRuntime?.ssh ?? { status: 'unknown' },
+          api: {
+            ...(persistedRuntime?.api ?? { status: 'unknown' }),
+            configured: apiConfigured,
           },
-          vault: previous?.runtime.vault ?? { status: 'not_configured' },
-          queue: previous?.runtime.queue ?? { status: 'idle' },
-          lastSeenAt: previous?.runtime.lastSeenAt,
+          vault: persistedRuntime?.vault ?? { status: 'not_configured' },
+          queue: persistedRuntime?.queue ?? { status: 'idle' },
+          lastSeenAt: persistedRuntime?.lastSeenAt,
           issues: hostIssues.map((i) => i.message),
         };
 
@@ -171,6 +194,7 @@ export class HostRegistry extends EventEmitter {
             type: config.type,
             status: runtimeStatus.overall,
             cachedConfigJson: safeConfigJson,
+            runtimeJson: JSON.stringify(runtimeStatus),
             updatedAt: new Date(),
           });
 
@@ -312,19 +336,28 @@ export class HostRegistry extends EventEmitter {
       updatedAt: new Date(),
     });
 
-    void this.repos.hostsCache.upsert({
-      id: entry.id,
-      name: entry.config.name,
-      type: entry.config.type,
-      status: updatedRuntime.overall,
-      cachedConfigJson: JSON.stringify({
-        id: entry.config.id,
+    void (async () => {
+      const existing = await this.repos.hostsCache.get(entry.id);
+      await this.repos.hostsCache.upsert({
+        id: entry.id,
         name: entry.config.name,
         type: entry.config.type,
-        index: entry.config.index,
-      }),
-      updatedAt: new Date(),
-    });
+        status: updatedRuntime.overall,
+        lastSeenAt: updatedRuntime.lastSeenAt
+          ? new Date(updatedRuntime.lastSeenAt)
+          : null,
+        cachedConfigJson:
+          existing?.cachedConfigJson ??
+          JSON.stringify({
+            id: entry.config.id,
+            name: entry.config.name,
+            type: entry.config.type,
+            index: entry.config.index,
+          }),
+        runtimeJson: JSON.stringify(updatedRuntime),
+        updatedAt: new Date(),
+      });
+    })();
 
     this.emit('statusChanged', { hostId: id, runtime: updatedRuntime });
   }

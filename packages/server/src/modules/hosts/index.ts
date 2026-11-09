@@ -4,6 +4,7 @@ import type { HostRegistry } from '../../hosts/registry.js';
 import type { DatabaseRepositories } from '../../db/repositories/types.js';
 import type { ConnectionManager } from '../../router/manager.js';
 import { HostProber } from '../../probe/prober.js';
+import type { HostProbeResult } from '../../probe/types.js';
 
 export interface HostsModuleOptions {
   readonly hostRegistry: HostRegistry;
@@ -307,6 +308,16 @@ export const hostsModule: FastifyPluginAsyncZod<HostsModuleOptions> = async (
   );
 
   const prober = new HostProber();
+  const probeCache = new Map<string, HostProbeResult>();
+
+  const runProbe = async (
+    id: string,
+    router: Awaited<ReturnType<ConnectionManager['getRouter']>>,
+  ): Promise<HostProbeResult> => {
+    const result = await prober.probe(id, router);
+    probeCache.set(id, result);
+    return result;
+  };
 
   app.post(
     '/api/hosts/:id/probe',
@@ -366,7 +377,7 @@ export const hostsModule: FastifyPluginAsyncZod<HostsModuleOptions> = async (
       }
 
       const router = await connectionManager.getRouter(id);
-      const probeResult = await prober.probe(id, router);
+      const probeResult = await runProbe(id, router);
 
       if (probeResult.warnings.length > 0) {
         hostRegistry.updateRuntimeStatus(id, {
@@ -435,9 +446,10 @@ export const hostsModule: FastifyPluginAsyncZod<HostsModuleOptions> = async (
         });
       }
 
+      const cached = probeCache.get(id);
+      if (cached) return cached;
       const router = await connectionManager.getRouter(id);
-      const probeResult = await prober.probe(id, router);
-      return probeResult;
+      return runProbe(id, router);
     },
   );
 };

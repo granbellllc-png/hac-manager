@@ -294,6 +294,48 @@ describe('host overview states and actions', () => {
       .click(screen.getByRole('button', { name: 'Test Connection' }));
     expect(await screen.findByText(/SSH: OK \(0ms\)/)).toBeInTheDocument();
   });
+
+  it('shows the persisted last check and refreshes host cards after testing', async () => {
+    const fetchFn = installApi((request) => {
+      if (
+        request.method === 'GET' &&
+        new URL(request.url).pathname === '/api/hosts'
+      ) {
+        return Promise.resolve(
+          Response.json({
+            hosts: [
+              {
+                ...fixtureHost,
+                runtime: {
+                  ...fixtureHost.runtime,
+                  ssh: {
+                    status: 'connected',
+                    lastCheckedAt: '2026-01-02T03:04:05.000Z',
+                  },
+                },
+              },
+            ],
+          }),
+        );
+      }
+      return undefined;
+    });
+    renderHosts();
+    expect(await screen.findByText(/Last checked/)).toBeVisible();
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'Test Connection' }));
+    await waitFor(() =>
+      expect(
+        fetchFn.mock.calls.filter(([request]) => {
+          const req = request as Request;
+          return (
+            req.method === 'GET' && new URL(req.url).pathname === '/api/hosts'
+          );
+        }).length,
+      ).toBeGreaterThanOrEqual(2),
+    );
+  });
 });
 
 describe('host detail variants', () => {
@@ -302,9 +344,9 @@ describe('host detail variants', () => {
     renderDetail();
     await screen.findByRole('heading', { name: 'Fixture Host' });
     expect(screen.getByText('Not configured')).toBeInTheDocument();
-    expect(screen.getByText(/Cluster Membership Detected/)).toHaveTextContent(
-      'Proxmox Cluster',
-    );
+    expect(
+      await screen.findByText(/Cluster Membership Detected/),
+    ).toHaveTextContent('Proxmox Cluster');
     expect(screen.getByText('2.0 TB')).toBeInTheDocument();
     expect(screen.getByText('N/A')).toBeInTheDocument();
     expect(screen.getByText('Missing')).toBeInTheDocument();
@@ -335,6 +377,112 @@ describe('host detail variants', () => {
     expect(screen.getAllByText('Connected (0ms)')).toHaveLength(2);
     await user.click(screen.getByRole('button', { name: 'Back to Hosts' }));
     expect(screen.getByText('Hosts destination')).toBeInTheDocument();
+  });
+
+  it('shows saved runtime status, probe guidance, and reloads detail after testing', async () => {
+    const fetchFn = installApi((request) => {
+      if (
+        request.method === 'GET' &&
+        new URL(request.url).pathname === '/api/hosts/fixture-host'
+      ) {
+        return Promise.resolve(
+          Response.json({
+            host: {
+              ...fixtureHostDetail,
+              runtime: {
+                ...fixtureHostDetail.runtime,
+                ssh: {
+                  status: 'connected',
+                  lastCheckedAt: '2026-01-02T03:04:05.000Z',
+                },
+              },
+            },
+          }),
+        );
+      }
+      return undefined;
+    });
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Fixture Host' });
+    expect(screen.getByText('Saved runtime status')).toBeVisible();
+    expect(screen.getByText(/Last checked/)).toBeVisible();
+    expect(
+      screen.getByText(/Run Probe refreshes host capabilities/),
+    ).toBeVisible();
+
+    const detailGets = () =>
+      fetchFn.mock.calls.filter(([request]) => {
+        const req = request as Request;
+        return (
+          req.method === 'GET' &&
+          new URL(req.url).pathname === '/api/hosts/fixture-host'
+        );
+      }).length;
+    const before = detailGets();
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'Test Connection' }));
+    await waitFor(() => expect(detailGets()).toBeGreaterThan(before));
+  });
+
+  it('reports a missing host id without calling the API', async () => {
+    const fetchFn = installApi();
+    render(
+      <MemoryRouter initialEntries={['/hosts']}>
+        <Routes>
+          <Route path="/hosts" element={<HostDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Host not found.')).toBeVisible();
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('renders saved channel errors and configured API details', async () => {
+    installApi((request) => {
+      if (
+        request.method === 'GET' &&
+        new URL(request.url).pathname === '/api/hosts/fixture-host'
+      ) {
+        return Promise.resolve(
+          Response.json({
+            host: {
+              ...fixtureHostDetail,
+              connection: {
+                ssh: fixtureHostDetail.connection.ssh,
+                api: {
+                  configured: true,
+                  url: 'https://192.0.2.10:8006',
+                  tokenId: 'root@pam!fixture',
+                  fingerprint: 'AA:BB',
+                },
+              },
+              runtime: {
+                ...fixtureHostDetail.runtime,
+                ssh: {
+                  status: 'error',
+                  error: 'fixture ssh error',
+                  lastCheckedAt: '2026-01-02T03:04:05.000Z',
+                },
+                api: {
+                  configured: true,
+                  status: 'error',
+                  error: 'fixture api error',
+                  lastCheckedAt: '2026-01-02T03:04:05.000Z',
+                },
+              },
+            },
+          }),
+        );
+      }
+      return undefined;
+    });
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Fixture Host' });
+    expect(screen.getByText('SSH: fixture ssh error')).toBeVisible();
+    expect(screen.getByText('API: fixture api error')).toBeVisible();
+    expect(screen.getByText(/TLS Fingerprint: AA:BB/)).toBeVisible();
   });
 
   it.each(['http', 'network'] as const)(

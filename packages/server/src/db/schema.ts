@@ -19,6 +19,7 @@ export const hostsCacheTable = sqliteTable('hosts', {
   status: text('status').notNull().default('unknown'),
   lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }),
   cachedConfigJson: text('cached_config_json').notNull(),
+  runtimeJson: text('runtime_json'),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });
 

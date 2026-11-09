@@ -279,6 +279,16 @@ export const jobReasonMigration: Migration = {
   },
 };
 
+export const hostRuntimeMigration: Migration = {
+  id: '0008_host_runtime',
+  up: (db) => {
+    const columns = db.pragma('table_info(hosts)') as { name: string }[];
+    if (!columns.some((column) => column.name === 'runtime_json')) {
+      db.exec('ALTER TABLE hosts ADD COLUMN runtime_json TEXT;');
+    }
+  },
+};
+
 export const allMigrations: readonly Migration[] = [
   initialMigration,
   totpMigration,
@@ -287,6 +297,7 @@ export const allMigrations: readonly Migration[] = [
   promptsMigration,
   plansMigration,
   jobReasonMigration,
+  hostRuntimeMigration,
 ];
 
 export function runMigrations(
