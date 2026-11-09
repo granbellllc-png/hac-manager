@@ -8,3 +8,4 @@ export * from './proxmox/index.js';
 export * from './router/index.js';
 export * from './probe/index.js';
 export * from './jobs/index.js';
+export * from './events/index.js';

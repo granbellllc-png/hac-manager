@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { globalSecretRedactor, sanitizeAuditPayload } from '@hacm/core';
 import type { DatabaseRepositories } from '../db/repositories/types.js';
-import type { JobRow } from '../db/schema.js';
+import type { JobLogLineRow, JobRow } from '../db/schema.js';
 import {
   JOB_PRIORITY,
   JobCancelledError,
@@ -55,6 +55,7 @@ export class DurableJobQueue extends EventEmitter {
   private readonly guestLocks = new Set<string>();
   private readonly hostLaneLocks = new Set<string>();
   private started = false;
+  private recovered = false;
   private draining = false;
   private drainRequested = false;
 
@@ -91,10 +92,18 @@ export class DurableJobQueue extends EventEmitter {
 
   public async start(): Promise<number> {
     if (this.started) return 0;
+    const interrupted = await this.recoverInterrupted();
+    this.started = true;
+    this.requestDrain();
+    return interrupted;
+  }
+
+  public async recoverInterrupted(): Promise<number> {
+    if (this.recovered) return 0;
     const staleJobs = await this.repos.jobs.list({ statuses: ['running'] });
     const interrupted = await this.repos.jobs.interruptRunning();
     for (const job of staleJobs) {
-      await this.repos.jobLogLines.append({
+      await this.appendLog({
         jobId: job.id,
         stream: 'system',
         text: 'Job marked interrupted after backend restart',
@@ -102,8 +111,7 @@ export class DurableJobQueue extends EventEmitter {
       const updated = await this.repos.jobs.get(job.id);
       if (updated) this.emitStatus(updated, 'running');
     }
-    this.started = true;
-    this.requestDrain();
+    this.recovered = true;
     return interrupted;
   }
 
@@ -160,7 +168,7 @@ export class DurableJobQueue extends EventEmitter {
       timeoutMs: input.timeoutMs ?? null,
       createdAt: now,
     });
-    await this.repos.jobLogLines.append({
+    await this.appendLog({
       jobId: job.id,
       stream: 'system',
       text: 'Job queued',
@@ -183,7 +191,7 @@ export class DurableJobQueue extends EventEmitter {
         cancelRequestedAt: requestedAt,
         error: null,
       });
-      await this.repos.jobLogLines.append({
+      await this.appendLog({
         jobId,
         stream: 'system',
         text: 'Job cancelled before execution',
@@ -298,7 +306,7 @@ export class DurableJobQueue extends EventEmitter {
       finishedAt: new Date(),
       error: message,
     });
-    await this.repos.jobLogLines.append({
+    await this.appendLog({
       jobId: job.id,
       stream: 'system',
       text: message,
@@ -343,7 +351,7 @@ export class DurableJobQueue extends EventEmitter {
       const claimed = await this.repos.jobs.claim(job.id, startedAt);
       if (!claimed) return;
       this.emitStatus(claimed, 'queued');
-      await this.repos.jobLogLines.append({
+      await this.appendLog({
         jobId: job.id,
         stream: 'system',
         text: 'Job started',
@@ -367,7 +375,7 @@ export class DurableJobQueue extends EventEmitter {
           const lines = text.replaceAll('\r\n', '\n').split('\n');
           if (lines.at(-1) === '') lines.pop();
           for (const line of lines) {
-            await this.repos.jobLogLines.append({
+            await this.appendLog({
               jobId: job.id,
               stream,
               text: line,
@@ -424,7 +432,7 @@ export class DurableJobQueue extends EventEmitter {
   ): Promise<void> {
     const finishedAt = new Date();
     await this.transition(job, status, { finishedAt, error });
-    await this.repos.jobLogLines.append({
+    await this.appendLog({
       jobId: job.id,
       stream: 'system',
       text: error ? `Job ${status}: ${error}` : `Job ${status}`,
@@ -447,5 +455,13 @@ export class DurableJobQueue extends EventEmitter {
 
   private emitStatus(job: JobRow, previousStatus: JobRow['status']): void {
     this.emit('status', { job, previousStatus } satisfies JobStatusEvent);
+  }
+
+  private async appendLog(
+    input: Parameters<DatabaseRepositories['jobLogLines']['append']>[0],
+  ): Promise<JobLogLineRow> {
+    const line = await this.repos.jobLogLines.append(input);
+    this.emit('log', line);
+    return line;
   }
 }

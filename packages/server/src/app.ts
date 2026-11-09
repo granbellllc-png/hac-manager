@@ -19,10 +19,13 @@ import { auditModule } from './modules/audit/index.js';
 import { hostsModule } from './modules/hosts/index.js';
 import { inventoryModule } from './modules/inventory/index.js';
 import { configEditorModule } from './modules/config-editor/index.js';
+import { eventsModule } from './modules/events/index.js';
 import { HostRegistry } from './hosts/registry.js';
 import { ConnectionManager } from './router/manager.js';
 import { LiveInventoryService } from './inventory/service.js';
 import { authModule } from './auth/module.js';
+import { DurableJobQueue } from './jobs/queue.js';
+import { JobEventBroker } from './events/job-events.js';
 import {
   SessionService,
   SESSION_COOKIE_NAME,
@@ -43,6 +46,9 @@ export interface BuildAppOptions {
   readonly hostRegistry?: HostRegistry;
   readonly connectionManager?: ConnectionManager;
   readonly inventoryService?: LiveInventoryService;
+  readonly jobQueue?: DurableJobQueue;
+  readonly eventBroker?: JobEventBroker;
+  readonly eventsHeartbeatMs?: number | undefined;
 }
 
 export async function buildApp(
@@ -109,16 +115,27 @@ export async function buildApp(
 
   // Setup database & repositories
   let repositories: DatabaseRepositories;
+  let closeOwnedDatabase: (() => void) | undefined;
   if ('repositories' in configOrOptions && configOrOptions.repositories) {
     repositories = configOrOptions.repositories;
   } else {
     const dbPath = join(config.HACM_STATE_DIR, 'hacm.sqlite');
     const dbHandle = createDatabase({ path: dbPath });
-    app.addHook('onClose', async () => {
-      dbHandle.close();
-    });
+    closeOwnedDatabase = dbHandle.close;
     repositories = createSqliteRepositories(dbHandle.db);
   }
+
+  const jobQueue =
+    'jobQueue' in configOrOptions && configOrOptions.jobQueue
+      ? configOrOptions.jobQueue
+      : new DurableJobQueue(repositories);
+  await jobQueue.recoverInterrupted();
+  app.decorate('jobQueue', jobQueue);
+  const eventBroker =
+    'eventBroker' in configOrOptions && configOrOptions.eventBroker
+      ? configOrOptions.eventBroker
+      : new JobEventBroker(jobQueue);
+  app.decorate('eventBroker', eventBroker);
 
   const sessionService = new SessionService(repositories, config);
   const rateLimiter = new LoginRateLimiter();
@@ -205,8 +222,11 @@ export async function buildApp(
   app.decorate('inventoryService', inventoryService);
 
   app.addHook('onClose', async () => {
+    eventBroker.close();
+    await jobQueue.stop({ interruptRunning: true });
     hostRegistry.close();
     await connectionManager.close();
+    closeOwnedDatabase?.();
   });
 
   // Register Modules
@@ -225,6 +245,15 @@ export async function buildApp(
   await app.register(configEditorModule, {
     hostRegistry,
     repos: repositories,
+  });
+  await app.register(eventsModule, {
+    repos: repositories,
+    hostRegistry,
+    broker: eventBroker,
+    ...('eventsHeartbeatMs' in configOrOptions &&
+    configOrOptions.eventsHeartbeatMs !== undefined
+      ? { heartbeatMs: configOrOptions.eventsHeartbeatMs }
+      : {}),
   });
 
   await app.register(authModule, {
