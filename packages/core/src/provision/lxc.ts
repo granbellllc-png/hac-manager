@@ -91,7 +91,18 @@ function boolValue(
   return value;
 }
 
-function networkOptions(
+const LXC_NETWORK_OPTION_ORDER = [
+  'name',
+  'bridge',
+  'gw',
+  'hwaddr',
+  'ip',
+  'ip6',
+  'gw6',
+  'type',
+] as const;
+
+export function lxcNetworkOptions(
   network: GuestDeployment['network'][number],
 ): Record<string, string> {
   const opts: Record<string, string> = {};
@@ -130,7 +141,18 @@ function networkOptions(
   return opts;
 }
 
-function featureOptions(
+/** Canonical `netN` value used for both `pct create` and drift comparison. */
+export function formatLxcNetwork(
+  network: GuestDeployment['network'][number],
+): string {
+  return formatOptionString(
+    undefined,
+    lxcNetworkOptions(network),
+    LXC_NETWORK_OPTION_ORDER,
+  );
+}
+
+export function lxcFeatureOptions(
   features: NonNullable<Extract<GuestDeployment, { type: 'lxc' }>['features']>,
 ): Record<string, string> {
   const opts: Record<string, string> = {};
@@ -141,6 +163,18 @@ function featureOptions(
     opts['mount'] = features.mount.join(';');
   }
   return opts;
+}
+
+/** Canonical `features` value, or undefined when no feature is enabled. */
+export function formatLxcFeatures(
+  features:
+    | NonNullable<Extract<GuestDeployment, { type: 'lxc' }>['features']>
+    | undefined,
+): string | undefined {
+  if (!features) return undefined;
+  const opts = lxcFeatureOptions(features);
+  if (Object.keys(opts).length === 0) return undefined;
+  return formatOptionString(undefined, opts);
 }
 
 export interface LxcCreatePreview {
@@ -195,7 +229,7 @@ export function buildLxcCreateArgv(
   );
 
   if (guest.features) {
-    const opts = featureOptions(guest.features);
+    const opts = lxcFeatureOptions(guest.features);
     if (Object.keys(opts).length > 0) {
       argv.push('--features', formatOptionString(undefined, opts));
     }
@@ -236,19 +270,7 @@ export function buildLxcCreateArgv(
   }
 
   for (const network of guest.network) {
-    argv.push(
-      `--net${network.index}`,
-      formatOptionString(undefined, networkOptions(network), [
-        'name',
-        'bridge',
-        'gw',
-        'hwaddr',
-        'ip',
-        'ip6',
-        'gw6',
-        'type',
-      ]),
-    );
+    argv.push(`--net${network.index}`, formatLxcNetwork(network));
   }
 
   return argv;

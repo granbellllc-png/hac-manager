@@ -403,6 +403,58 @@ export const plansModule: FastifyPluginAsyncZod<PlansModuleOptions> = async (
     },
   );
 
+  app.post(
+    '/api/plans/guest-update',
+    {
+      schema: {
+        tags: ['Plans'],
+        summary: 'Create a durable LXC configuration update plan',
+        body: z.object({
+          hostId: z.string(),
+          vmid: z.number().int(),
+        }),
+        response: {
+          201: planSchema,
+          400: errorSchema,
+          403: errorSchema,
+          404: errorSchema,
+          409: errorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const allowed = await options.hostRegistry.listHosts(request.user);
+      if (!allowed.some((host) => host.id === request.body.hostId)) {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: `Access denied to host '${request.body.hostId}'`,
+        });
+      }
+      try {
+        const plan = await options.planService.createGuestUpdatePlan({
+          ...request.body,
+          createdBy: request.user?.id,
+          createdByRole: knownRole(request.user?.role),
+        });
+        return reply.code(201).send(plan);
+      } catch (error) {
+        const mapped = planError(error);
+        if (mapped) {
+          return reply.code(mapped.code).send({
+            statusCode: mapped.code,
+            error: mapped.error,
+            message: mapped.message,
+            ...(mapped.confirmationText
+              ? { confirmationText: mapped.confirmationText }
+              : {}),
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
   app.get(
     '/api/plans',
     {

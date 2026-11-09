@@ -121,4 +121,34 @@ describe('Proxmox Config Codec (Issue #29)', () => {
 
     expect(parsed2).toEqual(parsed1);
   });
+
+  it('parses and serialises the protection flag for LXCs and VMs', () => {
+    const lxc = parseProxmoxConfig(
+      'hostname: protected-lxc\nprotection: 1',
+      'lxc',
+      120,
+    );
+    if (lxc.type !== 'lxc') throw new Error('Expected LXC');
+    expect(lxc.protection).toBe(true);
+    expect(serialiseProxmoxConfig({ ...lxc, protection: false })).toContain(
+      'protection: 0',
+    );
+    expect(
+      parseProxmoxConfig(serialiseProxmoxConfig(lxc), 'lxc', 120),
+    ).toMatchObject({ protection: true });
+
+    const vm = parseProxmoxConfig(
+      'name: protected-vm\nprotection: true',
+      'vm',
+      220,
+    );
+    if (vm.type !== 'vm') throw new Error('Expected VM');
+    expect(vm.protection).toBe(true);
+    expect(serialiseProxmoxConfig({ ...vm, protection: false })).toContain(
+      'protection: 0',
+    );
+    expect(
+      parseProxmoxConfig(serialiseProxmoxConfig(vm), 'vm', 220),
+    ).toMatchObject({ protection: true });
+  });
 });

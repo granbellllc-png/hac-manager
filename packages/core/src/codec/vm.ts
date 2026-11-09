@@ -167,6 +167,12 @@ export function parseVmProxmoxConfig(
     });
   }
 
+  let protection: boolean | undefined = undefined;
+  if (main['protection'] !== undefined) {
+    protection = main['protection'] === '1' || main['protection'] === 'true';
+    delete main['protection'];
+  }
+
   const extra: Record<string, unknown> = { ...main };
   if (raw.pending && Object.keys(raw.pending).length > 0) {
     extra['_pending'] = raw.pending;
@@ -188,6 +194,7 @@ export function parseVmProxmoxConfig(
     efi_disk: efiDisk || undefined,
     tpm: tpm || undefined,
     cloud_init: cloudInit,
+    protection,
     disks,
     network,
     extra: Object.keys(extra).length > 0 ? extra : undefined,
@@ -223,6 +230,9 @@ export function serialiseVmProxmoxConfig(guest: GuestDeployment): string {
 
   if (guest.bios) main['bios'] = guest.bios;
   if (guest.machine) main['machine'] = guest.machine;
+  if (guest.protection !== undefined) {
+    main['protection'] = guest.protection ? '1' : '0';
+  }
   if (guest.guest_agent) main['agent'] = '1';
   if (guest.cloud_init) {
     if (guest.cloud_init.user) main['ciuser'] = valToStr(guest.cloud_init.user);

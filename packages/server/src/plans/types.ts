@@ -23,6 +23,12 @@ export interface GuestCreatePlanPayload {
   readonly generatedAt: string;
 }
 
+export interface GuestUpdatePlanPayload {
+  readonly relativePath: string;
+  readonly generatedAt: string;
+  readonly restartRequired: boolean;
+}
+
 export interface CreateGuestPowerPlanInput {
   readonly hostId: string;
   readonly vmid: number;
@@ -39,6 +45,13 @@ export interface CreateGuestStampPlanInput {
 }
 
 export interface CreateGuestCreatePlanInput {
+  readonly hostId: string;
+  readonly vmid: number;
+  readonly createdBy?: string | undefined;
+  readonly createdByRole?: 'admin' | 'operator' | 'viewer' | undefined;
+}
+
+export interface CreateGuestUpdatePlanInput {
   readonly hostId: string;
   readonly vmid: number;
   readonly createdBy?: string | undefined;

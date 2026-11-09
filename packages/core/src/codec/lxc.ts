@@ -58,6 +58,12 @@ export function parseLxcProxmoxConfig(
     delete main['startup'];
   }
 
+  let protection: boolean | undefined = undefined;
+  if (main['protection'] !== undefined) {
+    protection = main['protection'] === '1' || main['protection'] === 'true';
+    delete main['protection'];
+  }
+
   let tags: string[] | undefined = undefined;
   if (main['tags']) {
     tags = main['tags']
@@ -227,6 +233,7 @@ export function parseLxcProxmoxConfig(
     ostype,
     onboot,
     startup,
+    protection,
     tags,
     features,
     disks,
@@ -276,6 +283,9 @@ export function serialiseLxcProxmoxConfig(guest: GuestDeployment): string {
   }
   if (guest.startup !== undefined) {
     main['startup'] = valToStr(guest.startup);
+  }
+  if (guest.protection !== undefined) {
+    main['protection'] = guest.protection ? '1' : '0';
   }
   if (guest.tags && guest.tags.length > 0) {
     main['tags'] = guest.tags.join(';');

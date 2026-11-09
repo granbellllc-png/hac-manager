@@ -117,6 +117,21 @@ installation:
 `,
     'utf8',
   );
+  const updateDir = join(dataDir, 'hosts', 'pve-01', '116-update-lxc');
+  await mkdir(updateDir, { recursive: true });
+  await writeFile(
+    join(updateDir, 'deployment.yaml'),
+    `schema_version: 1
+id: 116
+name: update-lxc
+type: lxc
+cpu: 4
+ram: 2048
+disks: []
+network: []
+`,
+    'utf8',
+  );
   const createTransport = new FakeTransport()
     .onExec('test -f /etc/pve/local/qemu-server/114.conf', { exitCode: 1 })
     .onExec('test -f /etc/pve/local/lxc/114.conf', { exitCode: 1 });
@@ -126,6 +141,7 @@ installation:
   const live = new Map<string, LiveGuestDetail>([
     ['pve-01:112', guest('pve-01', 112)],
     ['pve-01:113', guest('pve-01', 113)],
+    ['pve-01:116', guest('pve-01', 116)],
     ['pve-02:212', guest('pve-02', 212)],
   ]);
   const planService = new PlanService(
@@ -139,7 +155,38 @@ installation:
       },
     },
     { dataDir },
-    undefined,
+    {
+      async requireSnapshot(hostId: string, vmid: number) {
+        const detail = live.get(`${hostId}:${vmid}`);
+        if (!detail) throw new Error(`Guest '${hostId}/${vmid}' not found`);
+        return {
+          hostId,
+          vmid,
+          type: 'lxc',
+          summary: detail.summary,
+          deployment: detail.canonicalConfig,
+          status: detail.summary.status,
+        };
+      },
+      verifyForMutation: async (hostId: string, vmid: number) => {
+        const detail = live.get(`${hostId}:${vmid}`);
+        if (!detail) throw new Error(`Guest '${hostId}/${vmid}' not found`);
+        return {
+          hostId,
+          vmid,
+          type: 'lxc',
+          summary: detail.summary,
+          deployment: detail.canonicalConfig,
+          status: detail.summary.status,
+        };
+      },
+      async executePower() {
+        return { source: 'ssh' };
+      },
+      async waitForPowerState() {
+        return { status: 'running', expected: 'running' };
+      },
+    } as never,
     {
       async getRouter() {
         return createTransport as never;
@@ -355,6 +402,46 @@ describe('plans API', () => {
       });
       expect(noDeployment.statusCode).toBe(409);
       expect(noDeployment.json().message).toContain('No deployment YAML');
+    } finally {
+      await fixture.app.close();
+      fixture.handle.close();
+    }
+  });
+
+  it('creates LXC update plans for granted hosts and restricts other hosts', async () => {
+    const fixture = await createFixture();
+    try {
+      const created = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/plans/guest-update',
+        headers: {
+          cookie: fixture.operator.cookie,
+          [CSRF_HEADER_NAME]: fixture.operator.csrf,
+        },
+        payload: { hostId: 'pve-01', vmid: 116 },
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json()).toMatchObject({
+        operation: 'guest.update',
+        target: { hostId: 'pve-01', vmid: 116, resourceType: 'guest' },
+        status: 'ready',
+        changes: [
+          expect.objectContaining({ id: 'cpu', before: 2, after: 4 }),
+          expect.objectContaining({ id: 'tags' }),
+        ],
+      });
+
+      const denied = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/plans/guest-update',
+        headers: {
+          cookie: fixture.operator.cookie,
+          [CSRF_HEADER_NAME]: fixture.operator.csrf,
+        },
+        payload: { hostId: 'pve-02', vmid: 212 },
+      });
+      expect(denied.statusCode).toBe(403);
+      expect(denied.json().message).toContain("Access denied to host 'pve-02'");
     } finally {
       await fixture.app.close();
       fixture.handle.close();

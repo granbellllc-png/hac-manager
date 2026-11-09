@@ -45,6 +45,11 @@ export interface GuardedGuestOptions {
   readonly operation: string;
   readonly runIdentityChecks?: boolean | undefined;
   readonly requireManaged?: boolean | undefined;
+  /**
+   * Permit a non-destructive operation on a guest whose YAML enables
+   * `protection`. Callers must still block destructive changes themselves.
+   */
+  readonly allowProtected?: boolean | undefined;
   readonly signal?: AbortSignal | undefined;
 }
 
@@ -241,7 +246,8 @@ export class GuestLifecycleService {
       !allowUnmanaged &&
       expectedDeployment.protection &&
       options.operation !== 'guest.power.start' &&
-      options.operation !== 'guest.stamp'
+      options.operation !== 'guest.stamp' &&
+      !options.allowProtected
     ) {
       throw new GuestProtectionEnabledError(hostId, vmid);
     }

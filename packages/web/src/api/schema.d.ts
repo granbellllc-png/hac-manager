@@ -2952,6 +2952,141 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/plans/guest-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a durable LXC configuration update plan */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        hostId: string;
+                        vmid: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {number} */
+                            schemaVersion: 1;
+                            id: string;
+                            operation: string;
+                            target: {
+                                hostId: string;
+                                vmid?: number;
+                                /** @enum {string} */
+                                resourceType?: "host" | "guest" | "file";
+                            };
+                            summary: string;
+                            readonly changes: {
+                                id: string;
+                                /** @enum {string} */
+                                action: "create" | "update" | "delete" | "execute";
+                                summary: string;
+                                path?: string;
+                                before?: unknown;
+                                after?: unknown;
+                                readonly warnings?: string[];
+                                destructive?: boolean;
+                            }[];
+                            readonly warnings: string[];
+                            destructive: boolean;
+                            stateFingerprint: string;
+                            confirmationText?: string;
+                            createdAt: string;
+                            /** @enum {string} */
+                            status: "ready" | "applying" | "applied" | "stale" | "failed";
+                            createdBy?: string;
+                            approvedBy?: string;
+                            lastJobId?: string;
+                            error?: string;
+                            approvedAt?: string;
+                            appliedAt?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/plans": {
         parameters: {
             query?: never;
