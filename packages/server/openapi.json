@@ -5341,6 +5341,765 @@
         }
       }
     },
+    "/api/jobs": {
+      "get": {
+        "summary": "List durable jobs for granted hosts",
+        "tags": ["Jobs"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "hostId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "vmid",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "queued",
+                "running",
+                "waiting_input",
+                "completed",
+                "failed",
+                "cancelled",
+                "interrupted"
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "hostId": {
+                            "type": "string"
+                          },
+                          "vmid": {
+                            "type": "number"
+                          },
+                          "lane": {
+                            "type": "string",
+                            "enum": ["guest", "host"]
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "queued",
+                              "running",
+                              "waiting_input",
+                              "completed",
+                              "failed",
+                              "cancelled",
+                              "interrupted"
+                            ]
+                          },
+                          "priority": {
+                            "type": "number"
+                          },
+                          "triggeredBy": {
+                            "type": "string"
+                          },
+                          "dependsOnJobId": {
+                            "type": "string"
+                          },
+                          "timeoutMs": {
+                            "type": "number"
+                          },
+                          "cancelRequestedAt": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "startedAt": {
+                            "type": "string"
+                          },
+                          "finishedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "hostId",
+                          "lane",
+                          "type",
+                          "status",
+                          "priority",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["jobs"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{jobId}": {
+      "get": {
+        "summary": "Get job details, steps, and prompts",
+        "tags": ["Jobs"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "hostId": {
+                          "type": "string"
+                        },
+                        "vmid": {
+                          "type": "number"
+                        },
+                        "lane": {
+                          "type": "string",
+                          "enum": ["guest", "host"]
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "running",
+                            "waiting_input",
+                            "completed",
+                            "failed",
+                            "cancelled",
+                            "interrupted"
+                          ]
+                        },
+                        "priority": {
+                          "type": "number"
+                        },
+                        "triggeredBy": {
+                          "type": "string"
+                        },
+                        "dependsOnJobId": {
+                          "type": "string"
+                        },
+                        "timeoutMs": {
+                          "type": "number"
+                        },
+                        "cancelRequestedAt": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "startedAt": {
+                          "type": "string"
+                        },
+                        "finishedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "hostId",
+                        "lane",
+                        "type",
+                        "status",
+                        "priority",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "steps": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "jobId": {
+                            "type": "string"
+                          },
+                          "stepIndex": {
+                            "type": "number"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "running",
+                              "completed",
+                              "failed",
+                              "skipped"
+                            ]
+                          },
+                          "result": {},
+                          "rollbackHint": {
+                            "type": "string"
+                          },
+                          "startedAt": {
+                            "type": "string"
+                          },
+                          "finishedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["jobId", "stepIndex", "name", "status"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "prompts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "jobId": {
+                            "type": "string"
+                          },
+                          "hostId": {
+                            "type": "string"
+                          },
+                          "vmid": {
+                            "type": "number"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": ["choice", "confirm", "typed_confirmation"]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["pending", "resolved", "expired"]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "payload": {},
+                          "options": {
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "resolution": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["choice"]
+                                  },
+                                  "choice": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["kind", "choice"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["confirm"]
+                                  },
+                                  "confirmed": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": ["kind", "confirmed"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["typed_confirmation"]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["kind", "text"],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "resolvedBy": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string"
+                          },
+                          "resolvedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "jobId",
+                          "hostId",
+                          "kind",
+                          "status",
+                          "message",
+                          "payload",
+                          "options",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["job", "steps", "prompts"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{jobId}/logs": {
+      "get": {
+        "summary": "Page through persisted job log lines",
+        "tags": ["Jobs"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "after",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "logs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "jobId": {
+                            "type": "string"
+                          },
+                          "seq": {
+                            "type": "number"
+                          },
+                          "ts": {
+                            "type": "string"
+                          },
+                          "stream": {
+                            "type": "string",
+                            "enum": ["stdout", "stderr", "system"]
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["jobId", "seq", "ts", "stream", "text"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["logs", "nextCursor"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{jobId}/cancel": {
+      "post": {
+        "summary": "Cancel a queued or running job",
+        "tags": ["Jobs"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "hostId": {
+                          "type": "string"
+                        },
+                        "vmid": {
+                          "type": "number"
+                        },
+                        "lane": {
+                          "type": "string",
+                          "enum": ["guest", "host"]
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "running",
+                            "waiting_input",
+                            "completed",
+                            "failed",
+                            "cancelled",
+                            "interrupted"
+                          ]
+                        },
+                        "priority": {
+                          "type": "number"
+                        },
+                        "triggeredBy": {
+                          "type": "string"
+                        },
+                        "dependsOnJobId": {
+                          "type": "string"
+                        },
+                        "timeoutMs": {
+                          "type": "number"
+                        },
+                        "cancelRequestedAt": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "startedAt": {
+                          "type": "string"
+                        },
+                        "finishedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "hostId",
+                        "lane",
+                        "type",
+                        "status",
+                        "priority",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["job"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/status": {
       "get": {
         "tags": ["auth"],

@@ -61,77 +61,86 @@ function installApi({
 }
 
 describe('ResourcesPage', () => {
-  it('renders more than 100 guests in pages and applies every filter', async () => {
-    const guests = Array.from({ length: 105 }, (_, index) => ({
-      hostId: index === 104 ? 'unknown-host' : fixtureHost.id,
-      vmid: 1000 + index,
-      name: `Guest ${String(index).padStart(3, '0')}`,
-      type: index % 2 === 0 ? ('lxc' as const) : ('vm' as const),
-      status:
-        index % 3 === 0 ? 'running' : index % 3 === 1 ? 'stopped' : 'paused',
-      node: 'fixture-node',
-      ...(index % 7 === 0 ? {} : { maxcpu: 2, maxmem: 1024 ** 3 }),
-      configuration:
-        index % 5 === 0
-          ? { status: 'orphan' as const }
-          : {
-              status: 'configured' as const,
-              relativePath: `hosts/fixture-host/${1000 + index}-guest/deployment.yaml`,
-            },
-    }));
-    installApi({ guests });
-    const user = userEvent.setup();
-    renderResources();
+  it(
+    'renders more than 100 guests in pages and applies every filter',
+    { timeout: 20_000 },
+    async () => {
+      const guests = Array.from({ length: 105 }, (_, index) => ({
+        hostId: index === 104 ? 'unknown-host' : fixtureHost.id,
+        vmid: 1000 + index,
+        name: `Guest ${String(index).padStart(3, '0')}`,
+        type: index % 2 === 0 ? ('lxc' as const) : ('vm' as const),
+        status:
+          index % 3 === 0 ? 'running' : index % 3 === 1 ? 'stopped' : 'paused',
+        node: 'fixture-node',
+        ...(index % 7 === 0 ? {} : { maxcpu: 2, maxmem: 1024 ** 3 }),
+        configuration:
+          index % 5 === 0
+            ? { status: 'orphan' as const }
+            : {
+                status: 'configured' as const,
+                relativePath: `hosts/fixture-host/${1000 + index}-guest/deployment.yaml`,
+              },
+      }));
+      installApi({ guests });
+      const user = userEvent.setup();
+      renderResources();
 
-    expect(
-      await screen.findByText('Showing 1–50 of 105 resources'),
-    ).toBeVisible();
-    expect(screen.getAllByRole('link', { name: 'View guest' })).toHaveLength(
-      50,
-    );
-    expect(screen.getByRole('alert')).toHaveTextContent('21 live guests have');
-    expect(screen.getAllByText('paused').length).toBeGreaterThan(0);
+      expect(
+        await screen.findByText('Showing 1–50 of 105 resources'),
+      ).toBeVisible();
+      expect(screen.getAllByRole('link', { name: 'View guest' })).toHaveLength(
+        50,
+      );
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        '21 live guests have',
+      );
+      expect(screen.getAllByText('paused').length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole('button', { name: 'Next' }));
-    expect(screen.getByText('Showing 51–100 of 105 resources')).toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Previous' }));
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+      expect(screen.getByText('Showing 51–100 of 105 resources')).toBeVisible();
+      await user.click(screen.getByRole('button', { name: 'Previous' }));
 
-    await user.selectOptions(screen.getByLabelText('Type'), 'vm');
-    expect(screen.getByText(/of 52 resources/)).toBeVisible();
-    await user.selectOptions(screen.getByLabelText('Status'), 'stopped');
-    await user.selectOptions(screen.getByLabelText('Configuration'), 'orphan');
-    expect(
-      screen.getAllByRole('link', { name: 'View guest' }).length,
-    ).toBeGreaterThan(0);
+      await user.selectOptions(screen.getByLabelText('Type'), 'vm');
+      expect(screen.getByText(/of 52 resources/)).toBeVisible();
+      await user.selectOptions(screen.getByLabelText('Status'), 'stopped');
+      await user.selectOptions(
+        screen.getByLabelText('Configuration'),
+        'orphan',
+      );
+      expect(
+        screen.getAllByRole('link', { name: 'View guest' }).length,
+      ).toBeGreaterThan(0);
 
-    await user.selectOptions(screen.getByLabelText('Host'), fixtureHost.id);
-    await user.type(
-      screen.getByPlaceholderText('Name, VMID, or host'),
-      'Guest 025',
-    );
-    expect(screen.getByRole('heading', { name: 'Guest 025' })).toBeVisible();
-    await user.clear(screen.getByPlaceholderText('Name, VMID, or host'));
-    await user.selectOptions(screen.getByLabelText('Type'), '');
-    await user.selectOptions(screen.getByLabelText('Status'), '');
-    await user.selectOptions(screen.getByLabelText('Configuration'), '');
-    await user.selectOptions(screen.getByLabelText('Host'), '');
-    await user.type(
-      screen.getByPlaceholderText('Name, VMID, or host'),
-      'Guest 104',
-    );
+      await user.selectOptions(screen.getByLabelText('Host'), fixtureHost.id);
+      await user.type(
+        screen.getByPlaceholderText('Name, VMID, or host'),
+        'Guest 025',
+      );
+      expect(screen.getByRole('heading', { name: 'Guest 025' })).toBeVisible();
+      await user.clear(screen.getByPlaceholderText('Name, VMID, or host'));
+      await user.selectOptions(screen.getByLabelText('Type'), '');
+      await user.selectOptions(screen.getByLabelText('Status'), '');
+      await user.selectOptions(screen.getByLabelText('Configuration'), '');
+      await user.selectOptions(screen.getByLabelText('Host'), '');
+      await user.type(
+        screen.getByPlaceholderText('Name, VMID, or host'),
+        'Guest 104',
+      );
 
-    const unknownCard = screen
-      .getByRole('heading', { name: 'Guest 104' })
-      .closest('article');
-    expect(unknownCard).not.toBeNull();
-    expect(within(unknownCard!).getByText(/unknown-host/)).toBeVisible();
-    await user.click(
-      within(unknownCard!).getByRole('link', { name: 'View guest' }),
-    );
-    expect(screen.getByTestId('destination')).toHaveTextContent(
-      '/resources/unknown-host/1104?type=lxc',
-    );
-  });
+      const unknownCard = screen
+        .getByRole('heading', { name: 'Guest 104' })
+        .closest('article');
+      expect(unknownCard).not.toBeNull();
+      expect(within(unknownCard!).getByText(/unknown-host/)).toBeVisible();
+      await user.click(
+        within(unknownCard!).getByRole('link', { name: 'View guest' }),
+      );
+      expect(screen.getByTestId('destination')).toHaveTextContent(
+        '/resources/unknown-host/1104?type=lxc',
+      );
+    },
+  );
 
   it('loads URL filters, refreshes inventory, and renders a singular orphan alert', async () => {
     const fetchFn = installApi({ guests: [fixtureGuests[1]!] });

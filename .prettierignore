@@ -7,5 +7,6 @@ playwright-report
 test-results
 
 .tsc-out
+.codegraph
 packages/web/src/api/schema.d.ts
 docs/reference/config.md

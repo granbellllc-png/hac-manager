@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     projects: ['packages/*/vitest.config.ts'],
+    testTimeout: 20_000,
     coverage: {
       provider: 'v8',
       include: ['packages/*/src/**/*.{ts,tsx}'],

@@ -42,6 +42,23 @@ test('renders the audit page with filters and table', async ({
   });
 });
 
+test('renders the responsive jobs queue and virtualized live log', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/jobs');
+  await expect(
+    page.getByRole('heading', { name: 'Jobs & Queue' }),
+  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'plan.apply' })).toBeVisible();
+  await expect(page.getByText('Apply planned guest import')).toBeVisible();
+  await expect(page.getByText('Applying planned change')).toBeVisible();
+  await expect(page.getByRole('log')).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath('jobs.png'),
+    fullPage: true,
+  });
+});
+
 test('renders SSH-only host detail and connection test feedback', async ({
   page,
 }, testInfo) => {

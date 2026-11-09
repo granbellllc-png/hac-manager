@@ -235,6 +235,12 @@ export class PromptService {
     return Promise.all(rows.map((row) => this.toPublicPrompt(row)));
   }
 
+  public async listForJob(jobId: string): Promise<readonly PublicPrompt[]> {
+    await this.expireDue();
+    const rows = await this.repos.prompts.list({ jobId });
+    return Promise.all(rows.map((row) => this.toPublicPrompt(row)));
+  }
+
   public async expireDue(now = new Date()): Promise<number> {
     const pending = await this.repos.prompts.list({ statuses: ['pending'] });
     const due = pending.filter(

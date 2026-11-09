@@ -19,6 +19,11 @@ const GuestDetailPage = lazy(() =>
     default: module.GuestDetailPage,
   })),
 );
+const JobsPage = lazy(() =>
+  import('./pages/jobs').then((module) => ({
+    default: module.JobsPage,
+  })),
+);
 
 export function RouteLoading() {
   return <p className="text-sm text-muted-foreground">Loading page…</p>;
@@ -48,8 +53,21 @@ export function App() {
                 </Suspense>
               }
             />
+            <Route
+              path="/jobs"
+              element={
+                <Suspense fallback={<RouteLoading />}>
+                  <JobsPage />
+                </Suspense>
+              }
+            />
             {navItems
-              .filter((item) => item.path !== '/' && item.path !== '/resources')
+              .filter(
+                (item) =>
+                  item.path !== '/' &&
+                  item.path !== '/resources' &&
+                  item.path !== '/jobs',
+              )
               .map((item) => (
                 <Route
                   key={item.path}

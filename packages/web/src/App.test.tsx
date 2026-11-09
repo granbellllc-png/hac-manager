@@ -148,6 +148,36 @@ describe('application shell', () => {
     ).toBeInTheDocument();
   });
 
+  it('renders the lazy jobs route', async () => {
+    class FixtureEventSource {
+      public static readonly OPEN = 1;
+      public readyState = FixtureEventSource.OPEN;
+      public addEventListener() {}
+      public close() {}
+    }
+    vi.stubGlobal('EventSource', FixtureEventSource);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (request: Request) => {
+        const path = new URL(request.url).pathname;
+        if (path === '/api/auth/status')
+          return Response.json({
+            setupNeeded: false,
+            user: { id: 'fixture-admin', username: 'admin', role: 'admin' },
+          });
+        if (path === '/api/health')
+          return Response.json({ status: 'ok', service: 'HAC Manager' });
+        if (path === '/api/jobs') return Response.json({ jobs: [] });
+        if (path === '/api/prompts') return Response.json({ prompts: [] });
+        return Response.json({}, { status: 404 });
+      }),
+    );
+    await renderApp('/jobs');
+    expect(
+      await screen.findByRole('heading', { name: 'Jobs & Queue' }),
+    ).toBeVisible();
+  });
+
   it('renders the route loading fallback', () => {
     render(<RouteLoading />);
     expect(screen.getByText('Loading page…')).toBeInTheDocument();
@@ -165,10 +195,10 @@ describe('application shell', () => {
     await user.click(
       screen
         .getByRole('navigation', { name: 'Mobile' })
-        .querySelector('a[href="/jobs"]')!,
+        .querySelector('a[href="/drift"]')!,
     );
     expect(mobile).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Jobs' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Drift' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Open navigation' }));
     await user.click(

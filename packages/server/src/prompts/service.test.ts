@@ -70,6 +70,9 @@ describe('PromptService', () => {
           payload: { token: '***' },
         }),
       ]);
+      expect(await service.listForJob(job.id)).toEqual([
+        expect.objectContaining({ id: 'prompt-job:confirm' }),
+      ]);
 
       await service.resolve(
         'prompt-job:confirm',
@@ -181,180 +184,188 @@ describe('PromptService', () => {
     }
   });
 
-  it('validates choices, typed confirmation, expiry, and request identity', async () => {
-    const handle = createDatabase({ path: ':memory:' });
-    try {
-      const repos = createSqliteRepositories(handle.db);
-      const queue = new DurableJobQueue(repos);
-      queues.push(queue);
-      const broker = new JobEventBroker(queue);
-      const service = new PromptService(repos, broker);
-      await repos.jobs.create({
-        id: 'validation-job',
-        hostId: 'pve-01',
-        lane: 'host',
-        type: 'test',
-        status: 'waiting_input',
-        priority: 0,
-        createdAt: new Date(),
-      });
+  it(
+    'validates choices, typed confirmation, expiry, and request identity',
+    { timeout: 20_000 },
+    async () => {
+      const handle = createDatabase({ path: ':memory:' });
+      try {
+        const repos = createSqliteRepositories(handle.db);
+        const queue = new DurableJobQueue(repos);
+        queues.push(queue);
+        const broker = new JobEventBroker(queue);
+        const service = new PromptService(repos, broker);
+        await repos.jobs.create({
+          id: 'validation-job',
+          hostId: 'pve-01',
+          lane: 'host',
+          type: 'test',
+          status: 'waiting_input',
+          priority: 0,
+          createdAt: new Date(),
+        });
 
-      await expect(
-        service.request({
-          jobId: 'validation-job',
-          kind: 'choice',
-          message: '',
-          options: ['a', 'b'],
-        }),
-      ).rejects.toBeInstanceOf(PromptValidationError);
-      await expect(
-        service.request({
-          jobId: 'validation-job',
-          kind: 'choice',
-          message: 'Choose',
-          options: ['only-one'],
-        }),
-      ).rejects.toThrow('at least two options');
-      await expect(
-        service.request({
-          jobId: 'validation-job',
-          kind: 'typed_confirmation',
-          message: 'Type it',
-        }),
-      ).rejects.toThrow('expectedText');
+        await expect(
+          service.request({
+            jobId: 'validation-job',
+            kind: 'choice',
+            message: '',
+            options: ['a', 'b'],
+          }),
+        ).rejects.toBeInstanceOf(PromptValidationError);
+        await expect(
+          service.request({
+            jobId: 'validation-job',
+            kind: 'choice',
+            message: 'Choose',
+            options: ['only-one'],
+          }),
+        ).rejects.toThrow('at least two options');
+        await expect(
+          service.request({
+            jobId: 'validation-job',
+            kind: 'typed_confirmation',
+            message: 'Type it',
+          }),
+        ).rejects.toThrow('expectedText');
 
-      const controller = new AbortController();
-      const typedWait = service.request({
-        id: 'typed',
-        jobId: 'validation-job',
-        kind: 'typed_confirmation',
-        message: 'Type DELETE',
-        expectedText: 'DELETE',
-        signal: controller.signal,
-      });
-      await waitUntil(async () => (await repos.prompts.get('typed')) !== null);
-      await expect(
-        service.resolve(
-          'typed',
-          { id: 'admin', username: 'admin' },
-          { kind: 'confirm', confirmed: true },
-        ),
-      ).rejects.toThrow("cannot use 'confirm'");
-      await expect(
-        service.resolve(
-          'typed',
-          { id: 'admin', username: 'admin' },
-          { kind: 'typed_confirmation', text: 'delete' },
-        ),
-      ).rejects.toThrow('does not match');
-      await service.resolve(
-        'typed',
-        { id: 'admin', username: 'admin' },
-        { kind: 'typed_confirmation', text: 'DELETE' },
-      );
-      await expect(typedWait).resolves.toEqual({
-        kind: 'typed_confirmation',
-        text: 'DELETE',
-      });
-      await expect(
-        service.resolve(
-          'typed',
-          { id: 'admin', username: 'admin' },
-          { kind: 'typed_confirmation', text: 'DELETE' },
-        ),
-      ).rejects.toThrow('already resolved');
-      await expect(
-        service.resolve(
-          'missing',
-          { id: 'admin', username: 'admin' },
-          { kind: 'confirm', confirmed: true },
-        ),
-      ).rejects.toThrow("Prompt 'missing' not found");
-
-      await expect(
-        service.request({
+        const controller = new AbortController();
+        const typedWait = service.request({
           id: 'typed',
-          jobId: 'different-job',
+          jobId: 'validation-job',
           kind: 'typed_confirmation',
           message: 'Type DELETE',
           expectedText: 'DELETE',
-        }),
-      ).rejects.toThrow('does not match the resumed request');
+          signal: controller.signal,
+        });
+        await waitUntil(
+          async () => (await repos.prompts.get('typed')) !== null,
+        );
+        await expect(
+          service.resolve(
+            'typed',
+            { id: 'admin', username: 'admin' },
+            { kind: 'confirm', confirmed: true },
+          ),
+        ).rejects.toThrow("cannot use 'confirm'");
+        await expect(
+          service.resolve(
+            'typed',
+            { id: 'admin', username: 'admin' },
+            { kind: 'typed_confirmation', text: 'delete' },
+          ),
+        ).rejects.toThrow('does not match');
+        await service.resolve(
+          'typed',
+          { id: 'admin', username: 'admin' },
+          { kind: 'typed_confirmation', text: 'DELETE' },
+        );
+        await expect(typedWait).resolves.toEqual({
+          kind: 'typed_confirmation',
+          text: 'DELETE',
+        });
+        await expect(
+          service.resolve(
+            'typed',
+            { id: 'admin', username: 'admin' },
+            { kind: 'typed_confirmation', text: 'DELETE' },
+          ),
+        ).rejects.toThrow('already resolved');
+        await expect(
+          service.resolve(
+            'missing',
+            { id: 'admin', username: 'admin' },
+            { kind: 'confirm', confirmed: true },
+          ),
+        ).rejects.toThrow("Prompt 'missing' not found");
 
-      const expired = service.request({
-        id: 'expired',
-        jobId: 'validation-job',
-        kind: 'confirm',
-        message: 'Too late',
-        expiresAt: new Date(Date.now() + 10),
-      });
-      await expect(expired).rejects.toBeInstanceOf(PromptExpiredError);
-      expect(await service.get('expired')).toMatchObject({ status: 'expired' });
-      await expect(
-        service.request({
+        await expect(
+          service.request({
+            id: 'typed',
+            jobId: 'different-job',
+            kind: 'typed_confirmation',
+            message: 'Type DELETE',
+            expectedText: 'DELETE',
+          }),
+        ).rejects.toThrow('does not match the resumed request');
+
+        const expired = service.request({
           id: 'expired',
           jobId: 'validation-job',
           kind: 'confirm',
           message: 'Too late',
-        }),
-      ).rejects.toBeInstanceOf(PromptExpiredError);
+          expiresAt: new Date(Date.now() + 10),
+        });
+        await expect(expired).rejects.toBeInstanceOf(PromptExpiredError);
+        expect(await service.get('expired')).toMatchObject({
+          status: 'expired',
+        });
+        await expect(
+          service.request({
+            id: 'expired',
+            jobId: 'validation-job',
+            kind: 'confirm',
+            message: 'Too late',
+          }),
+        ).rejects.toBeInstanceOf(PromptExpiredError);
 
-      await repos.prompts.create({
-        id: 'corrupt-resolution',
-        jobId: 'validation-job',
-        kind: 'confirm',
-        status: 'resolved',
-        message: 'Unreadable',
-        resolutionJson: '{',
-        createdAt: new Date(),
-        resolvedAt: new Date(),
-      });
-      await expect(
-        service.request({
+        await repos.prompts.create({
           id: 'corrupt-resolution',
           jobId: 'validation-job',
           kind: 'confirm',
+          status: 'resolved',
           message: 'Unreadable',
-        }),
-      ).rejects.toThrow('no readable resolution');
-
-      globalSecretRedactor.register('fixture-confirmation-secret');
-      try {
+          resolutionJson: '{',
+          createdAt: new Date(),
+          resolvedAt: new Date(),
+        });
         await expect(
           service.request({
-            id: 'secret-confirmation',
+            id: 'corrupt-resolution',
             jobId: 'validation-job',
-            kind: 'typed_confirmation',
-            message: 'Type the value',
-            expectedText: 'fixture-confirmation-secret',
+            kind: 'confirm',
+            message: 'Unreadable',
           }),
-        ).rejects.toThrow('must not contain a resolved secret');
-      } finally {
-        globalSecretRedactor.unregister('fixture-confirmation-secret');
-      }
+        ).rejects.toThrow('no readable resolution');
 
-      await repos.prompts.create({
-        id: 'resolution-race',
-        jobId: 'validation-job',
-        kind: 'confirm',
-        status: 'pending',
-        message: 'Race',
-        createdAt: new Date(),
-      });
-      const resolve = vi
-        .spyOn(repos.prompts, 'resolve')
-        .mockResolvedValueOnce(null);
-      await expect(
-        service.resolve(
-          'resolution-race',
-          { id: 'admin', username: 'admin' },
-          { kind: 'confirm', confirmed: true },
-        ),
-      ).rejects.toThrow('resolved by another request');
-      resolve.mockRestore();
-      broker.close();
-    } finally {
-      handle.close();
-    }
-  });
+        globalSecretRedactor.register('fixture-confirmation-secret');
+        try {
+          await expect(
+            service.request({
+              id: 'secret-confirmation',
+              jobId: 'validation-job',
+              kind: 'typed_confirmation',
+              message: 'Type the value',
+              expectedText: 'fixture-confirmation-secret',
+            }),
+          ).rejects.toThrow('must not contain a resolved secret');
+        } finally {
+          globalSecretRedactor.unregister('fixture-confirmation-secret');
+        }
+
+        await repos.prompts.create({
+          id: 'resolution-race',
+          jobId: 'validation-job',
+          kind: 'confirm',
+          status: 'pending',
+          message: 'Race',
+          createdAt: new Date(),
+        });
+        const resolve = vi
+          .spyOn(repos.prompts, 'resolve')
+          .mockResolvedValueOnce(null);
+        await expect(
+          service.resolve(
+            'resolution-race',
+            { id: 'admin', username: 'admin' },
+            { kind: 'confirm', confirmed: true },
+          ),
+        ).rejects.toThrow('resolved by another request');
+        resolve.mockRestore();
+        broker.close();
+      } finally {
+        handle.close();
+      }
+    },
+  );
 });

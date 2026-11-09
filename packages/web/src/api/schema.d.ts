@@ -2793,6 +2793,379 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List durable jobs for granted hosts */
+        get: {
+            parameters: {
+                query?: {
+                    hostId?: string;
+                    vmid?: number;
+                    status?: "queued" | "running" | "waiting_input" | "completed" | "failed" | "cancelled" | "interrupted";
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            jobs: {
+                                id: string;
+                                hostId: string;
+                                vmid?: number;
+                                /** @enum {string} */
+                                lane: "guest" | "host";
+                                type: string;
+                                /** @enum {string} */
+                                status: "queued" | "running" | "waiting_input" | "completed" | "failed" | "cancelled" | "interrupted";
+                                priority: number;
+                                triggeredBy?: string;
+                                dependsOnJobId?: string;
+                                timeoutMs?: number;
+                                cancelRequestedAt?: string;
+                                error?: string;
+                                createdAt: string;
+                                startedAt?: string;
+                                finishedAt?: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get job details, steps, and prompts */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    jobId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            job: {
+                                id: string;
+                                hostId: string;
+                                vmid?: number;
+                                /** @enum {string} */
+                                lane: "guest" | "host";
+                                type: string;
+                                /** @enum {string} */
+                                status: "queued" | "running" | "waiting_input" | "completed" | "failed" | "cancelled" | "interrupted";
+                                priority: number;
+                                triggeredBy?: string;
+                                dependsOnJobId?: string;
+                                timeoutMs?: number;
+                                cancelRequestedAt?: string;
+                                error?: string;
+                                createdAt: string;
+                                startedAt?: string;
+                                finishedAt?: string;
+                            };
+                            steps: {
+                                jobId: string;
+                                stepIndex: number;
+                                name: string;
+                                /** @enum {string} */
+                                status: "pending" | "running" | "completed" | "failed" | "skipped";
+                                result?: unknown;
+                                rollbackHint?: string;
+                                startedAt?: string;
+                                finishedAt?: string;
+                            }[];
+                            prompts: {
+                                id: string;
+                                jobId: string;
+                                hostId: string;
+                                vmid?: number;
+                                /** @enum {string} */
+                                kind: "choice" | "confirm" | "typed_confirmation";
+                                /** @enum {string} */
+                                status: "pending" | "resolved" | "expired";
+                                message: string;
+                                payload: unknown;
+                                readonly options: string[];
+                                resolution?: {
+                                    /** @enum {string} */
+                                    kind: "choice";
+                                    choice: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "confirm";
+                                    confirmed: boolean;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "typed_confirmation";
+                                    text: string;
+                                };
+                                resolvedBy?: string;
+                                createdAt: string;
+                                expiresAt?: string;
+                                resolvedAt?: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{jobId}/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Page through persisted job log lines */
+        get: {
+            parameters: {
+                query?: {
+                    after?: number;
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    jobId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            logs: {
+                                jobId: string;
+                                seq: number;
+                                ts: string;
+                                /** @enum {string} */
+                                stream: "stdout" | "stderr" | "system";
+                                text: string;
+                            }[];
+                            nextCursor: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{jobId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel a queued or running job */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    jobId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            job: {
+                                id: string;
+                                hostId: string;
+                                vmid?: number;
+                                /** @enum {string} */
+                                lane: "guest" | "host";
+                                type: string;
+                                /** @enum {string} */
+                                status: "queued" | "running" | "waiting_input" | "completed" | "failed" | "cancelled" | "interrupted";
+                                priority: number;
+                                triggeredBy?: string;
+                                dependsOnJobId?: string;
+                                timeoutMs?: number;
+                                cancelRequestedAt?: string;
+                                error?: string;
+                                createdAt: string;
+                                startedAt?: string;
+                                finishedAt?: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/status": {
         parameters: {
             query?: never;

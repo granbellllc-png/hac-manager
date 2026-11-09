@@ -22,6 +22,7 @@ import { configEditorModule } from './modules/config-editor/index.js';
 import { eventsModule } from './modules/events/index.js';
 import { promptsModule } from './modules/prompts/index.js';
 import { plansModule } from './modules/plans/index.js';
+import { jobsModule } from './modules/jobs/index.js';
 import { HostRegistry } from './hosts/registry.js';
 import { ConnectionManager } from './router/manager.js';
 import { LiveInventoryService } from './inventory/service.js';
@@ -288,6 +289,12 @@ export async function buildApp(
   await app.register(plansModule, {
     hostRegistry,
     planService,
+  });
+  await app.register(jobsModule, {
+    repos: repositories,
+    hostRegistry,
+    queue: jobQueue,
+    promptService,
   });
 
   await app.register(authModule, {

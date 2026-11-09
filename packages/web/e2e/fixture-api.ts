@@ -21,9 +21,29 @@ export async function installFixtureApi(
     role: 'admin',
     totpEnabled: false,
   };
+  const fixtureJob = {
+    id: 'fixture-job',
+    hostId: fixtureHost.id,
+    vmid: 112,
+    lane: 'guest',
+    type: 'plan.apply',
+    status: 'running',
+    priority: 0,
+    triggeredBy: user.id,
+    createdAt: fixtureHost.updatedAt,
+    startedAt: fixtureHost.updatedAt,
+  };
   await page.route('**://*/api/**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    if (path === '/api/events' || path.endsWith('/events')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: 'retry: 60000\n\n: fixture\n\n',
+      });
+      return;
+    }
     let body: unknown;
     let status = 200;
     if (path === '/api/auth/status')
@@ -157,6 +177,44 @@ export async function installFixtureApi(
         limit: 20,
         offset: 0,
       };
+    else if (path === '/api/jobs') body = { jobs: [fixtureJob] };
+    else if (path === '/api/jobs/fixture-job')
+      body = {
+        job: fixtureJob,
+        steps: [
+          {
+            jobId: fixtureJob.id,
+            stepIndex: 0,
+            name: 'Apply planned guest import',
+            status: 'running',
+            rollbackHint: 'Inspect the generated YAML.',
+          },
+        ],
+        prompts: [],
+      };
+    else if (path === '/api/jobs/fixture-job/logs')
+      body = {
+        logs: [
+          {
+            jobId: fixtureJob.id,
+            seq: 1,
+            ts: fixtureHost.updatedAt,
+            stream: 'system',
+            text: 'Job started',
+          },
+          {
+            jobId: fixtureJob.id,
+            seq: 2,
+            ts: fixtureHost.updatedAt,
+            stream: 'stdout',
+            text: 'Applying planned change',
+          },
+        ],
+        nextCursor: 2,
+      };
+    else if (path === '/api/prompts') body = { prompts: [] };
+    else if (path === '/api/jobs/fixture-job/cancel')
+      body = { job: { ...fixtureJob, status: 'cancelled' } };
     else {
       status = 404;
       body = { message: 'Fixture endpoint not found' };

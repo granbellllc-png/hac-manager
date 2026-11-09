@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { watch } from 'node:fs';
 import { defaultNodeFileSystem, type FileSystem } from '../yaml/file.js';
 import { scanDataDir } from './discovery.js';
 import type { DataDirValidationIssue, DiscoveredDataDir } from './types.js';
@@ -15,15 +16,13 @@ export type WatchProvider = (
 
 export const defaultNodeWatchProvider: WatchProvider = (dir, listener) => {
   let rawWatcher: { close: () => void } | undefined = undefined;
-  import('node:fs').then(({ watch }) => {
-    try {
-      rawWatcher = watch(dir, { recursive: true }, (event, filename) => {
-        listener(event, filename);
-      });
-    } catch {
-      // ignore if dir was deleted during setup
-    }
-  });
+  try {
+    rawWatcher = watch(dir, { recursive: true }, (event, filename) => {
+      listener(event, filename);
+    });
+  } catch {
+    // ignore if dir was deleted during setup
+  }
 
   return {
     close() {
