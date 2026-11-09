@@ -106,8 +106,14 @@ export function HostsPage() {
   const handleResync = async () => {
     setResyncing(true);
     try {
-      await apiClient.POST('/api/hosts/sync');
+      const result = await apiClient.POST('/api/hosts/sync');
+      if (result.error) {
+        setError('Failed to resync host registry.');
+        return;
+      }
       await fetchHosts();
+    } catch {
+      setError('Failed to resync host registry.');
     } finally {
       setResyncing(false);
     }
@@ -168,23 +174,27 @@ export function HostsPage() {
 
   const sampleHostYaml = `schema_version: 1
 id: pve-02
-name: Proxmox Node 2
+name: Proxmox Host 2
 type: proxmox
 index: 2
 connection:
   ssh:
-    host: 192.168.1.52
+    host: 192.0.2.52
     port: 22
     username: root
   api:
-    url: https://192.168.1.52:8006
+    url: https://192.0.2.52:8006
     token_id: root@pam!hacm
     token_secret: !secret pve02_token_secret`;
 
-  const copyYamlToClipboard = () => {
-    navigator.clipboard.writeText(sampleHostYaml);
-    setCopiedYaml(true);
-    setTimeout(() => setCopiedYaml(false), 2000);
+  const copyYamlToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(sampleHostYaml);
+      setCopiedYaml(true);
+      setTimeout(() => setCopiedYaml(false), 2000);
+    } catch {
+      setError('Could not copy YAML to the clipboard.');
+    }
   };
 
   const renderStatusBadge = (status: string) => {

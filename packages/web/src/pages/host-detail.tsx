@@ -40,7 +40,7 @@ export interface HostDetailData {
       readonly fingerprint?: string;
       readonly authMethod: string;
     };
-    readonly api: {
+    readonly api?: {
       readonly configured: boolean;
       readonly url?: string;
       readonly tokenId?: string;
@@ -87,9 +87,14 @@ export function HostDetailPage() {
   const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<TestResultData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const fetchHostDetail = useCallback(async () => {
-    if (!id) return;
+    if (!id) {
+      setError('Host not found.');
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -129,13 +134,21 @@ export function HostDetailPage() {
   const handleTestConnection = async () => {
     if (!id) return;
     setTestingConnection(true);
+    setActionError(null);
     try {
-      const { data } = await apiClient.POST('/api/hosts/{id}/test-connection', {
-        params: { path: { id } },
-      });
-      if (data) {
+      const { data, error: apiError } = await apiClient.POST(
+        '/api/hosts/{id}/test-connection',
+        {
+          params: { path: { id } },
+        },
+      );
+      if (apiError || !data) {
+        setActionError('Unable to test the host connection.');
+      } else {
         setTestResult(data);
       }
+    } catch {
+      setActionError('Unable to test the host connection.');
     } finally {
       setTestingConnection(false);
     }
@@ -144,13 +157,21 @@ export function HostDetailPage() {
   const handleRunProbe = async () => {
     if (!id) return;
     setProbing(true);
+    setActionError(null);
     try {
-      const { data } = await apiClient.POST('/api/hosts/{id}/probe', {
-        params: { path: { id } },
-      });
-      if (data) {
+      const { data, error: apiError } = await apiClient.POST(
+        '/api/hosts/{id}/probe',
+        {
+          params: { path: { id } },
+        },
+      );
+      if (apiError || !data) {
+        setActionError('Unable to probe host capabilities.');
+      } else {
         setProbe(data as unknown as ProbeResult);
       }
+    } catch {
+      setActionError('Unable to probe host capabilities.');
     } finally {
       setProbing(false);
     }
@@ -238,6 +259,15 @@ export function HostDetailPage() {
         </div>
       </div>
 
+      {actionError && (
+        <p
+          role="alert"
+          className="rounded-md border border-destructive/50 p-3 text-sm text-destructive"
+        >
+          {actionError}
+        </p>
+      )}
+
       {/* Connection Test Result Banner */}
       {testResult && (
         <div className="rounded-lg border bg-card p-4 space-y-2 text-xs font-mono">
@@ -280,7 +310,7 @@ export function HostDetailPage() {
                 {testResult.api?.ok ? (
                   <span className="text-emerald-500">
                     Connected ({testResult.api.latencyMs ?? 0}ms)
-                    {host.connection.api.fingerprint && (
+                    {host.connection.api?.fingerprint && (
                       <span className="block text-[11px] text-muted-foreground truncate">
                         TLS: {host.connection.api.fingerprint}
                       </span>
@@ -308,10 +338,8 @@ export function HostDetailPage() {
             </span>
           </div>
           <p className="text-xs text-amber-500/90 leading-relaxed">
-            HAC Manager v1 is engineered for standalone Proxmox VE hosts.
-            Clustered hypervisors are supported with caution: guest migration
-            between nodes is not automatically tracked in YAML, and shared
-            storage operations require awareness.
+            HAC Manager v1 manages standalone Proxmox VE hosts. Cluster-aware
+            management is planned for a later release.
           </p>
         </div>
       )}
@@ -356,12 +384,12 @@ export function HostDetailPage() {
                   Proxmox REST API Channel
                 </span>
                 <span className="text-xs px-2 py-0.5 rounded bg-muted">
-                  {host.connection.api.configured
+                  {host.connection.api?.configured
                     ? 'Configured'
                     : 'Not configured'}
                 </span>
               </div>
-              {host.connection.api.configured ? (
+              {host.connection.api?.configured ? (
                 <div className="bg-muted/50 p-3 rounded-md text-xs font-mono space-y-1">
                   <div>URL: {host.connection.api.url}</div>
                   <div>Token ID: {host.connection.api.tokenId}</div>

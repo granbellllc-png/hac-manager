@@ -285,6 +285,8 @@ Task fields: `name`, `run`, `when`, `creates` (idempotency), `timeout`, `retries
 - **Audit log and Users.**
 - **Docker Compose Stacks:** future module.
 
+Host detail supports SSH-only connections. Connection tests, capability probes, registry resyncs and clipboard failures display an error and keep the page available for retry.
+
 _M5, M6, M8._
 
 **D-69. YAML editor.** CodeMirror 6 with JSON Schema validation and autocomplete, server-side validate and save via the CST layer, diff preview, conflict message on external edits. Admin-only for files containing execution surfaces. _M5._

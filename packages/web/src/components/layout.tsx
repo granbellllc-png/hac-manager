@@ -59,21 +59,24 @@ export function Layout() {
           >
             <Menu aria-hidden className="h-5 w-5" />
           </Button>
-          <span className="font-semibold md:hidden">{projectName}</span>
-          <div className="ml-auto flex items-center gap-3">
+          <span className="font-semibold md:hidden">
+            <span className="sm:hidden">HAC</span>
+            <span className="hidden sm:inline">{projectName}</span>
+          </span>
+          <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
             <ServerStatus />
             {user && (
               <div className="flex items-center gap-2 border-l border-border pl-3 text-xs">
-                <span className="font-medium text-foreground">
+                <span className="hidden max-w-36 truncate font-medium text-foreground sm:inline">
                   {user.username}
                 </span>
-                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase font-semibold text-muted-foreground">
+                <span className="hidden rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase font-semibold text-muted-foreground sm:inline">
                   {user.role}
                 </span>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                  className="h-7 whitespace-nowrap text-xs text-muted-foreground hover:text-foreground"
                   onClick={() => {
                     void logout();
                   }}
