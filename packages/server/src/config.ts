@@ -1,10 +1,24 @@
+import { existsSync } from 'node:fs';
 import { resolve, relative, isAbsolute } from 'node:path';
 import { z } from 'zod';
 
 const pathSchema = z
   .string()
   .min(1)
-  .transform((value) => resolve(value));
+  .transform((value) => {
+    if (isAbsolute(value)) {
+      return resolve(value);
+    }
+    const directPath = resolve(value);
+    if (existsSync(directPath)) {
+      return directPath;
+    }
+    const rootPath = resolve('../../', value);
+    if (existsSync(rootPath)) {
+      return rootPath;
+    }
+    return directPath;
+  });
 const booleanSchema = z
   .enum(['true', 'false'])
   .transform((value) => value === 'true');
