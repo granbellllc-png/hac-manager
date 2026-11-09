@@ -2,7 +2,11 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FakeTransport, type GuestDeployment } from '@hacm/core';
+import {
+  FakeTransport,
+  serialiseVmProxmoxConfig,
+  type GuestDeployment,
+} from '@hacm/core';
 import { createDatabase } from '../db/connection.js';
 import { createSqliteRepositories } from '../db/repositories/sqlite.js';
 import type { GuestLifecycleService } from '../guests/service.js';
@@ -154,12 +158,12 @@ function snapshot(
   return {
     hostId: 'pve-01',
     vmid: 112,
-    type: 'lxc',
+    type: deployment.type,
     summary: {
       hostId: 'pve-01',
       vmid: 112,
       name: deployment.name,
-      type: 'lxc',
+      type: deployment.type,
       status,
       node: 'pve-01',
     },
@@ -183,6 +187,7 @@ async function createFixture(
     readonly yaml?: string;
     readonly live?: GuestDeployment;
     readonly configs?: readonly string[];
+    readonly transport?: FakeTransport;
   } = {},
 ) {
   const dataDir = await mkdtemp(join(tmpdir(), 'hacm-plan-update-'));
@@ -201,9 +206,9 @@ async function createFixture(
   const handle = createDatabase({ path: ':memory:' });
   const repos = createSqliteRepositories(handle.db);
   const queue = new DurableJobQueue(repos);
-  const transport = transportSequence(
-    ...(options.configs ?? [liveConfigBefore]),
-  );
+  const transport =
+    options.transport ??
+    transportSequence(...(options.configs ?? [liveConfigBefore]));
   let current = snapshot(options.live ?? liveDeployment());
   const lifecycle = {
     async requireSnapshot() {
@@ -476,24 +481,16 @@ describe('PlanService LXC configuration updates', () => {
       pending.handle.close();
     }
 
-    const vm = await createFixture({
-      yaml: vmYaml,
-      live: {
-        id: 112,
-        name: 'example-vm',
-        type: 'vm',
-        cpu: 2,
-        ram: 1024,
-        disks: [],
-        network: [],
-      },
-    });
+    const wrongType = await createFixture({ yaml: vmYaml });
     try {
       await expect(
-        vm.service.createGuestUpdatePlan({ hostId: 'pve-01', vmid: 112 }),
-      ).rejects.toThrow('LXC config updates only support');
+        wrongType.service.createGuestUpdatePlan({
+          hostId: 'pve-01',
+          vmid: 112,
+        }),
+      ).rejects.toThrow('is not a VM');
     } finally {
-      vm.handle.close();
+      wrongType.handle.close();
     }
 
     const missing = await createFixture();
@@ -620,6 +617,242 @@ describe('PlanService LXC configuration updates', () => {
       ).rejects.toThrow('No deployment YAML');
     } finally {
       fixture.handle.close();
+    }
+  });
+});
+
+const vmUpdateYaml = `schema_version: 1
+id: 112
+name: example-vm
+type: vm
+cpu: 4
+ram: 2048
+bios: ovmf
+machine: q35
+guest_agent: true
+disks:
+  - name: scsi0
+    storage: local-lvm
+    size_gb: 20
+network:
+  - index: 0
+    bridge: vmbr0
+    ip: 192.0.2.112/24
+    gateway: 192.0.2.1
+`;
+
+function vmDesired(): GuestDeployment {
+  return {
+    id: 112,
+    name: 'example-vm',
+    type: 'vm',
+    cpu: 4,
+    ram: 2048,
+    bios: 'ovmf',
+    machine: 'q35',
+    guest_agent: true,
+    tags: ['hacm-managed'],
+    disks: [
+      {
+        name: 'scsi0',
+        storage: 'local-lvm',
+        size_gb: 20,
+        extra: { volume: 'vm-112-disk-0' },
+      },
+    ],
+    network: [
+      {
+        index: 0,
+        bridge: 'vmbr0',
+        ip: '192.0.2.112/24',
+        gateway: '192.0.2.1',
+        extra: { model: 'virtio' },
+      },
+    ],
+  };
+}
+
+function vmLive(): GuestDeployment {
+  return {
+    id: 112,
+    name: 'example-vm',
+    type: 'vm',
+    cpu: 2,
+    ram: 1024,
+    bios: 'seabios',
+    protection: false,
+    tags: ['hacm-managed'],
+    disks: [
+      {
+        name: 'scsi0',
+        storage: 'local-lvm',
+        size_gb: 10,
+        extra: { volume: 'vm-112-disk-0' },
+      },
+    ],
+    network: [
+      {
+        index: 0,
+        bridge: 'vmbr0',
+        ip: '192.0.2.111/24',
+        gateway: '192.0.2.1',
+        extra: { model: 'virtio' },
+      },
+    ],
+  };
+}
+
+function vmTransportSequence(...configs: string[]): FakeTransport {
+  const transport = new FakeTransport().onExec(/^qm (set|resize) 112 /, {
+    stdout: 'ok',
+  });
+  for (const config of [...configs].reverse()) {
+    transport.onExec('qm config 112', { stdout: config }, { once: true });
+  }
+  return transport;
+}
+
+describe('PlanService VM configuration updates', () => {
+  it('plans VM CPU, memory, firmware, agent, NIC and disk growth', async () => {
+    const fixture = await createFixture({
+      yaml: vmUpdateYaml,
+      live: vmLive(),
+      transport: vmTransportSequence(
+        serialiseVmProxmoxConfig(vmLive() as never),
+      ),
+    });
+    try {
+      const plan = await fixture.service.createGuestUpdatePlan({
+        hostId: 'pve-01',
+        vmid: 112,
+      });
+      expect(plan).toMatchObject({
+        operation: 'guest.update',
+        status: 'ready',
+        destructive: false,
+        summary: 'Update VM 112 (example-vm)',
+      });
+      expect(plan.changes.map((change) => change.id)).toEqual(
+        expect.arrayContaining([
+          'cpu',
+          'ram',
+          'bios',
+          'machine',
+          'guest_agent',
+          'disk-scsi0',
+          'net0',
+        ]),
+      );
+      expect(
+        plan.changes.find((change) => change.id === 'disk-scsi0'),
+      ).toMatchObject({ action: 'update', before: 10, after: 20 });
+      expect(fixture.lifecycle.verifyForMutation).toHaveBeenCalledWith(
+        'pve-01',
+        112,
+        { operation: 'guest.update', allowProtected: true },
+      );
+    } finally {
+      fixture.handle.close();
+    }
+  });
+
+  it('applies VM changes with qm and restarts a running VM', async () => {
+    const before = serialiseVmProxmoxConfig(vmLive() as never);
+    const pending = `${before}\n[PENDING]\ncores: 4\nmemory: 2048`;
+    const after = serialiseVmProxmoxConfig(vmDesired() as never);
+    const fixture = await createFixture({
+      yaml: vmUpdateYaml,
+      live: vmLive(),
+      transport: vmTransportSequence(before, before, pending, pending, after),
+    });
+    try {
+      const plan = await fixture.service.createGuestUpdatePlan({
+        hostId: 'pve-01',
+        vmid: 112,
+      });
+      await fixture.queue.start();
+      const queued = await fixture.service.queueApply(plan.id, {
+        user: { id: 'operator-1', username: 'operator', role: 'operator' },
+      });
+      await expect(
+        fixture.queue.waitForJob(queued.job.id),
+      ).resolves.toMatchObject({ status: 'completed' });
+      expect(await fixture.service.get(plan.id)).toMatchObject({
+        status: 'applied',
+      });
+      expect(fixture.transport.execArgv).toEqual(
+        expect.arrayContaining([
+          ['qm', 'set', '112', '--cores', '4'],
+          ['qm', 'set', '112', '--memory', '2048'],
+          ['qm', 'set', '112', '--bios', 'ovmf'],
+          ['qm', 'set', '112', '--agent', 'enabled=1'],
+          ['qm', 'resize', '112', 'scsi0', '20G'],
+        ]),
+      );
+      expect(fixture.lifecycle.executePower).toHaveBeenCalledWith(
+        'pve-01',
+        112,
+        'shutdown',
+        expect.any(Object),
+      );
+      expect(fixture.lifecycle.executePower).toHaveBeenCalledWith(
+        'pve-01',
+        112,
+        'start',
+        expect.any(Object),
+      );
+    } finally {
+      await fixture.queue.stop({ interruptRunning: false });
+      fixture.handle.close();
+    }
+  });
+
+  it('rejects a VM live snapshot that does not match the YAML type', async () => {
+    const fixture = await createFixture({
+      yaml: vmUpdateYaml,
+      live: liveDeployment(),
+    });
+    try {
+      await expect(
+        fixture.service.createGuestUpdatePlan({ hostId: 'pve-01', vmid: 112 }),
+      ).rejects.toThrow('is not a VM');
+    } finally {
+      fixture.handle.close();
+    }
+  });
+
+  it('rejects a VM update with pending changes or a shrink', async () => {
+    const pendingFixture = await createFixture({
+      yaml: vmUpdateYaml,
+      live: {
+        ...vmLive(),
+        extra: { _pending: { cores: '4' } },
+      },
+    });
+    try {
+      await expect(
+        pendingFixture.service.createGuestUpdatePlan({
+          hostId: 'pve-01',
+          vmid: 112,
+        }),
+      ).rejects.toThrow('pending configuration changes');
+    } finally {
+      pendingFixture.handle.close();
+    }
+
+    const shrinkFixture = await createFixture({
+      yaml: vmUpdateYaml.replace('size_gb: 20', 'size_gb: 5'),
+      live: vmLive(),
+    });
+    try {
+      await expect(
+        shrinkFixture.service.createGuestUpdatePlan({
+          hostId: 'pve-01',
+          vmid: 112,
+        }),
+      ).rejects.toThrow('Refusing to shrink scsi0');
+    } finally {
+      shrinkFixture.handle.close();
     }
   });
 });

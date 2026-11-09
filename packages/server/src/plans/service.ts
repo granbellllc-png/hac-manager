@@ -8,6 +8,7 @@ import {
   createLxcUpdateSteps,
   createMutationPlan,
   createVmProvisionSteps,
+  createVmUpdateSteps,
   deploymentDefaultsFileSchema,
   describeLxcCreation,
   describeVmCreation,
@@ -20,6 +21,7 @@ import {
   parseManagedGuestUuid,
   planGuestImport,
   planLxcUpdate,
+  planVmUpdate,
   resolveConfigTags,
   runJournaledSteps,
   sanitizeAuditPayload,
@@ -32,6 +34,7 @@ import {
   type JournaledStep,
   type PlanChange,
   type Transport,
+  vmUpdateState,
 } from '@hacm/core';
 import type { DatabaseRepositories } from '../db/repositories/types.js';
 import type { PlanRow } from '../db/schema.js';
@@ -564,18 +567,35 @@ export class PlanService {
         `No deployment YAML is configured for guest ${input.vmid} on host '${input.hostId}'`,
       );
     }
-    if (loaded.deployment.type !== 'lxc') {
-      throw new PlanStateError(
-        `Guest ${input.vmid} is a VM; LXC config updates only support deployments with type 'lxc'`,
-      );
-    }
+    const deployment = loaded.deployment;
     const snapshot = await lifecycle.requireSnapshot(input.hostId, input.vmid);
-    if (snapshot.deployment.type !== 'lxc') {
-      throw new PlanStateError(
-        `Guest ${input.hostId}/${input.vmid} is not an LXC container`,
-      );
+    let diff: {
+      readonly summary: string;
+      readonly changes: readonly PlanChange[];
+      readonly warnings: readonly string[];
+      readonly restartRequired: boolean;
+      readonly destructive: boolean;
+      readonly blocked: boolean;
+      readonly blockReason?: string | undefined;
+    };
+    let currentState: unknown;
+    if (deployment.type === 'lxc') {
+      if (snapshot.deployment.type !== 'lxc') {
+        throw new PlanStateError(
+          `Guest ${input.hostId}/${input.vmid} is not an LXC container`,
+        );
+      }
+      diff = planLxcUpdate(deployment, snapshot.deployment);
+      currentState = lxcUpdateState(deployment, snapshot.deployment);
+    } else {
+      if (snapshot.deployment.type !== 'vm') {
+        throw new PlanStateError(
+          `Guest ${input.hostId}/${input.vmid} is not a VM`,
+        );
+      }
+      diff = planVmUpdate(deployment, snapshot.deployment);
+      currentState = vmUpdateState(deployment, snapshot.deployment);
     }
-    const diff = planLxcUpdate(loaded.deployment, snapshot.deployment);
     if (diff.blocked) {
       throw new PlanStateError(diff.blockReason ?? 'Update is blocked');
     }
@@ -598,7 +618,7 @@ export class PlanService {
         resourceType: 'guest',
       },
       summary: diff.summary,
-      currentState: lxcUpdateState(loaded.deployment, snapshot.deployment),
+      currentState,
       changes: diff.changes,
       warnings: diff.warnings,
       createdAt: generatedAt,
@@ -987,61 +1007,70 @@ export class PlanService {
           `No deployment YAML is configured for guest ${guestVmid} on host '${row.hostId}'`,
         );
       }
-      if (loaded.deployment.type !== 'lxc') {
-        throw new PlanStateError(
-          `Guest ${guestVmid} is a VM; LXC config updates only support deployments with type 'lxc'`,
-        );
-      }
+      const deployment = loaded.deployment;
       const snapshot = await lifecycle.requireSnapshot(row.hostId, guestVmid);
-      if (snapshot.deployment.type !== 'lxc') {
-        throw new PlanStateError(
-          `Guest ${row.hostId}/${guestVmid} is not an LXC container`,
-        );
-      }
-      assertPlanFresh(
-        plan,
-        lxcUpdateState(loaded.deployment, snapshot.deployment),
-      );
       const payload = parseJson<GuestUpdatePlanPayload>(row.payloadJson, {
         relativePath: loaded.relativePath,
         generatedAt: row.createdAt.toISOString(),
         restartRequired: false,
       });
-      await lifecycle.verifyForMutation(row.hostId, guestVmid, {
-        operation: 'guest.update',
-        allowProtected: !plan.destructive,
-      });
-      steps = createLxcUpdateSteps(loaded.deployment, {
-        hostId: row.hostId,
-        restartRequired: payload.restartRequired,
-        restart: async () => {
-          const current = await lifecycle.requireSnapshot(
-            row.hostId,
-            guestVmid,
+      const restart = async () => {
+        const current = await lifecycle.requireSnapshot(row.hostId, guestVmid);
+        if (current.status !== 'running') {
+          await context.log(
+            'system',
+            `Guest ${row.hostId}/${guestVmid} is stopped; the configuration will apply on its next start.`,
           );
-          if (current.status !== 'running') {
-            await context.log(
-              'system',
-              `Guest ${row.hostId}/${guestVmid} is stopped; the configuration will apply on its next start.`,
-            );
-            return;
-          }
-          await lifecycle.executePower(row.hostId, guestVmid, 'shutdown', {
-            signal: context.signal,
-            log: (message) => context.log('system', message),
-          });
-          await lifecycle.waitForPowerState(row.hostId, guestVmid, 'shutdown', {
-            signal: context.signal,
-          });
-          await lifecycle.executePower(row.hostId, guestVmid, 'start', {
-            signal: context.signal,
-            log: (message) => context.log('system', message),
-          });
-          await lifecycle.waitForPowerState(row.hostId, guestVmid, 'start', {
-            signal: context.signal,
-          });
-        },
-      });
+          return;
+        }
+        await lifecycle.executePower(row.hostId, guestVmid, 'shutdown', {
+          signal: context.signal,
+          log: (message) => context.log('system', message),
+        });
+        await lifecycle.waitForPowerState(row.hostId, guestVmid, 'shutdown', {
+          signal: context.signal,
+        });
+        await lifecycle.executePower(row.hostId, guestVmid, 'start', {
+          signal: context.signal,
+          log: (message) => context.log('system', message),
+        });
+        await lifecycle.waitForPowerState(row.hostId, guestVmid, 'start', {
+          signal: context.signal,
+        });
+      };
+      if (deployment.type === 'lxc') {
+        if (snapshot.deployment.type !== 'lxc') {
+          throw new PlanStateError(
+            `Guest ${row.hostId}/${guestVmid} is not an LXC container`,
+          );
+        }
+        assertPlanFresh(plan, lxcUpdateState(deployment, snapshot.deployment));
+        await lifecycle.verifyForMutation(row.hostId, guestVmid, {
+          operation: 'guest.update',
+          allowProtected: !plan.destructive,
+        });
+        steps = createLxcUpdateSteps(deployment, {
+          hostId: row.hostId,
+          restartRequired: payload.restartRequired,
+          restart,
+        });
+      } else {
+        if (snapshot.deployment.type !== 'vm') {
+          throw new PlanStateError(
+            `Guest ${row.hostId}/${guestVmid} is not a VM`,
+          );
+        }
+        assertPlanFresh(plan, vmUpdateState(deployment, snapshot.deployment));
+        await lifecycle.verifyForMutation(row.hostId, guestVmid, {
+          operation: 'guest.update',
+          allowProtected: !plan.destructive,
+        });
+        steps = createVmUpdateSteps(deployment, {
+          hostId: row.hostId,
+          restartRequired: payload.restartRequired,
+          restart,
+        });
+      }
       transport = await this.requireConnections().getRouter(row.hostId);
     } else if (row.operation === 'guest.power') {
       const lifecycle = this.requireLifecycle();

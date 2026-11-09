@@ -167,6 +167,15 @@ export function parseVmProxmoxConfig(
     });
   }
 
+  let tags: string[] | undefined = undefined;
+  if (main['tags'] !== undefined) {
+    tags = main['tags']
+      .split(';')
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0);
+    delete main['tags'];
+  }
+
   let protection: boolean | undefined = undefined;
   if (main['protection'] !== undefined) {
     protection = main['protection'] === '1' || main['protection'] === 'true';
@@ -194,6 +203,7 @@ export function parseVmProxmoxConfig(
     efi_disk: efiDisk || undefined,
     tpm: tpm || undefined,
     cloud_init: cloudInit,
+    tags,
     protection,
     disks,
     network,
@@ -233,7 +243,17 @@ export function serialiseVmProxmoxConfig(guest: GuestDeployment): string {
   if (guest.protection !== undefined) {
     main['protection'] = guest.protection ? '1' : '0';
   }
+  if (guest.tags && guest.tags.length > 0) {
+    main['tags'] = guest.tags.join(';');
+  }
   if (guest.guest_agent) main['agent'] = '1';
+  const storage = valToStr(guest.disks[0]?.storage) || 'local-lvm';
+  if (guest.efi_disk && !main['efidisk0']) {
+    main['efidisk0'] = `${storage}:1,efitype=4m,pre-enrolled-keys=1`;
+  }
+  if (guest.tpm && !main['tpmstate0']) {
+    main['tpmstate0'] = `${storage}:1,version=v2.0`;
+  }
   if (guest.cloud_init) {
     if (guest.cloud_init.user) main['ciuser'] = valToStr(guest.cloud_init.user);
     if (guest.cloud_init.password)
