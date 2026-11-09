@@ -24,6 +24,11 @@ const JobsPage = lazy(() =>
     default: module.JobsPage,
   })),
 );
+const DriftPage = lazy(() =>
+  import('./pages/drift').then((module) => ({
+    default: module.DriftPage,
+  })),
+);
 
 export function RouteLoading() {
   return <p className="text-sm text-muted-foreground">Loading page…</p>;
@@ -61,12 +66,21 @@ export function App() {
                 </Suspense>
               }
             />
+            <Route
+              path="/drift"
+              element={
+                <Suspense fallback={<RouteLoading />}>
+                  <DriftPage />
+                </Suspense>
+              }
+            />
             {navItems
               .filter(
                 (item) =>
                   item.path !== '/' &&
                   item.path !== '/resources' &&
-                  item.path !== '/jobs',
+                  item.path !== '/jobs' &&
+                  item.path !== '/drift',
               )
               .map((item) => (
                 <Route

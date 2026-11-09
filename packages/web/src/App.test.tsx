@@ -40,6 +40,12 @@ function mockApi(reply: () => Promise<Response>) {
         });
       if (request.url.includes('/api/audit'))
         return Response.json({ items: [], total: 0, limit: 20, offset: 0 });
+      if (request.url.endsWith('/api/drift'))
+        return Response.json({ snapshots: [] });
+      if (request.url.endsWith('/api/hosts'))
+        return Response.json({ hosts: [] });
+      if (request.url.endsWith('/api/inventory/guests'))
+        return Response.json({ guests: [] });
       return reply();
     }),
   );
@@ -103,8 +109,15 @@ describe('application shell', () => {
   });
 
   it('renders a placeholder page per route', async () => {
-    await renderApp('/audit');
+    const auditView = await renderApp('/audit');
     expect(screen.getByRole('heading', { name: 'Audit' })).toBeInTheDocument();
+    auditView.unmount();
+
+    await renderApp('/users');
+    expect(screen.getByRole('heading', { name: 'Users' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Accounts, roles and host access.'),
+    ).toBeInTheDocument();
   });
 
   it('renders a not-found page for unknown routes', async () => {
@@ -198,7 +211,9 @@ describe('application shell', () => {
         .querySelector('a[href="/drift"]')!,
     );
     expect(mobile).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Drift' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Drift & Sync Center' }),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Open navigation' }));
     await user.click(
