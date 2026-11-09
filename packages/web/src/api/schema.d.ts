@@ -1751,6 +1751,403 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/drift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the latest persisted drift snapshots */
+        get: {
+            parameters: {
+                query?: {
+                    hostId?: string;
+                    status?: "in_sync" | "drifted";
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            readonly snapshots: {
+                                id: string;
+                                hostId: string;
+                                vmid: number;
+                                /** @enum {string} */
+                                type: "lxc" | "vm";
+                                /** @enum {string} */
+                                status: "in_sync" | "drifted";
+                                readonly changes: {
+                                    path: string;
+                                    /** @enum {string} */
+                                    category: "config" | "network" | "disk" | "mount" | "feature" | "tags" | "protection" | "cloud_init" | "identity";
+                                    /** @enum {string} */
+                                    kind: "changed" | "missing_in_live" | "missing_in_yaml";
+                                    desired: unknown;
+                                    actual: unknown;
+                                    pullable: boolean;
+                                    computed: boolean;
+                                    secret: boolean;
+                                    /** @enum {string} */
+                                    tag?: "env" | "secret" | "expr" | "cmd" | "include";
+                                    provenance?: {
+                                        /** @enum {string} */
+                                        layer: "default" | "override";
+                                        file: string;
+                                        path: string;
+                                        sourcePath: string;
+                                    };
+                                    desiredHash?: string;
+                                    actualHash?: string;
+                                    readonly warnings?: string[];
+                                }[];
+                                readonly computedFields: string[];
+                                readonly ignoredPaths: string[];
+                                checkedAt: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drift/{hostId}/{vmid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the latest persisted drift snapshot for a guest */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    hostId: string;
+                    vmid: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            hostId: string;
+                            vmid: number;
+                            /** @enum {string} */
+                            type: "lxc" | "vm";
+                            /** @enum {string} */
+                            status: "in_sync" | "drifted";
+                            readonly changes: {
+                                path: string;
+                                /** @enum {string} */
+                                category: "config" | "network" | "disk" | "mount" | "feature" | "tags" | "protection" | "cloud_init" | "identity";
+                                /** @enum {string} */
+                                kind: "changed" | "missing_in_live" | "missing_in_yaml";
+                                desired: unknown;
+                                actual: unknown;
+                                pullable: boolean;
+                                computed: boolean;
+                                secret: boolean;
+                                /** @enum {string} */
+                                tag?: "env" | "secret" | "expr" | "cmd" | "include";
+                                provenance?: {
+                                    /** @enum {string} */
+                                    layer: "default" | "override";
+                                    file: string;
+                                    path: string;
+                                    sourcePath: string;
+                                };
+                                desiredHash?: string;
+                                actualHash?: string;
+                                readonly warnings?: string[];
+                            }[];
+                            readonly computedFields: string[];
+                            readonly ignoredPaths: string[];
+                            checkedAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drift/{hostId}/{vmid}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run an on-demand drift check for one guest */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    hostId: string;
+                    vmid: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            hostId: string;
+                            vmid: number;
+                            /** @enum {string} */
+                            type: "lxc" | "vm";
+                            /** @enum {string} */
+                            status: "in_sync" | "drifted";
+                            readonly changes: {
+                                path: string;
+                                /** @enum {string} */
+                                category: "config" | "network" | "disk" | "mount" | "feature" | "tags" | "protection" | "cloud_init" | "identity";
+                                /** @enum {string} */
+                                kind: "changed" | "missing_in_live" | "missing_in_yaml";
+                                desired: unknown;
+                                actual: unknown;
+                                pullable: boolean;
+                                computed: boolean;
+                                secret: boolean;
+                                /** @enum {string} */
+                                tag?: "env" | "secret" | "expr" | "cmd" | "include";
+                                provenance?: {
+                                    /** @enum {string} */
+                                    layer: "default" | "override";
+                                    file: string;
+                                    path: string;
+                                    sourcePath: string;
+                                };
+                                desiredHash?: string;
+                                actualHash?: string;
+                                readonly warnings?: string[];
+                            }[];
+                            readonly computedFields: string[];
+                            readonly ignoredPaths: string[];
+                            checkedAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drift/hosts/{hostId}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run on-demand drift checks for every configured guest on a host */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    hostId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            hostId: string;
+                            checked: number;
+                            readonly snapshots: {
+                                id: string;
+                                hostId: string;
+                                vmid: number;
+                                /** @enum {string} */
+                                type: "lxc" | "vm";
+                                /** @enum {string} */
+                                status: "in_sync" | "drifted";
+                                readonly changes: {
+                                    path: string;
+                                    /** @enum {string} */
+                                    category: "config" | "network" | "disk" | "mount" | "feature" | "tags" | "protection" | "cloud_init" | "identity";
+                                    /** @enum {string} */
+                                    kind: "changed" | "missing_in_live" | "missing_in_yaml";
+                                    desired: unknown;
+                                    actual: unknown;
+                                    pullable: boolean;
+                                    computed: boolean;
+                                    secret: boolean;
+                                    /** @enum {string} */
+                                    tag?: "env" | "secret" | "expr" | "cmd" | "include";
+                                    provenance?: {
+                                        /** @enum {string} */
+                                        layer: "default" | "override";
+                                        file: string;
+                                        path: string;
+                                        sourcePath: string;
+                                    };
+                                    desiredHash?: string;
+                                    actualHash?: string;
+                                    readonly warnings?: string[];
+                                }[];
+                                readonly computedFields: string[];
+                                readonly ignoredPaths: string[];
+                                checkedAt: string;
+                            }[];
+                            readonly failures: {
+                                vmid: number;
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/config/schema/deployment": {
         parameters: {
             query?: never;

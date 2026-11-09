@@ -3275,6 +3275,949 @@
         }
       }
     },
+    "/api/drift": {
+      "get": {
+        "summary": "List the latest persisted drift snapshots",
+        "tags": ["Drift"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "hostId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["in_sync", "drifted"]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "snapshots": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "hostId": {
+                            "type": "string"
+                          },
+                          "vmid": {
+                            "type": "number"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": ["lxc", "vm"]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["in_sync", "drifted"]
+                          },
+                          "changes": {
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "category": {
+                                  "type": "string",
+                                  "enum": [
+                                    "config",
+                                    "network",
+                                    "disk",
+                                    "mount",
+                                    "feature",
+                                    "tags",
+                                    "protection",
+                                    "cloud_init",
+                                    "identity"
+                                  ]
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "changed",
+                                    "missing_in_live",
+                                    "missing_in_yaml"
+                                  ]
+                                },
+                                "desired": {},
+                                "actual": {},
+                                "pullable": {
+                                  "type": "boolean"
+                                },
+                                "computed": {
+                                  "type": "boolean"
+                                },
+                                "secret": {
+                                  "type": "boolean"
+                                },
+                                "tag": {
+                                  "type": "string",
+                                  "enum": [
+                                    "env",
+                                    "secret",
+                                    "expr",
+                                    "cmd",
+                                    "include"
+                                  ]
+                                },
+                                "provenance": {
+                                  "type": "object",
+                                  "properties": {
+                                    "layer": {
+                                      "type": "string",
+                                      "enum": ["default", "override"]
+                                    },
+                                    "file": {
+                                      "type": "string"
+                                    },
+                                    "path": {
+                                      "type": "string"
+                                    },
+                                    "sourcePath": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "layer",
+                                    "file",
+                                    "path",
+                                    "sourcePath"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "desiredHash": {
+                                  "type": "string"
+                                },
+                                "actualHash": {
+                                  "type": "string"
+                                },
+                                "warnings": {
+                                  "readOnly": true,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "category",
+                                "kind",
+                                "desired",
+                                "actual",
+                                "pullable",
+                                "computed",
+                                "secret"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "computedFields": {
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "ignoredPaths": {
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "checkedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "hostId",
+                          "vmid",
+                          "type",
+                          "status",
+                          "changes",
+                          "computedFields",
+                          "ignoredPaths",
+                          "checkedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["snapshots"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drift/{hostId}/{vmid}": {
+      "get": {
+        "summary": "Get the latest persisted drift snapshot for a guest",
+        "tags": ["Drift"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "hostId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "vmid",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "hostId": {
+                      "type": "string"
+                    },
+                    "vmid": {
+                      "type": "number"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": ["lxc", "vm"]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["in_sync", "drifted"]
+                    },
+                    "changes": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "config",
+                              "network",
+                              "disk",
+                              "mount",
+                              "feature",
+                              "tags",
+                              "protection",
+                              "cloud_init",
+                              "identity"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "changed",
+                              "missing_in_live",
+                              "missing_in_yaml"
+                            ]
+                          },
+                          "desired": {},
+                          "actual": {},
+                          "pullable": {
+                            "type": "boolean"
+                          },
+                          "computed": {
+                            "type": "boolean"
+                          },
+                          "secret": {
+                            "type": "boolean"
+                          },
+                          "tag": {
+                            "type": "string",
+                            "enum": ["env", "secret", "expr", "cmd", "include"]
+                          },
+                          "provenance": {
+                            "type": "object",
+                            "properties": {
+                              "layer": {
+                                "type": "string",
+                                "enum": ["default", "override"]
+                              },
+                              "file": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "sourcePath": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["layer", "file", "path", "sourcePath"],
+                            "additionalProperties": false
+                          },
+                          "desiredHash": {
+                            "type": "string"
+                          },
+                          "actualHash": {
+                            "type": "string"
+                          },
+                          "warnings": {
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "category",
+                          "kind",
+                          "desired",
+                          "actual",
+                          "pullable",
+                          "computed",
+                          "secret"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "computedFields": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "ignoredPaths": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "checkedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "hostId",
+                    "vmid",
+                    "type",
+                    "status",
+                    "changes",
+                    "computedFields",
+                    "ignoredPaths",
+                    "checkedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drift/{hostId}/{vmid}/check": {
+      "post": {
+        "summary": "Run an on-demand drift check for one guest",
+        "tags": ["Drift"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "hostId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "vmid",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "hostId": {
+                      "type": "string"
+                    },
+                    "vmid": {
+                      "type": "number"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": ["lxc", "vm"]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["in_sync", "drifted"]
+                    },
+                    "changes": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "config",
+                              "network",
+                              "disk",
+                              "mount",
+                              "feature",
+                              "tags",
+                              "protection",
+                              "cloud_init",
+                              "identity"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "changed",
+                              "missing_in_live",
+                              "missing_in_yaml"
+                            ]
+                          },
+                          "desired": {},
+                          "actual": {},
+                          "pullable": {
+                            "type": "boolean"
+                          },
+                          "computed": {
+                            "type": "boolean"
+                          },
+                          "secret": {
+                            "type": "boolean"
+                          },
+                          "tag": {
+                            "type": "string",
+                            "enum": ["env", "secret", "expr", "cmd", "include"]
+                          },
+                          "provenance": {
+                            "type": "object",
+                            "properties": {
+                              "layer": {
+                                "type": "string",
+                                "enum": ["default", "override"]
+                              },
+                              "file": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "sourcePath": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["layer", "file", "path", "sourcePath"],
+                            "additionalProperties": false
+                          },
+                          "desiredHash": {
+                            "type": "string"
+                          },
+                          "actualHash": {
+                            "type": "string"
+                          },
+                          "warnings": {
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "category",
+                          "kind",
+                          "desired",
+                          "actual",
+                          "pullable",
+                          "computed",
+                          "secret"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "computedFields": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "ignoredPaths": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "checkedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "hostId",
+                    "vmid",
+                    "type",
+                    "status",
+                    "changes",
+                    "computedFields",
+                    "ignoredPaths",
+                    "checkedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drift/hosts/{hostId}/check": {
+      "post": {
+        "summary": "Run on-demand drift checks for every configured guest on a host",
+        "tags": ["Drift"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "hostId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hostId": {
+                      "type": "string"
+                    },
+                    "checked": {
+                      "type": "number"
+                    },
+                    "snapshots": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "hostId": {
+                            "type": "string"
+                          },
+                          "vmid": {
+                            "type": "number"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": ["lxc", "vm"]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["in_sync", "drifted"]
+                          },
+                          "changes": {
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "category": {
+                                  "type": "string",
+                                  "enum": [
+                                    "config",
+                                    "network",
+                                    "disk",
+                                    "mount",
+                                    "feature",
+                                    "tags",
+                                    "protection",
+                                    "cloud_init",
+                                    "identity"
+                                  ]
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "changed",
+                                    "missing_in_live",
+                                    "missing_in_yaml"
+                                  ]
+                                },
+                                "desired": {},
+                                "actual": {},
+                                "pullable": {
+                                  "type": "boolean"
+                                },
+                                "computed": {
+                                  "type": "boolean"
+                                },
+                                "secret": {
+                                  "type": "boolean"
+                                },
+                                "tag": {
+                                  "type": "string",
+                                  "enum": [
+                                    "env",
+                                    "secret",
+                                    "expr",
+                                    "cmd",
+                                    "include"
+                                  ]
+                                },
+                                "provenance": {
+                                  "type": "object",
+                                  "properties": {
+                                    "layer": {
+                                      "type": "string",
+                                      "enum": ["default", "override"]
+                                    },
+                                    "file": {
+                                      "type": "string"
+                                    },
+                                    "path": {
+                                      "type": "string"
+                                    },
+                                    "sourcePath": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "layer",
+                                    "file",
+                                    "path",
+                                    "sourcePath"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "desiredHash": {
+                                  "type": "string"
+                                },
+                                "actualHash": {
+                                  "type": "string"
+                                },
+                                "warnings": {
+                                  "readOnly": true,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "category",
+                                "kind",
+                                "desired",
+                                "actual",
+                                "pullable",
+                                "computed",
+                                "secret"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "computedFields": {
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "ignoredPaths": {
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "checkedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "hostId",
+                          "vmid",
+                          "type",
+                          "status",
+                          "changes",
+                          "computedFields",
+                          "ignoredPaths",
+                          "checkedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "failures": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "vmid": {
+                            "type": "number"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["vmid", "message"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["hostId", "checked", "snapshots", "failures"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/config/schema/deployment": {
       "get": {
         "summary": "Get the deployment editor JSON Schema",

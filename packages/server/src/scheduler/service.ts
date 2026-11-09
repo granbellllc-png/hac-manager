@@ -1,4 +1,5 @@
 import type { DatabaseRepositories } from '../db/repositories/types.js';
+import type { DriftService } from '../drift/service.js';
 import type { HostRegistry } from '../hosts/registry.js';
 import type { HostDetail } from '../hosts/types.js';
 import type { LiveInventoryService } from '../inventory/service.js';
@@ -21,6 +22,7 @@ export interface DriftSchedulerOptions {
   readonly maxBackoffMs?: number | undefined;
   readonly now?: (() => Date) | undefined;
   readonly onError?: ((error: unknown) => void) | undefined;
+  readonly driftService?: Pick<DriftService, 'checkHost'> | undefined;
 }
 
 type SchedulerHostRegistry = Pick<
@@ -69,6 +71,7 @@ export class DriftScheduler {
   private readonly maxBackoffMs: number;
   private readonly now: () => Date;
   private readonly onError: (error: unknown) => void;
+  private readonly driftService: Pick<DriftService, 'checkHost'> | undefined;
   private readonly cronCache = new Map<string, ParsedCronExpression>();
   private timer?: ReturnType<typeof setInterval> | undefined;
   private ticking = false;
@@ -85,6 +88,7 @@ export class DriftScheduler {
     this.maxBackoffMs = options.maxBackoffMs ?? 60 * 60_000;
     this.now = options.now ?? (() => new Date());
     this.onError = options.onError ?? (() => undefined);
+    this.driftService = options.driftService;
   }
 
   public registerQueueHandler(): void {
@@ -203,6 +207,19 @@ export class DriftScheduler {
         'system',
         `Scheduled drift check refreshed ${inventory.guests.length} guest${inventory.guests.length === 1 ? '' : 's'}`,
       );
+      if (this.driftService) {
+        const drift = await this.driftService.checkHost(hostId);
+        await context.log(
+          'system',
+          `Compared ${drift.checked} configured guest${drift.checked === 1 ? '' : 's'}`,
+        );
+        for (const failure of drift.failures) {
+          await context.log(
+            'stderr',
+            `Drift check failed for guest ${failure.vmid}: ${failure.message}`,
+          );
+        }
+      }
       await this.clearBackoff(hostId);
     } catch (error) {
       outcome = 'unavailable';

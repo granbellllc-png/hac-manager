@@ -17,6 +17,8 @@ import type {
   InsertPromptRow,
   PlanRow,
   InsertPlanRow,
+  DriftSnapshotRow,
+  InsertDriftSnapshotRow,
 } from '../schema.js';
 
 export interface SettingsRepository {
@@ -230,6 +232,20 @@ export interface PlansRepository {
   ): Promise<boolean>;
 }
 
+export interface DriftSnapshotListFilter {
+  readonly hostId?: string | undefined;
+  readonly vmid?: number | undefined;
+  readonly statuses?: readonly DriftSnapshotRow['status'][] | undefined;
+  readonly limit?: number | undefined;
+}
+
+export interface DriftSnapshotsRepository {
+  upsert(row: InsertDriftSnapshotRow): Promise<DriftSnapshotRow>;
+  get(hostId: string, vmid: number): Promise<DriftSnapshotRow | null>;
+  list(filter?: DriftSnapshotListFilter): Promise<readonly DriftSnapshotRow[]>;
+  delete(hostId: string, vmid: number): Promise<boolean>;
+}
+
 export interface DatabaseRepositories {
   readonly settings: SettingsRepository;
   readonly hostsCache: HostsCacheRepository;
@@ -243,4 +259,5 @@ export interface DatabaseRepositories {
   readonly jobSteps: JobStepsRepository;
   readonly prompts: PromptsRepository;
   readonly plans: PlansRepository;
+  readonly driftSnapshots: DriftSnapshotsRepository;
 }

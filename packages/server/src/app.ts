@@ -23,6 +23,7 @@ import { eventsModule } from './modules/events/index.js';
 import { promptsModule } from './modules/prompts/index.js';
 import { plansModule } from './modules/plans/index.js';
 import { jobsModule } from './modules/jobs/index.js';
+import { driftModule } from './modules/drift/index.js';
 import { HostRegistry } from './hosts/registry.js';
 import { ConnectionManager } from './router/manager.js';
 import { LiveInventoryService } from './inventory/service.js';
@@ -32,6 +33,7 @@ import { DurableJobQueue } from './jobs/queue.js';
 import { JobEventBroker } from './events/job-events.js';
 import { PromptService } from './prompts/service.js';
 import { PlanService } from './plans/service.js';
+import { DriftService } from './drift/service.js';
 import { DriftScheduler } from './scheduler/service.js';
 import {
   SessionService,
@@ -59,6 +61,7 @@ export interface BuildAppOptions {
   readonly eventsHeartbeatMs?: number | undefined;
   readonly promptService?: PromptService;
   readonly planService?: PlanService;
+  readonly driftService?: DriftService;
   readonly scheduler?: DriftScheduler;
 }
 
@@ -276,6 +279,16 @@ export async function buildApp(
         );
   planService.registerQueueHandler();
   app.decorate('planService', planService);
+  const driftService =
+    'driftService' in configOrOptions && configOrOptions.driftService
+      ? configOrOptions.driftService
+      : new DriftService({
+          repos: repositories,
+          hostRegistry,
+          inventoryService,
+          connections: connectionManager,
+        });
+  app.decorate('driftService', driftService);
   const scheduler =
     'scheduler' in configOrOptions && configOrOptions.scheduler
       ? configOrOptions.scheduler
@@ -287,6 +300,7 @@ export async function buildApp(
           {
             onError: (error) =>
               app.log.error({ err: error }, 'Drift scheduler tick failed'),
+            driftService,
           },
         );
   scheduler.registerQueueHandler();
@@ -314,6 +328,10 @@ export async function buildApp(
     inventoryService,
     hostRegistry,
     guestLifecycleService,
+  });
+  await app.register(driftModule, {
+    driftService,
+    hostRegistry,
   });
   await app.register(configEditorModule, {
     hostRegistry,

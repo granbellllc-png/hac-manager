@@ -4,6 +4,7 @@ import { createDatabase } from '../db/connection.js';
 import { createSqliteRepositories } from '../db/repositories/sqlite.js';
 import type { HostDetail, HostSummary } from '../hosts/types.js';
 import { DurableJobQueue } from '../jobs/queue.js';
+import type { DriftService } from '../drift/service.js';
 import { DriftScheduler } from './service.js';
 
 const queues: DurableJobQueue[] = [];
@@ -77,6 +78,7 @@ async function fixture(options?: {
   readonly now?: Date;
   readonly baseBackoffMs?: number;
   readonly onError?: (error: unknown) => void;
+  readonly driftService?: Pick<DriftService, 'checkHost'>;
 }) {
   const handle = createDatabase({ path: ':memory:' });
   const repos = createSqliteRepositories(handle.db);
@@ -144,6 +146,7 @@ async function fixture(options?: {
     maxBackoffMs: 10 * 60_000,
     pollIntervalMs: 1_000,
     onError: options?.onError,
+    ...(options?.driftService ? { driftService: options.driftService } : {}),
   });
   scheduler.registerQueueHandler();
   return {
@@ -199,6 +202,49 @@ describe('DriftScheduler', () => {
       expect(
         await test.repos.settings.get('scheduler.drift.pve-01.backoff'),
       ).toBeNull();
+    } finally {
+      test.scheduler.stop();
+      test.handle.close();
+    }
+  });
+
+  it('runs drift checks as part of a scheduled job', async () => {
+    const checkHost = vi.fn().mockResolvedValue({
+      hostId: 'pve-01',
+      checked: 2,
+      snapshots: [],
+      failures: [{ vmid: 113, message: 'guest unavailable' }],
+    });
+    const test = await fixture({ driftService: { checkHost } });
+    try {
+      const job = await test.repos.jobs.create({
+        id: 'job-drift',
+        hostId: 'pve-01',
+        lane: 'host',
+        type: 'drift.check',
+        reason: 'schedule',
+        status: 'running',
+        priority: 0,
+        createdAt: new Date(),
+      });
+      const log = vi.fn().mockResolvedValue(undefined);
+      await test.scheduler.executeJob({
+        job,
+        payload: {},
+        signal: new AbortController().signal,
+        log,
+        prompt: vi.fn(),
+      });
+
+      expect(checkHost).toHaveBeenCalledWith('pve-01');
+      expect(log).toHaveBeenCalledWith(
+        'system',
+        expect.stringContaining('Compared 2 configured guests'),
+      );
+      expect(log).toHaveBeenCalledWith(
+        'stderr',
+        expect.stringContaining('guest 113: guest unavailable'),
+      );
     } finally {
       test.scheduler.stop();
       test.handle.close();

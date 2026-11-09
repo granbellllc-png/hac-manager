@@ -4,6 +4,7 @@ import {
   integer,
   index,
   primaryKey,
+  uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
 
 export const settingsTable = sqliteTable('settings', {
@@ -244,6 +245,27 @@ export const plansTable = sqliteTable(
   ],
 );
 
+export const driftSnapshotsTable = sqliteTable(
+  'drift_snapshots',
+  {
+    id: text('id').primaryKey(),
+    hostId: text('host_id').notNull(),
+    vmid: integer('vmid').notNull(),
+    guestType: text('guest_type', { enum: ['lxc', 'vm'] }).notNull(),
+    status: text('status', { enum: ['in_sync', 'drifted'] }).notNull(),
+    changesJson: text('changes_json').notNull(),
+    computedFieldsJson: text('computed_fields_json').notNull(),
+    ignoredPathsJson: text('ignored_paths_json').notNull(),
+    checkedAt: integer('checked_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_drift_snapshots_host_vmid').on(table.hostId, table.vmid),
+    index('idx_drift_snapshots_checked_at').on(table.checkedAt),
+    index('idx_drift_snapshots_status').on(table.status),
+  ],
+);
+
 export const migrationsTable = sqliteTable('__hacm_migrations', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull().unique(),
@@ -285,3 +307,6 @@ export type InsertPromptRow = typeof promptsTable.$inferInsert;
 
 export type PlanRow = typeof plansTable.$inferSelect;
 export type InsertPlanRow = typeof plansTable.$inferInsert;
+
+export type DriftSnapshotRow = typeof driftSnapshotsTable.$inferSelect;
+export type InsertDriftSnapshotRow = typeof driftSnapshotsTable.$inferInsert;

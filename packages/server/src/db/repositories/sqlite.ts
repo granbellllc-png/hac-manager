@@ -29,6 +29,7 @@ import type {
   JobStepsRepository,
   PromptsRepository,
   PlansRepository,
+  DriftSnapshotsRepository,
 } from './types.js';
 
 export function createSqliteRepositories(
@@ -814,6 +815,94 @@ export function createSqliteRepositories(
     },
   };
 
+  const driftSnapshots: DriftSnapshotsRepository = {
+    async upsert(row) {
+      const now = row.updatedAt ?? new Date();
+      db.insert(schema.driftSnapshotsTable)
+        .values({ ...row, updatedAt: now })
+        .onConflictDoUpdate({
+          target: [
+            schema.driftSnapshotsTable.hostId,
+            schema.driftSnapshotsTable.vmid,
+          ],
+          set: {
+            guestType: row.guestType,
+            status: row.status,
+            changesJson: row.changesJson,
+            computedFieldsJson: row.computedFieldsJson,
+            ignoredPathsJson: row.ignoredPathsJson,
+            checkedAt: row.checkedAt,
+            updatedAt: now,
+          },
+        })
+        .run();
+      const persisted = db
+        .select()
+        .from(schema.driftSnapshotsTable)
+        .where(
+          and(
+            eq(schema.driftSnapshotsTable.hostId, row.hostId),
+            eq(schema.driftSnapshotsTable.vmid, row.vmid),
+          ),
+        )
+        .get();
+      if (!persisted) {
+        throw new Error(
+          `Failed to persist drift snapshot for ${row.hostId}/${row.vmid}`,
+        );
+      }
+      return persisted;
+    },
+    async get(hostId, vmid) {
+      return (
+        db
+          .select()
+          .from(schema.driftSnapshotsTable)
+          .where(
+            and(
+              eq(schema.driftSnapshotsTable.hostId, hostId),
+              eq(schema.driftSnapshotsTable.vmid, vmid),
+            ),
+          )
+          .get() ?? null
+      );
+    },
+    async list(filter = {}) {
+      const conditions = [];
+      if (filter.hostId) {
+        conditions.push(eq(schema.driftSnapshotsTable.hostId, filter.hostId));
+      }
+      if (filter.vmid !== undefined) {
+        conditions.push(eq(schema.driftSnapshotsTable.vmid, filter.vmid));
+      }
+      if (filter.statuses && filter.statuses.length > 0) {
+        conditions.push(
+          inArray(schema.driftSnapshotsTable.status, [...filter.statuses]),
+        );
+      }
+      const query = db
+        .select()
+        .from(schema.driftSnapshotsTable)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(schema.driftSnapshotsTable.checkedAt));
+      return filter.limit === undefined
+        ? query.all()
+        : query.limit(filter.limit).all();
+    },
+    async delete(hostId, vmid) {
+      const result = db
+        .delete(schema.driftSnapshotsTable)
+        .where(
+          and(
+            eq(schema.driftSnapshotsTable.hostId, hostId),
+            eq(schema.driftSnapshotsTable.vmid, vmid),
+          ),
+        )
+        .run();
+      return result.changes > 0;
+    },
+  };
+
   return {
     settings,
     hostsCache,
@@ -827,5 +916,6 @@ export function createSqliteRepositories(
     jobSteps,
     prompts,
     plans,
+    driftSnapshots,
   };
 }

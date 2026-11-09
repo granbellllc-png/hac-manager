@@ -289,6 +289,32 @@ export const hostRuntimeMigration: Migration = {
   },
 };
 
+export const driftSnapshotsMigration: Migration = {
+  id: '0009_drift_snapshots',
+  up: (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS drift_snapshots (
+        id TEXT PRIMARY KEY,
+        host_id TEXT NOT NULL,
+        vmid INTEGER NOT NULL,
+        guest_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        changes_json TEXT NOT NULL,
+        computed_fields_json TEXT NOT NULL,
+        ignored_paths_json TEXT NOT NULL,
+        checked_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_drift_snapshots_host_vmid
+        ON drift_snapshots(host_id, vmid);
+      CREATE INDEX IF NOT EXISTS idx_drift_snapshots_checked_at
+        ON drift_snapshots(checked_at);
+      CREATE INDEX IF NOT EXISTS idx_drift_snapshots_status
+        ON drift_snapshots(status);
+    `);
+  },
+};
+
 export const allMigrations: readonly Migration[] = [
   initialMigration,
   totpMigration,
@@ -298,6 +324,7 @@ export const allMigrations: readonly Migration[] = [
   plansMigration,
   jobReasonMigration,
   hostRuntimeMigration,
+  driftSnapshotsMigration,
 ];
 
 export function runMigrations(

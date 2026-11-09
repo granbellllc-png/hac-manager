@@ -8,6 +8,7 @@ import {
   yamlDocumentToJS,
   type GuestDeployment,
   type ParseResult,
+  type ProvenanceMap,
 } from '@hacm/core';
 
 export class GuestConfigurationError extends Error {
@@ -19,6 +20,7 @@ export class GuestConfigurationError extends Error {
 
 export interface LoadedGuestDeployment {
   readonly deployment: GuestDeployment;
+  readonly provenance: ProvenanceMap;
   readonly relativePath: string;
 }
 
@@ -92,6 +94,7 @@ export async function loadGuestDeployment(
     });
     return {
       deployment: merged.deployment,
+      provenance: merged.provenance,
       relativePath: guest.relativeDeploymentFile,
     };
   } catch (error) {
