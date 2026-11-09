@@ -1,5 +1,13 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import {
+  planGuestImport,
+  applyGuestImport,
+  deploymentDefaultsFileSchema,
+  loadYamlDocument,
+} from '@hacm/core';
 import type { LiveInventoryService } from '../../inventory/service.js';
 import type { HostRegistry } from '../../hosts/registry.js';
 
@@ -279,6 +287,267 @@ export const inventoryModule: FastifyPluginAsyncZod<
           ...(inv.error ? { error: inv.error } : {}),
         },
       };
+    },
+  );
+
+  app.post(
+    '/api/inventory/guests/:hostId/:vmid/import',
+    {
+      schema: {
+        tags: ['Inventory'],
+        summary: 'Import a live guest into YAML configuration',
+        params: z.object({
+          hostId: z.string(),
+          vmid: z.coerce.number(),
+        }),
+        body: z
+          .object({
+            dryRun: z.boolean().optional(),
+            overwrite: z.boolean().optional(),
+          })
+          .optional(),
+        response: {
+          200: z.object({
+            success: z.boolean(),
+            status: z.enum(['new', 'already_exists']),
+            relativeFile: z.string(),
+            fullPath: z.string(),
+            yamlContent: z.string(),
+            omittedDefaults: z.array(z.string()).readonly(),
+            reason: z.string().optional(),
+          }),
+          403: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          404: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const { hostId, vmid } = request.params;
+      const { dryRun = false, overwrite = false } = request.body ?? {};
+
+      // Viewer cannot mutate YAML files
+      if (request.user?.role === 'viewer' && !dryRun) {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: 'Viewer role cannot import guests without dryRun: true',
+        });
+      }
+
+      const allowedHosts = await hostRegistry.listHosts(request.user);
+      const isAllowed = allowedHosts.some((h) => h.id === hostId);
+
+      if (!isAllowed) {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: `Access denied to host '${hostId}'`,
+        });
+      }
+
+      try {
+        const liveDetail = await inventoryService.getGuestLiveConfig(
+          hostId,
+          vmid,
+        );
+
+        // Try to load default-deployment.yaml for host if present
+        let defaults:
+          ReturnType<typeof deploymentDefaultsFileSchema.parse> | undefined =
+          undefined;
+        try {
+          const defaultsPath = join(
+            hostRegistry.dataDir,
+            'hosts',
+            hostId,
+            'default-deployment.yaml',
+          );
+          const defaultsContent = await readFile(defaultsPath, 'utf8');
+          const doc = loadYamlDocument(defaultsContent);
+          defaults = deploymentDefaultsFileSchema.parse(doc.toJSON());
+        } catch {
+          // Defaults file is optional
+        }
+
+        const plan = await planGuestImport({
+          dataDir: hostRegistry.dataDir,
+          hostId,
+          guest: liveDetail.canonicalConfig,
+          defaults,
+        });
+
+        if (dryRun) {
+          return {
+            success: plan.status === 'new' || overwrite,
+            status: plan.status,
+            relativeFile: plan.relativeFile,
+            fullPath: plan.fullPath,
+            yamlContent: plan.yamlContent,
+            omittedDefaults: plan.omittedDefaults,
+            ...(plan.status === 'already_exists'
+              ? { reason: 'already_exists' }
+              : {}),
+          };
+        }
+
+        const applyResult = await applyGuestImport({
+          plan,
+          overwrite,
+        });
+
+        return {
+          success: applyResult.success,
+          status: plan.status,
+          relativeFile: applyResult.relativeFile,
+          fullPath: applyResult.fullPath,
+          yamlContent: plan.yamlContent,
+          omittedDefaults: plan.omittedDefaults,
+          ...(applyResult.reason ? { reason: applyResult.reason } : {}),
+        };
+      } catch (err) {
+        return reply.code(404).send({
+          statusCode: 404,
+          error: 'Not Found',
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+  );
+
+  app.post(
+    '/api/inventory/import',
+    {
+      schema: {
+        tags: ['Inventory'],
+        summary: 'Bulk import live guests into YAML',
+        body: z.object({
+          hostId: z.string(),
+          vmids: z.array(z.number()),
+          dryRun: z.boolean().optional(),
+          overwrite: z.boolean().optional(),
+        }),
+        response: {
+          200: z.object({
+            results: z.array(
+              z.object({
+                vmid: z.number(),
+                success: z.boolean(),
+                status: z.enum(['new', 'already_exists']),
+                relativeFile: z.string(),
+                omittedDefaults: z.array(z.string()).readonly(),
+                reason: z.string().optional(),
+              }),
+            ),
+          }),
+          403: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const { hostId, vmids, dryRun = false, overwrite = false } = request.body;
+
+      if (request.user?.role === 'viewer' && !dryRun) {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: 'Viewer role cannot import guests without dryRun: true',
+        });
+      }
+
+      const allowedHosts = await hostRegistry.listHosts(request.user);
+      const isAllowed = allowedHosts.some((h) => h.id === hostId);
+
+      if (!isAllowed) {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: `Access denied to host '${hostId}'`,
+        });
+      }
+
+      let defaults:
+        ReturnType<typeof deploymentDefaultsFileSchema.parse> | undefined =
+        undefined;
+      try {
+        const defaultsPath = join(
+          hostRegistry.dataDir,
+          'hosts',
+          hostId,
+          'default-deployment.yaml',
+        );
+        const defaultsContent = await readFile(defaultsPath, 'utf8');
+        const doc = loadYamlDocument(defaultsContent);
+        defaults = deploymentDefaultsFileSchema.parse(doc.toJSON());
+      } catch {
+        // Optional
+      }
+
+      const results = [];
+      for (const vmid of vmids) {
+        try {
+          const liveDetail = await inventoryService.getGuestLiveConfig(
+            hostId,
+            vmid,
+          );
+          const plan = await planGuestImport({
+            dataDir: hostRegistry.dataDir,
+            hostId,
+            guest: liveDetail.canonicalConfig,
+            defaults,
+          });
+
+          if (dryRun) {
+            results.push({
+              vmid,
+              success: plan.status === 'new' || overwrite,
+              status: plan.status,
+              relativeFile: plan.relativeFile,
+              omittedDefaults: plan.omittedDefaults,
+              ...(plan.status === 'already_exists'
+                ? { reason: 'already_exists' }
+                : {}),
+            });
+            continue;
+          }
+
+          const applyResult = await applyGuestImport({
+            plan,
+            overwrite,
+          });
+
+          results.push({
+            vmid,
+            success: applyResult.success,
+            status: plan.status,
+            relativeFile: applyResult.relativeFile,
+            omittedDefaults: plan.omittedDefaults,
+            ...(applyResult.reason ? { reason: applyResult.reason } : {}),
+          });
+        } catch (err) {
+          results.push({
+            vmid,
+            success: false,
+            status: 'already_exists' as const,
+            relativeFile: '',
+            omittedDefaults: [],
+            reason: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      return { results };
     },
   );
 };

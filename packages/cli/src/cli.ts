@@ -1,6 +1,7 @@
 import { runInit } from './commands/init.js';
 import { runSchemaExport } from './commands/schema.js';
 import { runValidate } from './commands/validate.js';
+import { runImport } from './commands/import.js';
 
 export function printHelp(): void {
   process.stdout.write(`hacm - Homelab as Code Manager CLI
@@ -12,6 +13,7 @@ Commands:
   init                     Scaffold a new data directory with layout and gitignore
   validate                 Validate data directory schemas, merge, tags and layout
   schema export            Export JSON Schemas and document yaml-language-server modeline
+  import                   Import live guests into YAML deployment files
 
 Init Options:
   -d, --data-dir <path>    Path to directory to scaffold (defaults to current directory)
@@ -24,6 +26,16 @@ Validate Options:
   -d, --data-dir <path>    Path to data directory (defaults to HACM_DATA_DIR or current directory)
   --json                   Output machine-readable JSON
   --resolve                Opt-in to resolve secrets, env, and external commands
+
+Import Options:
+  -d, --data-dir <path>    Path to data directory (defaults to HACM_DATA_DIR or current directory)
+  --host <id>              Host ID to import under (e.g. pve-01)
+  --file <path>            Path to Proxmox config file (pct/qm config) or '-' for stdin
+  --vmid <number>          VMID to assign to the imported guest
+  --type <lxc|vm>          Guest type (auto-detected if omitted)
+  --dry-run                Preview generated YAML and plan without writing to disk
+  --overwrite              Allow overwriting existing deployment.yaml
+  --json                   Output machine-readable JSON
 
 Schema Export Options:
   -o, --out-dir <path>     Directory to write JSON Schemas to (defaults to ./schemas)
@@ -101,6 +113,61 @@ export async function runCli(argv: string[]): Promise<number> {
     }
 
     return runValidate({ dataDir, json, resolve });
+  }
+
+  if (command === 'import') {
+    let dataDir: string | undefined;
+    let host: string | undefined;
+    let file: string | undefined;
+    let vmid: number | undefined;
+    let type: 'lxc' | 'vm' | undefined;
+    let dryRun = false;
+    let overwrite = false;
+    let json = false;
+
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i]!;
+      if (arg === '--json') {
+        json = true;
+      } else if (arg === '--dry-run') {
+        dryRun = true;
+      } else if (arg === '--overwrite') {
+        overwrite = true;
+      } else if (arg === '-d' || arg === '--data-dir') {
+        dataDir = args[++i];
+      } else if (arg.startsWith('--data-dir=')) {
+        dataDir = arg.slice('--data-dir='.length);
+      } else if (arg === '--host') {
+        host = args[++i];
+      } else if (arg.startsWith('--host=')) {
+        host = arg.slice('--host='.length);
+      } else if (arg === '--file') {
+        file = args[++i];
+      } else if (arg.startsWith('--file=')) {
+        file = arg.slice('--file='.length);
+      } else if (arg === '--vmid') {
+        vmid = Number(args[++i]);
+      } else if (arg.startsWith('--vmid=')) {
+        vmid = Number(arg.slice('--vmid='.length));
+      } else if (arg === '--type') {
+        const t = args[++i];
+        if (t === 'lxc' || t === 'vm') type = t;
+      } else if (arg.startsWith('--type=')) {
+        const t = arg.slice('--type='.length);
+        if (t === 'lxc' || t === 'vm') type = t;
+      }
+    }
+
+    return runImport({
+      dataDir,
+      host,
+      file,
+      vmid,
+      type,
+      dryRun,
+      overwrite,
+      json,
+    });
   }
 
   if (command === 'schema') {

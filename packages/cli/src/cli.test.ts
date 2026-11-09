@@ -133,4 +133,71 @@ describe('CLI hacm', () => {
     expect(code).toBe(1);
     expect(stderrBuffer).toContain('Unknown command');
   });
+
+  it('runs import with dry-run and apply', async () => {
+    const tempDir = resolve(__dirname, '../dist/temp-import-test');
+    const fixturePath = resolve(
+      __dirname,
+      '../../core/fixtures/proxmox/lxc-112-unprivileged.conf',
+    );
+    try {
+      // First scaffold data dir
+      await runCli(['init', '--data-dir', tempDir, '--host', 'pve-01']);
+      stdoutBuffer = '';
+
+      // Dry run
+      const dryCode = await runCli([
+        'import',
+        '--data-dir',
+        tempDir,
+        '--host',
+        'pve-01',
+        '--file',
+        fixturePath,
+        '--vmid',
+        '112',
+        '--dry-run',
+      ]);
+      expect(dryCode).toBe(0);
+      expect(stdoutBuffer).toContain('Import plan for LXC 112 (example-lxc)');
+      expect(stdoutBuffer).toContain('Status: new');
+
+      // Actual import
+      stdoutBuffer = '';
+      const importCode = await runCli([
+        'import',
+        '--data-dir',
+        tempDir,
+        '--host',
+        'pve-01',
+        '--file',
+        fixturePath,
+        '--vmid',
+        '112',
+      ]);
+      expect(importCode).toBe(0);
+      expect(stdoutBuffer).toContain('Imported LXC 112 (example-lxc)');
+
+      // Re-running import fails with already exists
+      stdoutBuffer = '';
+      stderrBuffer = '';
+      const secondCode = await runCli([
+        'import',
+        '--data-dir',
+        tempDir,
+        '--host',
+        'pve-01',
+        '--file',
+        fixturePath,
+        '--vmid',
+        '112',
+      ]);
+      expect(secondCode).toBe(1);
+      expect(stderrBuffer).toContain('already exists');
+    } finally {
+      if (existsSync(tempDir)) {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    }
+  });
 });

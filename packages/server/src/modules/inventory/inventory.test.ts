@@ -215,6 +215,55 @@ connection:
       });
       expect(hostRefreshRes.statusCode).toBe(200);
       expect(hostRefreshRes.json().host.hostId).toBe('pve-01');
+
+      // 7. POST /api/inventory/guests/:hostId/:vmid/import (dryRun)
+      const dryImportRes = await app.inject({
+        method: 'POST',
+        url: '/api/inventory/guests/pve-01/112/import',
+        headers: authHeaders,
+        payload: { dryRun: true },
+      });
+      expect(dryImportRes.statusCode).toBe(200);
+      const dryJson = dryImportRes.json();
+      expect(dryJson.status).toBe('new');
+      expect(dryJson.relativeFile).toContain('112-adguard-lxc/deployment.yaml');
+
+      // Actual import
+      const importRes = await app.inject({
+        method: 'POST',
+        url: '/api/inventory/guests/pve-01/112/import',
+        headers: authHeaders,
+        payload: {},
+      });
+      expect(importRes.statusCode).toBe(200);
+      const importJson = importRes.json();
+      expect(importJson.success).toBe(true);
+
+      // Re-run import: refuses overwrite
+      const rerunRes = await app.inject({
+        method: 'POST',
+        url: '/api/inventory/guests/pve-01/112/import',
+        headers: authHeaders,
+        payload: {},
+      });
+      expect(rerunRes.statusCode).toBe(200);
+      expect(rerunRes.json().success).toBe(false);
+      expect(rerunRes.json().reason).toBe('already_exists');
+
+      // 8. Bulk import POST /api/inventory/import
+      const bulkRes = await app.inject({
+        method: 'POST',
+        url: '/api/inventory/import',
+        headers: authHeaders,
+        payload: {
+          hostId: 'pve-01',
+          vmids: [112],
+          dryRun: true,
+        },
+      });
+      expect(bulkRes.statusCode).toBe(200);
+      expect(bulkRes.json().results).toHaveLength(1);
+      expect(bulkRes.json().results[0].vmid).toBe(112);
     } finally {
       await app.close();
       await rm(tempDir, { recursive: true, force: true });
