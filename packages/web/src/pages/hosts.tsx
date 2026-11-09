@@ -46,6 +46,8 @@ export interface HostSummary {
   };
   readonly updatedAt: string;
   guestCount?: number;
+  orphanCount?: number;
+  ignoredCount?: number;
 }
 
 export interface ConnectionTestState {
@@ -80,15 +82,21 @@ export function HostsPage() {
       }
 
       const guestCountMap = new Map<string, number>();
+      const orphanCountMap = new Map<string, number>();
+      const ignoredCountMap = new Map<string, number>();
       if (invRes.data?.hosts) {
         for (const h of invRes.data.hosts) {
           guestCountMap.set(h.hostId, h.guestCount);
+          orphanCountMap.set(h.hostId, h.orphanCount);
+          ignoredCountMap.set(h.hostId, h.ignoredCount);
         }
       }
 
       const enriched = hostsRes.data.hosts.map((h) => ({
         ...h,
         guestCount: guestCountMap.get(h.id) ?? 0,
+        orphanCount: orphanCountMap.get(h.id) ?? 0,
+        ignoredCount: ignoredCountMap.get(h.id) ?? 0,
       }));
 
       setHosts(enriched);
@@ -238,6 +246,15 @@ connection:
     }
   };
 
+  const totalOrphans = hosts.reduce(
+    (sum, host) => sum + (host.orphanCount ?? 0),
+    0,
+  );
+  const totalIgnored = hosts.reduce(
+    (sum, host) => sum + (host.ignoredCount ?? 0),
+    0,
+  );
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -326,6 +343,42 @@ connection:
         <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 flex-shrink-0" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {/* Unmanaged guests across all hosts */}
+      {!loading && totalOrphans > 0 && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex gap-3">
+            <AlertTriangle
+              aria-hidden
+              className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-400"
+            />
+            <div>
+              <p className="font-medium">
+                {totalOrphans} live{' '}
+                {totalOrphans === 1 ? 'guest has' : 'guests have'} no YAML
+                definition.
+              </p>
+              <p className="text-muted-foreground">
+                Review them in Resources to import, ignore or delete them.
+                {totalIgnored > 0
+                  ? ` ${totalIgnored} ${totalIgnored === 1 ? 'guest is' : 'guests are'} already ignored in host.yaml.`
+                  : ''}
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/resources?configuration=orphan')}
+            className="self-start sm:self-auto"
+          >
+            Review orphans
+          </Button>
         </div>
       )}
 
@@ -477,12 +530,21 @@ connection:
                   </div>
 
                   {/* Guest Count */}
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                     <Layers className="w-3.5 h-3.5" />
                     <span>Live Guests:</span>
                     <span className="font-semibold text-foreground">
                       {host.guestCount ?? 0}
                     </span>
+                    {(host.orphanCount ?? 0) > 0 && (
+                      <span className="text-amber-600 dark:text-amber-400">
+                        · {host.orphanCount} orphan
+                        {host.orphanCount === 1 ? '' : 's'}
+                      </span>
+                    )}
+                    {(host.ignoredCount ?? 0) > 0 && (
+                      <span>· {host.ignoredCount} ignored</span>
+                    )}
                   </div>
 
                   {/* Probe Warnings / Issues */}

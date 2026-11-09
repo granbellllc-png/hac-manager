@@ -130,6 +130,9 @@ export function ResourcesPage() {
   const orphanCount = guests.filter(
     (guest) => guest.configuration.status === 'orphan',
   ).length;
+  const ignoredCount = guests.filter(
+    (guest) => guest.configuration.status === 'ignored',
+  ).length;
 
   const updateFilter = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
@@ -196,7 +199,11 @@ export function ResourcesPage() {
               definition.
             </p>
             <p className="text-muted-foreground">
-              Open an orphan to review it before importing or deleting it.
+              Open an orphan to review it before importing, ignoring or deleting
+              it.
+              {ignoredCount > 0
+                ? ` ${ignoredCount} ignored ${ignoredCount === 1 ? 'guest is' : 'guests are'} recorded in host.yaml.`
+                : ''}
             </p>
           </div>
         </div>
@@ -256,6 +263,7 @@ export function ResourcesPage() {
           options={[
             { value: 'configured', label: 'Configured' },
             { value: 'orphan', label: 'Orphan' },
+            { value: 'ignored', label: 'Ignored' },
           ]}
         />
       </section>
@@ -339,7 +347,9 @@ export function ResourcesPage() {
                     value={
                       guest.configuration.status === 'configured'
                         ? 'YAML'
-                        : 'Orphan'
+                        : guest.configuration.status === 'ignored'
+                          ? 'Ignored'
+                          : 'Orphan'
                     }
                     warning={guest.configuration.status === 'orphan'}
                   />

@@ -114,6 +114,38 @@ const orphanDetail = {
   configuration: { status: 'orphan' },
 };
 
+const ignoredDetail = {
+  ...orphanDetail,
+  configuration: { status: 'ignored' as const },
+};
+
+function installIgnoreApi(mode?: 'http' | 'network' | 'non-error') {
+  let currentDetail: unknown = orphanDetail;
+  const fetchFn = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+    const request = input as Request;
+    const path = new URL(request.url).pathname;
+    if (request.method === 'POST' && path.endsWith('/ignore')) {
+      if (mode === 'network') throw new Error('fixture offline');
+      if (mode === 'non-error') throw 'fixture offline';
+      if (mode === 'http') {
+        return Response.json({ message: 'ignore denied' }, { status: 409 });
+      }
+      currentDetail = ignoredDetail;
+      return Response.json({
+        ignored: true,
+        status: 'ignored',
+        dryRun: false,
+        changed: true,
+        replaced: false,
+        relativeFile: 'hosts/fixture-host/host.yaml',
+      });
+    }
+    return Response.json(currentDetail);
+  });
+  vi.stubGlobal('fetch', fetchFn);
+  return fetchFn;
+}
+
 class FakeEventSource {
   public static readonly instances: FakeEventSource[] = [];
   public static readonly OPEN = 1;
@@ -292,6 +324,81 @@ describe('GuestDetailPage', () => {
     expect(
       screen.getByRole('button', { name: 'Import to YAML' }),
     ).toBeDisabled();
+  });
+
+  it('ignores an orphan, records it in host.yaml and refreshes the detail', async () => {
+    installIgnoreApi();
+    const user = userEvent.setup();
+    renderDetail('/resources/fixture-host/212?type=vm');
+
+    await screen.findByText('Unmanaged guest (orphan)');
+    await user.click(screen.getByRole('button', { name: 'Ignore guest' }));
+    expect(
+      await screen.findByText(
+        /Ignored Unmanaged VM\. The identity is recorded/,
+      ),
+    ).toBeVisible();
+    expect(await screen.findByText('Ignored guest')).toBeVisible();
+    expect(screen.queryByText('Unmanaged guest (orphan)')).toBeNull();
+    expect(screen.getAllByText('Ignored')).toHaveLength(10);
+  });
+
+  it.each([
+    ['http', 'Unable to ignore this guest.'],
+    ['network', 'Unable to ignore this guest.'],
+    ['non-error', 'Unable to ignore this guest.'],
+  ] as const)('reports %s ignore failures', async (mode, message) => {
+    installIgnoreApi(mode);
+    const user = userEvent.setup();
+    renderDetail('/resources/fixture-host/212?type=vm');
+    await screen.findByText('Unmanaged guest (orphan)');
+    await user.click(screen.getByRole('button', { name: 'Ignore guest' }));
+    expect(await screen.findByText(message)).toBeVisible();
+  });
+
+  it('keeps the ignore action read-only for viewers', async () => {
+    installIgnoreApi();
+    renderDetail('/resources/fixture-host/212?type=vm', 'viewer');
+    await screen.findByText('Unmanaged guest (orphan)');
+    expect(screen.getByRole('button', { name: 'Ignore guest' })).toBeDisabled();
+  });
+
+  it('explains an already ignored guest and still allows importing it', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    FakeEventSource.instances.length = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>().mockImplementation(async (input) => {
+        const request = input as Request;
+        const path = new URL(request.url).pathname;
+        if (request.method === 'POST' && path === '/api/plans/guest-import') {
+          return Response.json({ id: 'plan-import' }, { status: 201 });
+        }
+        if (request.method === 'POST' && path.endsWith('/apply')) {
+          return Response.json(
+            {
+              plan: { id: 'plan-import', status: 'applying' },
+              job: { id: 'job-import' },
+            },
+            { status: 202 },
+          );
+        }
+        return Response.json(ignoredDetail);
+      }),
+    );
+    const user = userEvent.setup();
+    renderDetail('/resources/fixture-host/212?type=vm');
+
+    expect(await screen.findByText('Ignored guest')).toBeVisible();
+    expect(screen.getByText(/not reported as an orphan/)).toBeVisible();
+    const importButton = screen.getByRole('button', {
+      name: 'Import to YAML instead',
+    });
+    expect(importButton).toBeEnabled();
+    await user.click(importButton);
+    expect(
+      await screen.findByText(/Import queued as job job-import/),
+    ).toBeVisible();
   });
 
   it('opens the YAML editor, applies saved content, and keeps viewers read-only', async () => {

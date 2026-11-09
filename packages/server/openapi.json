@@ -2184,6 +2184,12 @@
                           "guestCount": {
                             "type": "number"
                           },
+                          "orphanCount": {
+                            "type": "number"
+                          },
+                          "ignoredCount": {
+                            "type": "number"
+                          },
                           "channels": {
                             "type": "object",
                             "properties": {
@@ -2241,6 +2247,8 @@
                           "name",
                           "status",
                           "guestCount",
+                          "orphanCount",
+                          "ignoredCount",
                           "channels",
                           "lastRefreshedAt"
                         ],
@@ -2356,6 +2364,33 @@
                                   }
                                 },
                                 "required": ["status"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "status": {
+                                    "type": "string",
+                                    "enum": ["ignored"]
+                                  },
+                                  "entry": {
+                                    "type": "object",
+                                    "properties": {
+                                      "vmid": {
+                                        "type": "number"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "fingerprint": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["vmid", "name"],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": ["status", "entry"],
                                 "additionalProperties": false
                               },
                               {
@@ -2539,6 +2574,17 @@
                             "status": {
                               "type": "string",
                               "enum": ["orphan"]
+                            }
+                          },
+                          "required": ["status"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": ["ignored"]
                             }
                           },
                           "required": ["status"],
@@ -2931,6 +2977,12 @@
                         "guestCount": {
                           "type": "number"
                         },
+                        "orphanCount": {
+                          "type": "number"
+                        },
+                        "ignoredCount": {
+                          "type": "number"
+                        },
                         "channels": {
                           "type": "object",
                           "properties": {
@@ -2988,6 +3040,8 @@
                         "name",
                         "status",
                         "guestCount",
+                        "orphanCount",
+                        "ignoredCount",
                         "channels",
                         "lastRefreshedAt"
                       ],
@@ -3001,6 +3055,157 @@
             }
           },
           "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/guests/{hostId}/{vmid}/ignore": {
+      "post": {
+        "summary": "Ignore an unmanaged guest by recording its identity in host.yaml",
+        "tags": ["Inventory"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dryRun": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "hostId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "vmid",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ignored": {
+                      "type": "boolean",
+                      "enum": [true]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["ignored"]
+                    },
+                    "dryRun": {
+                      "type": "boolean"
+                    },
+                    "changed": {
+                      "type": "boolean"
+                    },
+                    "replaced": {
+                      "type": "boolean"
+                    },
+                    "relativeFile": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ignored",
+                    "status",
+                    "dryRun",
+                    "changed",
+                    "replaced",
+                    "relativeFile"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
             "description": "Default Response",
             "content": {
               "application/json": {

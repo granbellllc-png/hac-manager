@@ -183,6 +183,38 @@ describe('ResourcesPage', () => {
     );
   });
 
+  it('distinguishes ignored guests from orphans and filters by configuration', async () => {
+    const ignoredGuest = {
+      ...fixtureGuests[1]!,
+      vmid: 312,
+      name: 'Ignored VM',
+      configuration: {
+        status: 'ignored' as const,
+        entry: {
+          vmid: 312,
+          name: 'Ignored VM',
+          fingerprint: 'a'.repeat(64),
+        },
+      },
+    };
+    installApi({ guests: [ignoredGuest] });
+    const user = userEvent.setup();
+    renderResources('/resources?configuration=ignored');
+
+    expect(
+      await screen.findByRole('heading', { name: 'Ignored VM' }),
+    ).toBeVisible();
+    const card = screen
+      .getByRole('heading', { name: 'Ignored VM' })
+      .closest('article');
+    expect(card).not.toBeNull();
+    expect(within(card!).getByText('Ignored')).toBeVisible();
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    await user.selectOptions(screen.getByLabelText('Configuration'), 'orphan');
+    expect(screen.getByText('No resources match')).toBeVisible();
+  });
+
   it('shows the empty state when filters or inventory have no matches', async () => {
     installApi({ guests: [] });
     renderResources();

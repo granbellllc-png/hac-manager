@@ -327,6 +327,7 @@ export async function buildApp(
   await app.register(inventoryModule, {
     inventoryService,
     hostRegistry,
+    repos: repositories,
     guestLifecycleService,
   });
   await app.register(driftModule, {

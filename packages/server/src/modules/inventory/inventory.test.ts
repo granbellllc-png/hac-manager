@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfig } from '../../config.js';
@@ -178,6 +178,8 @@ cpu: !expr "host.index + 1"
       expect(hostsJson.hosts[0].hostId).toBe('pve-01');
       expect(hostsJson.hosts[0].status).toBe('online');
       expect(hostsJson.hosts[0].guestCount).toBe(2);
+      expect(hostsJson.hosts[0].orphanCount).toBe(1);
+      expect(hostsJson.hosts[0].ignoredCount).toBe(0);
 
       // 2. GET /api/inventory/guests
       const guestsRes = await app.inject({
@@ -254,6 +256,10 @@ cpu: !expr "host.index + 1"
       });
       expect(hostRefreshRes.statusCode).toBe(200);
       expect(hostRefreshRes.json().host.hostId).toBe('pve-01');
+      expect(hostRefreshRes.json().host).toMatchObject({
+        orphanCount: 2,
+        ignoredCount: 0,
+      });
 
       // 7. POST /api/inventory/guests/:hostId/:vmid/import (dryRun)
       const dryImportRes = await app.inject({
@@ -303,6 +309,156 @@ cpu: !expr "host.index + 1"
       expect(bulkRes.statusCode).toBe(200);
       expect(bulkRes.json().results).toHaveLength(1);
       expect(bulkRes.json().results[0].vmid).toBe(112);
+
+      // 9. Ignore the unmanaged VM (212) and keep the entry in host.yaml.
+      const dryIgnore = await app.inject({
+        method: 'POST',
+        url: '/api/inventory/guests/pve-01/212/ignore',
+        headers: authHeaders,
+        payload: { dryRun: true },
+      });
+      expect(dryIgnore.statusCode).toBe(200);
+      expect(dryIgnore.json()).toMatchObject({
+        status: 'ignored',
+        dryRun: true,
+        changed: true,
+        relativeFile: 'hosts/pve-01/host.yaml',
+      });
+      expect(await readFile(join(h1Dir, 'host.yaml'), 'utf8')).not.toContain(
+        'ignored_guests',
+      );
+
+      const ignored = await app.inject({
+        method: 'POST',
+        url: '/api/inventory/guests/pve-01/212/ignore',
+        headers: authHeaders,
+        payload: {},
+      });
+      expect(ignored.statusCode).toBe(200);
+      expect(ignored.json()).toMatchObject({
+        status: 'ignored',
+        dryRun: false,
+        changed: true,
+        replaced: false,
+      });
+      const hostYaml = await readFile(join(h1Dir, 'host.yaml'), 'utf8');
+      expect(hostYaml).toContain('ignored_guests:');
+      expect(hostYaml).toContain('vmid: 212');
+      expect(hostYaml).toContain('name: homeassistant-vm');
+      expect(hostYaml).toContain('fingerprint:');
+
+      const repeated = await app.inject({
+        method: 'POST',
+        url: '/api/inventory/guests/pve-01/212/ignore',
+        headers: authHeaders,
+        payload: {},
+      });
+      expect(repeated.statusCode).toBe(200);
+      expect(repeated.json()).toMatchObject({
+        changed: false,
+        replaced: false,
+      });
+
+      const afterIgnore = await app.inject({
+        method: 'GET',
+        url: '/api/inventory/guests',
+        headers: authHeaders,
+      });
+      expect(afterIgnore.json().guests).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            vmid: 212,
+            configuration: expect.objectContaining({
+              status: 'ignored',
+              entry: expect.objectContaining({
+                vmid: 212,
+                name: 'homeassistant-vm',
+              }),
+            }),
+          }),
+        ]),
+      );
+
+      const ignoredDetail = await app.inject({
+        method: 'GET',
+        url: '/api/inventory/guests/pve-01/212',
+        headers: authHeaders,
+      });
+      expect(ignoredDetail.statusCode).toBe(200);
+      expect(ignoredDetail.json().configuration).toEqual({
+        status: 'ignored',
+      });
+
+      const afterIgnoreHost = await app.inject({
+        method: 'POST',
+        url: '/api/inventory/hosts/pve-01/refresh',
+        headers: authHeaders,
+      });
+      expect(afterIgnoreHost.json().host).toMatchObject({
+        orphanCount: 0,
+        ignoredCount: 1,
+      });
+
+      expect(
+        await repositories.auditLogs.search({ action: 'orphan.ignore' }),
+      ).toMatchObject({
+        total: 1,
+        items: [
+          expect.objectContaining({
+            hostId: 'pve-01',
+            vmid: 212,
+            reason: 'orphan_action',
+          }),
+        ],
+      });
+
+      // A reused VMID with a different identity surfaces as an orphan again.
+      const stale = hostYaml.replace(
+        /fingerprint: [0-9a-f]+/,
+        `fingerprint: ${'0'.repeat(64)}`,
+      );
+      await writeFile(join(h1Dir, 'host.yaml'), stale, 'utf8');
+      const staleList = await app.inject({
+        method: 'GET',
+        url: '/api/inventory/guests',
+        headers: authHeaders,
+      });
+      expect(staleList.json().guests).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            vmid: 212,
+            configuration: { status: 'orphan' },
+          }),
+        ]),
+      );
+      const replaced = await app.inject({
+        method: 'POST',
+        url: '/api/inventory/guests/pve-01/212/ignore',
+        headers: authHeaders,
+        payload: {},
+      });
+      expect(replaced.statusCode).toBe(200);
+      expect(replaced.json()).toMatchObject({
+        changed: true,
+        replaced: true,
+      });
+
+      // A configured guest cannot be ignored.
+      const configuredIgnore = await app.inject({
+        method: 'POST',
+        url: '/api/inventory/guests/pve-01/112/ignore',
+        headers: authHeaders,
+        payload: { dryRun: true },
+      });
+      expect(configuredIgnore.statusCode).toBe(409);
+
+      const deniedHost = await app.inject({
+        method: 'POST',
+        url: '/api/inventory/guests/other-host/212/ignore',
+        headers: authHeaders,
+        payload: { dryRun: true },
+      });
+      expect(deniedHost.statusCode).toBe(403);
     } finally {
       await app.close();
       await rm(tempDir, { recursive: true, force: true });

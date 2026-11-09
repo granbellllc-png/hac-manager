@@ -33,6 +33,8 @@ const mockInventoryHostsData = {
       name: 'Proxmox Main',
       status: 'online',
       guestCount: 3,
+      orphanCount: 1,
+      ignoredCount: 1,
       channels: {
         ssh: { ok: true, status: 'connected' },
         api: { ok: true, status: 'connected' },
@@ -182,6 +184,14 @@ describe('Hosts UI components', () => {
     expect(screen.getByText('idx:1')).toBeInTheDocument();
     expect(screen.getByText('Live Guests:')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '1 live guest has no YAML definition.',
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '1 guest is already ignored in host.yaml.',
+    );
+    expect(screen.getByText('· 1 orphan')).toBeInTheDocument();
+    expect(screen.getByText('· 1 ignored')).toBeInTheDocument();
 
     // Toggle add host guidance
     const addHostBtn = screen.getByRole('button', { name: /Add Host/i });

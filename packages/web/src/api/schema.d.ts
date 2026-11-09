@@ -1168,6 +1168,8 @@ export interface paths {
                                 /** @enum {string} */
                                 status: "online" | "offline" | "degraded" | "error";
                                 guestCount: number;
+                                orphanCount: number;
+                                ignoredCount: number;
                                 channels: {
                                     ssh: {
                                         ok: boolean;
@@ -1244,6 +1246,14 @@ export interface paths {
                                 configuration: {
                                     /** @enum {string} */
                                     status: "orphan";
+                                } | {
+                                    /** @enum {string} */
+                                    status: "ignored";
+                                    entry: {
+                                        vmid: number;
+                                        name: string;
+                                        fingerprint?: string;
+                                    };
                                 } | {
                                     /** @enum {string} */
                                     status: "configured";
@@ -1330,6 +1340,9 @@ export interface paths {
                             configuration: {
                                 /** @enum {string} */
                                 status: "orphan";
+                            } | {
+                                /** @enum {string} */
+                                status: "ignored";
                             } | {
                                 /** @enum {string} */
                                 status: "configured";
@@ -1561,6 +1574,8 @@ export interface paths {
                                 /** @enum {string} */
                                 status: "online" | "offline" | "degraded" | "error";
                                 guestCount: number;
+                                orphanCount: number;
+                                ignoredCount: number;
                                 channels: {
                                     ssh: {
                                         ok: boolean;
@@ -1583,6 +1598,99 @@ export interface paths {
                 };
                 /** @description Default Response */
                 403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventory/guests/{hostId}/{vmid}/ignore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ignore an unmanaged guest by recording its identity in host.yaml */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    hostId: string;
+                    vmid: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        dryRun?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {boolean} */
+                            ignored: true;
+                            /** @enum {string} */
+                            status: "ignored";
+                            dryRun: boolean;
+                            changed: boolean;
+                            replaced: boolean;
+                            relativeFile: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };

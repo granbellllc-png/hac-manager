@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Clock3,
   Cpu,
+  EyeOff,
   FileCode2,
   MemoryStick,
   ShieldAlert,
@@ -74,6 +75,9 @@ export function GuestDetailPage() {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importFeedback, setImportFeedback] = useState<string | null>(null);
+  const [ignoring, setIgnoring] = useState(false);
+  const [ignoreError, setIgnoreError] = useState<string | null>(null);
+  const [ignoreFeedback, setIgnoreFeedback] = useState<string | null>(null);
   const { user } = useAuth();
   const vmid = Number(vmidParam);
   const type = searchParams.get('type');
@@ -158,6 +162,41 @@ export function GuestDetailPage() {
       setImportError('Unable to import this guest.');
     } finally {
       setImporting(false);
+    }
+  };
+
+  const ignoreOrphan = async () => {
+    if (!detail) return;
+    setIgnoring(true);
+    setIgnoreError(null);
+    setIgnoreFeedback(null);
+    try {
+      const result = await apiClient.POST(
+        '/api/inventory/guests/{hostId}/{vmid}/ignore',
+        {
+          params: {
+            path: {
+              hostId: detail.summary.hostId,
+              vmid: detail.summary.vmid,
+            },
+          },
+          body: {},
+        },
+      );
+      if (result.error || !result.data) {
+        setIgnoreError('Unable to ignore this guest.');
+        return;
+      }
+      setIgnoreFeedback(
+        result.data.changed
+          ? `Ignored ${detail.summary.name}. The identity is recorded in ${result.data.relativeFile}.`
+          : `${detail.summary.name} was already ignored.`,
+      );
+      await loadDetail(true);
+    } catch {
+      setIgnoreError('Unable to ignore this guest.');
+    } finally {
+      setIgnoring(false);
     }
   };
 
@@ -274,6 +313,24 @@ export function GuestDetailPage() {
         </div>
       )}
 
+      {ignoreError && (
+        <p
+          role="alert"
+          className="rounded-md border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-700 dark:text-rose-300"
+        >
+          {ignoreError}
+        </p>
+      )}
+
+      {ignoreFeedback && (
+        <p
+          role="status"
+          className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300"
+        >
+          {ignoreFeedback}
+        </p>
+      )}
+
       {configured.status === 'orphan' && (
         <div
           role="alert"
@@ -292,7 +349,7 @@ export function GuestDetailPage() {
               </p>
             </div>
           </div>
-          <div>
+          <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
               disabled={importing || user?.role === 'viewer'}
@@ -305,6 +362,74 @@ export function GuestDetailPage() {
             >
               <FileCode2 aria-hidden className="h-4 w-4" />
               {importing ? 'Importing…' : 'Import to YAML'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={ignoring || user?.role === 'viewer'}
+              title={
+                user?.role === 'viewer'
+                  ? 'Viewers have read-only access'
+                  : 'Record this guest identity in host.yaml so it is no longer reported as an orphan'
+              }
+              onClick={() => void ignoreOrphan()}
+            >
+              <EyeOff aria-hidden className="h-4 w-4" />
+              {ignoring ? 'Ignoring…' : 'Ignore guest'}
+            </Button>
+          </div>
+          {importError && (
+            <p
+              role="alert"
+              className="rounded-md border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-700 dark:text-rose-300"
+            >
+              {importError}
+            </p>
+          )}
+          {importFeedback && (
+            <p
+              role="status"
+              className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300"
+            >
+              {importFeedback}
+            </p>
+          )}
+        </div>
+      )}
+
+      {configured.status === 'ignored' && (
+        <div
+          role="status"
+          className="flex flex-col gap-3 rounded-md border border-sky-500/30 bg-sky-500/10 p-4"
+        >
+          <div className="flex gap-3">
+            <EyeOff
+              aria-hidden
+              className="mt-0.5 h-5 w-5 shrink-0 text-sky-600 dark:text-sky-400"
+            />
+            <div className="min-w-0">
+              <h2 className="font-semibold">Ignored guest</h2>
+              <p className="text-sm text-muted-foreground">
+                This guest is listed in <code>ignored_guests</code> in
+                host.yaml, so it is not reported as an orphan. If the VMID is
+                reused by a different guest, it will surface again
+                automatically.
+              </p>
+            </div>
+          </div>
+          <div>
+            <Button
+              size="sm"
+              disabled={importing || user?.role === 'viewer'}
+              title={
+                user?.role === 'viewer'
+                  ? 'Viewers have read-only access'
+                  : 'Create deployment YAML from this live guest'
+              }
+              onClick={() => void importOrphan()}
+            >
+              <FileCode2 aria-hidden className="h-4 w-4" />
+              {importing ? 'Importing…' : 'Import to YAML instead'}
             </Button>
           </div>
           {importError && (
@@ -377,7 +502,9 @@ export function GuestDetailPage() {
                 <dd className="mt-1 break-words font-mono text-xs">
                   {configured.status === 'configured'
                     ? formatGuestConfigValue(configuredValue)
-                    : 'No YAML'}
+                    : configured.status === 'ignored'
+                      ? 'Ignored'
+                      : 'No YAML'}
                 </dd>
               </div>
             </dl>
@@ -402,7 +529,9 @@ export function GuestDetailPage() {
                   <td className="px-4 py-3 font-mono text-xs">
                     {configured.status === 'configured'
                       ? formatGuestConfigValue(configuredValue)
-                      : 'No YAML'}
+                      : configured.status === 'ignored'
+                        ? 'Ignored'
+                        : 'No YAML'}
                   </td>
                 </tr>
               ))}

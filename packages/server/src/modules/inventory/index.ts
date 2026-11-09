@@ -3,24 +3,31 @@ import { z } from 'zod';
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import {
-  planGuestImport,
+  addIgnoredGuest,
   applyGuestImport,
   deploymentDefaultsFileSchema,
+  ignoredGuestFingerprint,
+  isIgnoredGuest,
   loadYamlDocument,
+  planGuestImport,
+  sanitizeAuditPayload,
 } from '@hacm/core';
+import type { DatabaseRepositories } from '../../db/repositories/types.js';
 import type { LiveInventoryService } from '../../inventory/service.js';
+import type { LiveGuestSummary } from '../../inventory/types.js';
 import type { HostRegistry } from '../../hosts/registry.js';
 import {
-  getConfiguredGuestFromIndex,
-  indexConfiguredGuests,
-  readGuestConfiguration,
-} from '../../inventory/configuration.js';
+  classifyGuests,
+  type GuestConfigurationClassification,
+} from '../../inventory/classification.js';
+import { readGuestConfiguration } from '../../inventory/configuration.js';
 import type { GuestLifecycleService } from '../../guests/service.js';
 import { GuestStateUnavailableError } from '../../guests/types.js';
 
 export interface InventoryModuleOptions {
   readonly inventoryService: LiveInventoryService;
   readonly hostRegistry: HostRegistry;
+  readonly repos: DatabaseRepositories;
   readonly guestLifecycleService?: GuestLifecycleService | undefined;
 }
 
@@ -47,9 +54,19 @@ const liveGuestSummarySchema = z.object({
   tags: z.array(z.string()).readonly().optional(),
 });
 
+const ignoredGuestEntrySchema = z.object({
+  vmid: z.number(),
+  name: z.string(),
+  fingerprint: z.string().optional(),
+});
+
 const resourceGuestSummarySchema = liveGuestSummarySchema.extend({
   configuration: z.discriminatedUnion('status', [
     z.object({ status: z.literal('orphan') }),
+    z.object({
+      status: z.literal('ignored'),
+      entry: ignoredGuestEntrySchema,
+    }),
     z.object({
       status: z.literal('configured'),
       relativePath: z.string(),
@@ -59,6 +76,7 @@ const resourceGuestSummarySchema = liveGuestSummarySchema.extend({
 
 const guestConfigurationDetailSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('orphan') }),
+  z.object({ status: z.literal('ignored') }),
   z.object({
     status: z.literal('configured'),
     relativePath: z.string(),
@@ -80,6 +98,8 @@ const hostInventorySummarySchema = z.object({
   name: z.string(),
   status: z.enum(['online', 'offline', 'degraded', 'error']),
   guestCount: z.number(),
+  orphanCount: z.number(),
+  ignoredCount: z.number(),
   channels: z.object({
     ssh: channelHealthSchema,
     api: channelHealthSchema,
@@ -88,10 +108,62 @@ const hostInventorySummarySchema = z.object({
   error: z.string().optional(),
 });
 
+function configurationPayload(configuration: GuestConfigurationClassification):
+  | { status: 'configured'; relativePath: string }
+  | { status: 'orphan' }
+  | {
+      status: 'ignored';
+      entry: { vmid: number; name: string; fingerprint?: string };
+    } {
+  if (configuration.status === 'configured') {
+    return {
+      status: 'configured',
+      relativePath: configuration.relativePath,
+    };
+  }
+  if (configuration.status === 'ignored') {
+    return {
+      status: 'ignored',
+      entry: {
+        vmid: configuration.entry.vmid,
+        name: configuration.entry.name,
+        ...(configuration.entry.fingerprint
+          ? { fingerprint: configuration.entry.fingerprint }
+          : {}),
+      },
+    };
+  }
+  return { status: 'orphan' };
+}
+
+function identityFor(guest: LiveGuestSummary) {
+  return {
+    vmid: guest.vmid,
+    name: guest.name,
+    type: guest.type,
+    node: guest.node,
+  };
+}
+
+async function countsFor(
+  dataDir: string,
+  guests: readonly LiveGuestSummary[],
+): Promise<{ orphanCount: number; ignoredCount: number }> {
+  const classified = await classifyGuests(dataDir, guests);
+  return {
+    orphanCount: classified.filter(
+      (entry) => entry.configuration.status === 'orphan',
+    ).length,
+    ignoredCount: classified.filter(
+      (entry) => entry.configuration.status === 'ignored',
+    ).length,
+  };
+}
+
 export const inventoryModule: FastifyPluginAsyncZod<
   InventoryModuleOptions
 > = async (app, options) => {
-  const { inventoryService, hostRegistry } = options;
+  const { inventoryService, hostRegistry, repos } = options;
 
   app.get(
     '/api/inventory/hosts',
@@ -111,17 +183,33 @@ export const inventoryModule: FastifyPluginAsyncZod<
       const allowedIds = new Set(allowedHosts.map((h) => h.id));
 
       const allInventories = await inventoryService.getAllInventories();
-      const hosts = allInventories
-        .filter((inv) => allowedIds.has(inv.hostId))
-        .map((inv) => ({
+      const visible = allInventories.filter((inv) =>
+        allowedIds.has(inv.hostId),
+      );
+      const classified = await classifyGuests(
+        hostRegistry.dataDir,
+        visible.flatMap((inv) => inv.guests),
+      );
+      const hosts = visible.map((inv) => {
+        const own = classified.filter(
+          (entry) => entry.guest.hostId === inv.hostId,
+        );
+        return {
           hostId: inv.hostId,
           name: inv.name,
           status: inv.status,
           guestCount: inv.guests.length,
+          orphanCount: own.filter(
+            (entry) => entry.configuration.status === 'orphan',
+          ).length,
+          ignoredCount: own.filter(
+            (entry) => entry.configuration.status === 'ignored',
+          ).length,
           channels: inv.channels,
           lastRefreshedAt: inv.lastRefreshedAt,
           ...(inv.error ? { error: inv.error } : {}),
-        }));
+        };
+      });
 
       return { hosts };
     },
@@ -169,27 +257,12 @@ export const inventoryModule: FastifyPluginAsyncZod<
         ...(status ? { status } : {}),
       });
 
-      const configuredGuests = await indexConfiguredGuests(
-        hostRegistry.dataDir,
-      );
-      const filteredGuests = guests
-        .filter((g) => allowedIds.has(g.hostId))
-        .map((guest) => {
-          const configured = getConfiguredGuestFromIndex(
-            configuredGuests,
-            guest.hostId,
-            guest.vmid,
-          );
-          return {
-            ...guest,
-            configuration: configured
-              ? {
-                  status: 'configured' as const,
-                  relativePath: configured.relativePath,
-                }
-              : { status: 'orphan' as const },
-          };
-        });
+      const visible = guests.filter((guest) => allowedIds.has(guest.hostId));
+      const classified = await classifyGuests(hostRegistry.dataDir, visible);
+      const filteredGuests = classified.map(({ guest, configuration }) => ({
+        ...guest,
+        configuration: configurationPayload(configuration),
+      }));
 
       return { guests: filteredGuests };
     },
@@ -253,6 +326,14 @@ export const inventoryModule: FastifyPluginAsyncZod<
           hostId,
           vmid,
         );
+        const ignored =
+          configuration.status === 'orphan' &&
+          (await isIgnoredGuest(
+            hostRegistry.dataDir,
+            hostId,
+            vmid,
+            identityFor(detail.summary),
+          ));
         return {
           summary: detail.summary,
           rawConfig: detail.rawConfig,
@@ -272,7 +353,9 @@ export const inventoryModule: FastifyPluginAsyncZod<
                       }
                     : {}),
                 }
-              : configuration,
+              : ignored
+                ? { status: 'ignored' as const }
+                : configuration,
         };
       } catch (err) {
         return reply.code(404).send({
@@ -456,17 +539,179 @@ export const inventoryModule: FastifyPluginAsyncZod<
       }
 
       const inv = await inventoryService.getHostInventory(hostId, true);
+      const counts = await countsFor(hostRegistry.dataDir, inv.guests);
       return {
         host: {
           hostId: inv.hostId,
           name: inv.name,
           status: inv.status,
           guestCount: inv.guests.length,
+          ...counts,
           channels: inv.channels,
           lastRefreshedAt: inv.lastRefreshedAt,
           ...(inv.error ? { error: inv.error } : {}),
         },
       };
+    },
+  );
+
+  app.post(
+    '/api/inventory/guests/:hostId/:vmid/ignore',
+    {
+      schema: {
+        tags: ['Inventory'],
+        summary:
+          'Ignore an unmanaged guest by recording its identity in host.yaml',
+        params: z.object({
+          hostId: z.string(),
+          vmid: z.coerce.number(),
+        }),
+        body: z
+          .object({
+            dryRun: z.boolean().optional(),
+          })
+          .optional(),
+        response: {
+          200: z.object({
+            ignored: z.literal(true),
+            status: z.literal('ignored'),
+            dryRun: z.boolean(),
+            changed: z.boolean(),
+            replaced: z.boolean(),
+            relativeFile: z.string(),
+          }),
+          403: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          404: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          409: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const { hostId, vmid } = request.params;
+      const dryRun = request.body?.dryRun ?? false;
+      if (request.user?.role === 'viewer' && !dryRun) {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: 'Viewer role cannot ignore guests without dryRun: true',
+        });
+      }
+
+      const allowedHosts = await hostRegistry.listHosts(request.user);
+      if (!allowedHosts.some((host) => host.id === hostId)) {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: `Access denied to host '${hostId}'`,
+        });
+      }
+
+      const relativeFile = `hosts/${hostId}/host.yaml`;
+      try {
+        const detail = await inventoryService.getGuestLiveConfig(hostId, vmid);
+        const configuration = await readGuestConfiguration(
+          hostRegistry.dataDir,
+          hostId,
+          vmid,
+        );
+        if (configuration.status === 'configured') {
+          return reply.code(409).send({
+            statusCode: 409,
+            error: 'Conflict',
+            message: `Guest ${vmid} already has deployment YAML`,
+          });
+        }
+
+        const identity = identityFor(detail.summary);
+        if (dryRun) {
+          const already = await isIgnoredGuest(
+            hostRegistry.dataDir,
+            hostId,
+            vmid,
+            identity,
+          );
+          return {
+            ignored: true as const,
+            status: 'ignored' as const,
+            dryRun: true,
+            changed: !already,
+            replaced: false,
+            relativeFile,
+          };
+        }
+
+        const result = await addIgnoredGuest(
+          hostRegistry.dataDir,
+          hostId,
+          identity,
+        );
+        if (!result.ignored) {
+          if (result.reason === 'host_file_missing') {
+            return reply.code(404).send({
+              statusCode: 404,
+              error: 'Not Found',
+              message: `Host '${hostId}' has no host.yaml`,
+            });
+          }
+          return reply.code(409).send({
+            statusCode: 409,
+            error: 'Conflict',
+            message:
+              'The ignored_guests list is provided by !include; edit the included file instead',
+          });
+        }
+
+        if (result.changed) {
+          await repos.auditLogs.append({
+            userId: request.user?.id,
+            username: request.user?.username,
+            hostId,
+            vmid,
+            action: 'orphan.ignore',
+            reason: 'orphan_action',
+            diff: sanitizeAuditPayload({
+              identity,
+              fingerprint: ignoredGuestFingerprint(identity),
+              replaced: result.replaced,
+            }),
+            metadata: { relativeFile },
+          });
+        }
+
+        return {
+          ignored: true as const,
+          status: 'ignored' as const,
+          dryRun: false,
+          changed: result.changed,
+          replaced: result.replaced,
+          relativeFile,
+        };
+      } catch (error) {
+        if (error instanceof GuestStateUnavailableError) {
+          return reply.code(409).send({
+            statusCode: 409,
+            error: 'Conflict',
+            message: error.message,
+          });
+        }
+        return reply.code(404).send({
+          statusCode: 404,
+          error: 'Not Found',
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
     },
   );
 
