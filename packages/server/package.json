@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run",
-    "dev": "tsx watch --env-file-if-exists=../../.env scripts/dev.ts",
+    "dev": "pnpm --filter @hacm/core build && tsx watch --env-file-if-exists=../../.env scripts/dev.ts",
     "start": "node --env-file-if-exists=../../.env bin/server.mjs",
     "openapi:generate": "tsx scripts/openapi.ts"
   },
