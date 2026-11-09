@@ -3085,6 +3085,532 @@
         }
       }
     },
+    "/api/config/schema/deployment": {
+      "get": {
+        "summary": "Get the deployment editor JSON Schema",
+        "tags": ["Configuration"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schema": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": ["schema"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/config/guests/{hostId}/{vmid}/validate": {
+      "post": {
+        "summary": "Validate proposed guest deployment YAML",
+        "tags": ["Configuration"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rawYaml": {
+                    "type": "string",
+                    "maxLength": 1048576
+                  }
+                },
+                "required": ["rawYaml"]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "hostId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "vmid",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "valid": {
+                      "type": "boolean"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message", "code"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "adminOnly": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": ["tasks", "cmd", "include", "installation_url"]
+                      }
+                    },
+                    "requiresAdmin": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["valid", "issues", "adminOnly", "requiresAdmin"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message", "code"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "adminOnly": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": ["tasks", "cmd", "include", "installation_url"]
+                      }
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message", "code"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "adminOnly": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": ["tasks", "cmd", "include", "installation_url"]
+                      }
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/config/guests/{hostId}/{vmid}": {
+      "put": {
+        "summary": "Safely save guest deployment YAML",
+        "tags": ["Configuration"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rawYaml": {
+                    "type": "string",
+                    "maxLength": 1048576
+                  },
+                  "expectedHash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "dryRun": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["rawYaml", "expectedHash"]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "hostId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "vmid",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [true]
+                    },
+                    "dryRun": {
+                      "type": "boolean"
+                    },
+                    "rawYaml": {
+                      "type": "string"
+                    },
+                    "hash": {
+                      "type": "string"
+                    },
+                    "config": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message", "code"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "dryRun",
+                    "rawYaml",
+                    "hash",
+                    "config",
+                    "issues"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message", "code"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "adminOnly": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": ["tasks", "cmd", "include", "installation_url"]
+                      }
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message", "code"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "adminOnly": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": ["tasks", "cmd", "include", "installation_url"]
+                      }
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message", "code"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "adminOnly": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": ["tasks", "cmd", "include", "installation_url"]
+                      }
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "message", "code"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "adminOnly": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": ["tasks", "cmd", "include", "installation_url"]
+                      }
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/status": {
       "get": {
         "tags": ["auth"],

@@ -82,6 +82,32 @@ test('browses resources and preserves YAML comments and tags', async ({
   const yaml = page.getByLabel('Example LXC deployment YAML');
   await expect(yaml).toContainText('Fixture comment must remain visible');
   await expect(yaml).toContainText('host.index + 1');
+  await page.getByRole('button', { name: 'Edit YAML' }).click();
+  const editor = page.getByLabel('Example LXC editable deployment YAML');
+  await expect(editor).toBeVisible();
+  await editor.fill(`# Fixture comment must remain visible
+schema_version: 1
+id: 112
+name: Example LXC
+type: lxc
+cpu: !expr "host.index + 1"
+ram: 2048
+`);
+  await page.getByRole('button', { name: 'Review changes' }).click();
+  await expect(page.getByText('Diff preview')).toBeVisible();
+  await expect(page.getByTestId('yaml-diff')).toContainText('ram: 2048');
+  await page.screenshot({
+    path: testInfo.outputPath('yaml-editor-review.png'),
+    fullPage: true,
+  });
+  await page.getByRole('button', { name: 'Save YAML' }).click();
+  await expect(
+    page.getByText('YAML saved with its comments intact.'),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel editing' }).click();
+  await expect(page.getByLabel('Example LXC deployment YAML')).toContainText(
+    'ram: 2048',
+  );
   await page.screenshot({
     path: testInfo.outputPath('guest-detail.png'),
     fullPage: true,

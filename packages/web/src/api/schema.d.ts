@@ -1653,6 +1653,275 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/config/schema/deployment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the deployment editor JSON Schema */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            schema: {
+                                [key: string]: unknown;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/config/guests/{hostId}/{vmid}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate proposed guest deployment YAML */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    hostId: string;
+                    vmid: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        rawYaml: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            valid: boolean;
+                            issues: {
+                                path: string;
+                                message: string;
+                                code: string;
+                            }[];
+                            adminOnly: ("tasks" | "cmd" | "include" | "installation_url")[];
+                            requiresAdmin: boolean;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            issues?: {
+                                path: string;
+                                message: string;
+                                code: string;
+                            }[];
+                            adminOnly?: ("tasks" | "cmd" | "include" | "installation_url")[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            issues?: {
+                                path: string;
+                                message: string;
+                                code: string;
+                            }[];
+                            adminOnly?: ("tasks" | "cmd" | "include" | "installation_url")[];
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/config/guests/{hostId}/{vmid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Safely save guest deployment YAML */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    hostId: string;
+                    vmid: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        rawYaml: string;
+                        expectedHash: string;
+                        dryRun?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {boolean} */
+                            success: true;
+                            dryRun: boolean;
+                            rawYaml: string;
+                            hash: string;
+                            config: {
+                                [key: string]: unknown;
+                            };
+                            issues: {
+                                path: string;
+                                message: string;
+                                code: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            issues?: {
+                                path: string;
+                                message: string;
+                                code: string;
+                            }[];
+                            adminOnly?: ("tasks" | "cmd" | "include" | "installation_url")[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            issues?: {
+                                path: string;
+                                message: string;
+                                code: string;
+                            }[];
+                            adminOnly?: ("tasks" | "cmd" | "include" | "installation_url")[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            issues?: {
+                                path: string;
+                                message: string;
+                                code: string;
+                            }[];
+                            adminOnly?: ("tasks" | "cmd" | "include" | "installation_url")[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            issues?: {
+                                path: string;
+                                message: string;
+                                code: string;
+                            }[];
+                            adminOnly?: ("tasks" | "cmd" | "include" | "installation_url")[];
+                        };
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/status": {
         parameters: {
             query?: never;

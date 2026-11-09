@@ -6,9 +6,9 @@ This document tracks progress on the autonomous implementation of HAC Manager (H
 
 ---
 
-## Batch Status: Issues #24 – #34
+## Batch Status: Issues #24 – #34 (Complete)
 
-### Completed Issues (9 Commits in this batch)
+### Completed Issues
 
 | Issue   | Title                                         | Commit    | Summary                                                                                                                                                                                                                                                                    |
 | ------- | --------------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -21,31 +21,10 @@ This document tracks progress on the autonomous implementation of HAC Manager (H
 | **#30** | Live inventory service                        | `f271f6f` | Built `LiveInventoryService` with TTL cache, change events (`InventoryChangeEvent`), multi-host failure isolation, and REST endpoints (`GET /api/inventory/hosts`, `GET /api/inventory/guests`, `GET /api/inventory/guests/:hostId/:vmid`, `POST /api/inventory/refresh`). |
 | **#31** | Import live guests into YAML deployment files | `33ac77a` | Implemented `generateDeploymentYaml`, `planGuestImport`, `applyGuestImport` with default value omission, write-guard conflict detection, CLI command `hacm import`, and REST endpoints (`POST /api/inventory/guests/:hostId/:vmid/import`, `POST /api/inventory/import`).  |
 | **#32** | UI: Hosts overview and host detail            | `26dc92c` | Built `HostsPage` (`/`) and `HostDetailPage` (`/hosts/:id`) with health badges, per-channel status breakdown (SSH/API), latency metrics, cluster membership warnings, storage pool tables, installed tools grids, and YAML add-host guidance.                              |
+| **#33** | UI: Resources list and guest detail           | `86cd335` | Added responsive host/type/status/configuration filtering, paginated 100+ guest browsing, orphan indicators, live-versus-YAML detail, and byte-preserving read-only CodeMirror views.                                                                                      |
+| **#34** | UI: Safe YAML editor                          | —         | Added JSON Schema autocomplete, live validation, diff review, dry-run preflight, CST/write-guard saves, conflict reporting, hash-only audit entries, and admin-only enforcement for execution surfaces.                                                                    |
 
 ---
-
-### Remaining Issues in Current Target
-
-#### 1. Issue #33: UI: Resources list and guest detail (live + YAML)
-
-- **Target Areas:** `packages/web`, `packages/server`
-- **Depends On:** #30 (Live inventory service), #5 (Config schema)
-- **Scope:**
-  - Build Resources/Guests overview page listing all guests across hosts with search & filters (Host, LXC/VM, Running/Stopped, Drift status).
-  - Build Guest Detail page showing live status summary (CPU, RAM, disk, IP, uptime) and live configuration.
-  - Read-only CodeMirror 6 YAML view of the guest configuration.
-  - "Import to YAML" button triggering live import plan and apply when guest is unmanaged or drifted.
-  - Wire navigation routes in `packages/web/src/App.tsx`.
-
-#### 2. Issue #34: UI: YAML editor with schema validation and safe save
-
-- **Target Areas:** `packages/web`, `packages/server`, `packages/core`
-- **Depends On:** #33, #6 (YAML CST engine), #8 (Write guard)
-- **Scope:**
-  - CodeMirror 6 YAML editor with real-time schema validation (zod -> json-schema -> linter) and autocomplete.
-  - Diff preview before save comparing live CST modifications against file on disk.
-  - Server-side validate and safe save through CST layer with write guard (hash check).
-  - Admin-only enforcement for dangerous fields: tasks, `!cmd`, `!include`, `installation.url`.
 
 ---
 
@@ -82,8 +61,12 @@ This runs Fastify API (`http://localhost:3000`) and Vite React SPA (`http://loca
 All checks pass locally before push:
 
 ```bash
-pnpm lint       # ESLint with 0 warnings
-pnpm typecheck  # TypeScript strict type checking across all workspaces
-pnpm test       # Vitest across all 4 packages (core, server, cli, web - 376 tests passing)
-pnpm build      # tsc -b and Vite production bundle build
+pnpm format:check   # Prettier verification
+pnpm lint           # ESLint with 0 warnings
+pnpm typecheck      # TypeScript strict type checking across all workspaces
+pnpm test           # Vitest across all packages (698 tests passing)
+pnpm test:coverage  # Per-file 90% thresholds
+pnpm audit          # Dependency vulnerability check
+pnpm build          # tsc -b and Vite production bundle build
+pnpm --filter web e2e # Playwright at 360px and 1440px
 ```

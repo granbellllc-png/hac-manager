@@ -14,6 +14,7 @@ export async function installFixtureApi(
 ) {
   let authenticated = mode === 'authenticated';
   let setupNeeded = mode === 'setup';
+  let guestDetail = structuredClone(fixtureGuestDetail);
   const user = {
     id: 'fixture-user',
     username: 'fixture-user',
@@ -57,8 +58,76 @@ export async function installFixtureApi(
         ],
       };
     else if (path === '/api/inventory/guests') body = { guests: fixtureGuests };
-    else if (path === '/api/inventory/guests/fixture-host/112')
-      body = fixtureGuestDetail;
+    else if (path === '/api/config/schema/deployment')
+      body = {
+        schema: {
+          oneOf: [
+            {
+              properties: {
+                schema_version: { description: 'Schema version' },
+                id: { description: 'VMID' },
+                name: { description: 'Guest name' },
+                type: { description: 'Guest type' },
+                cpu: { description: 'CPU cores' },
+                ram: { description: 'Memory in MB' },
+              },
+            },
+          ],
+        },
+      };
+    else if (path.endsWith('/validate'))
+      body = {
+        valid: true,
+        issues: [],
+        adminOnly: [],
+        requiresAdmin: false,
+      };
+    else if (
+      path === '/api/config/guests/fixture-host/112' &&
+      request.method() === 'PUT'
+    ) {
+      const payload = request.postDataJSON() as {
+        rawYaml: string;
+        dryRun?: boolean;
+      };
+      if (payload.dryRun) {
+        body = {
+          success: true,
+          dryRun: true,
+          rawYaml: payload.rawYaml,
+          hash: guestDetail.configuration.hash,
+          config: guestDetail.configuration.config,
+          issues: [],
+        };
+        await route.fulfill({
+          status,
+          contentType: 'application/json',
+          body: JSON.stringify(body),
+        });
+        return;
+      }
+      guestDetail = {
+        ...guestDetail,
+        configuration: {
+          ...guestDetail.configuration,
+          rawYaml: payload.rawYaml,
+          hash: 'b'.repeat(64),
+          config: {
+            ...guestDetail.configuration.config,
+            ram: 2048,
+          },
+        },
+      };
+      body = {
+        success: true,
+        dryRun: false,
+        rawYaml: payload.rawYaml,
+        hash: guestDetail.configuration.hash,
+        config: guestDetail.configuration.config,
+        issues: [],
+      };
+    } else if (path === '/api/inventory/guests/fixture-host/112')
+      body = guestDetail;
     else if (path.endsWith('/test-connection'))
       body = {
         ok: true,

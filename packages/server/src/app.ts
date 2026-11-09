@@ -18,6 +18,7 @@ import { usersModule } from './modules/users/index.js';
 import { auditModule } from './modules/audit/index.js';
 import { hostsModule } from './modules/hosts/index.js';
 import { inventoryModule } from './modules/inventory/index.js';
+import { configEditorModule } from './modules/config-editor/index.js';
 import { HostRegistry } from './hosts/registry.js';
 import { ConnectionManager } from './router/manager.js';
 import { LiveInventoryService } from './inventory/service.js';
@@ -220,6 +221,10 @@ export async function buildApp(
   await app.register(inventoryModule, {
     inventoryService,
     hostRegistry,
+  });
+  await app.register(configEditorModule, {
+    hostRegistry,
+    repos: repositories,
   });
 
   await app.register(authModule, {

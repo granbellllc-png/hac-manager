@@ -14,6 +14,11 @@ import { apiClient } from '../api/client';
 import type { paths } from '../api/schema';
 import { Button } from '../components/ui/button';
 import { YamlCodeViewer } from '../components/yaml-code-viewer';
+import {
+  GuestYamlEditor,
+  type GuestYamlSnapshot,
+} from '../components/guest-yaml-editor';
+import { useAuth } from '../auth/auth-context';
 
 type GuestDetail =
   paths['/api/inventory/guests/{hostId}/{vmid}']['get']['responses']['200']['content']['application/json'];
@@ -49,6 +54,8 @@ export function GuestDetailPage() {
   const [detail, setDetail] = useState<GuestDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const { user } = useAuth();
   const vmid = Number(vmidParam);
   const type = searchParams.get('type');
 
@@ -296,7 +303,35 @@ export function GuestDetailPage() {
         </div>
       </section>
 
-      {configured.status === 'configured' && (
+      {configured.status === 'configured' && editing ? (
+        <GuestYamlEditor
+          hostId={detail.summary.hostId}
+          vmid={detail.summary.vmid}
+          guestName={detail.summary.name}
+          role={user?.role ?? 'viewer'}
+          snapshot={{
+            relativePath: configured.relativePath,
+            rawYaml: configured.rawYaml,
+            hash: configured.hash,
+            ...(configured.config ? { config: configured.config } : {}),
+            issues: configured.issues,
+          }}
+          onCancel={() => setEditing(false)}
+          onSaved={(snapshot: GuestYamlSnapshot) => {
+            setDetail({
+              ...detail,
+              configuration: {
+                status: 'configured',
+                relativePath: snapshot.relativePath,
+                rawYaml: snapshot.rawYaml,
+                hash: snapshot.hash,
+                ...(snapshot.config ? { config: snapshot.config } : {}),
+                issues: [...snapshot.issues],
+              },
+            });
+          }}
+        />
+      ) : configured.status === 'configured' ? (
         <section className="space-y-3 rounded-lg border bg-card p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -308,7 +343,17 @@ export function GuestDetailPage() {
                 {configured.relativePath}
               </p>
             </div>
-            <Button variant="outline" size="sm" disabled title="Issue #34">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={user?.role === 'viewer'}
+              title={
+                user?.role === 'viewer'
+                  ? 'Viewers have read-only access'
+                  : 'Edit deployment YAML'
+              }
+              onClick={() => setEditing(true)}
+            >
               Edit YAML
             </Button>
           </div>
@@ -335,7 +380,7 @@ export function GuestDetailPage() {
             label={`${detail.summary.name} deployment YAML`}
           />
         </section>
-      )}
+      ) : null}
 
       <section className="space-y-3 rounded-lg border bg-card p-4">
         <div>

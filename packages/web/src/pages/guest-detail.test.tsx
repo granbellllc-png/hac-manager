@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtureGuestDetail, fixtureGuests } from '../../fixtures/hosts';
@@ -8,17 +9,70 @@ import {
   formatGuestUptime,
   GuestDetailPage,
 } from './guest-detail';
+import { AuthProvider } from '../auth/auth-context';
+
+vi.mock('../components/guest-yaml-editor', () => ({
+  GuestYamlEditor: ({
+    snapshot,
+    onSaved,
+    onCancel,
+  }: {
+    snapshot: {
+      relativePath: string;
+      rawYaml: string;
+      hash: string;
+      issues: readonly unknown[];
+    };
+    onSaved: (value: {
+      relativePath: string;
+      rawYaml: string;
+      hash: string;
+      config: Record<string, unknown>;
+      issues: readonly never[];
+    }) => void;
+    onCancel: () => void;
+  }) => (
+    <div>
+      <p>Mock YAML editor</p>
+      <button
+        type="button"
+        onClick={() =>
+          onSaved({
+            relativePath: snapshot.relativePath,
+            rawYaml: snapshot.rawYaml.replace('ram: 1024', 'ram: 2048'),
+            hash: 'b'.repeat(64),
+            config: { ram: 2048 },
+            issues: [],
+          })
+        }
+      >
+        Mock save
+      </button>
+      <button type="button" onClick={onCancel}>
+        Mock cancel
+      </button>
+    </div>
+  ),
+}));
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderDetail(path = '/resources/fixture-host/112?type=lxc') {
+function renderDetail(
+  path = '/resources/fixture-host/112?type=lxc',
+  role = 'admin',
+) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/resources/:hostId/:vmid" element={<GuestDetailPage />} />
-      </Routes>
+      <AuthProvider initialUser={{ id: role, username: role, role }}>
+        <Routes>
+          <Route
+            path="/resources/:hostId/:vmid"
+            element={<GuestDetailPage />}
+          />
+        </Routes>
+      </AuthProvider>
     </MemoryRouter>,
   );
 }
@@ -84,7 +138,7 @@ describe('GuestDetailPage', () => {
     expect(screen.getByText('17% current usage')).toBeVisible();
     expect(screen.getByText(/Fixture warning/)).toBeVisible();
     expect(screen.getAllByText('{"nested":true}')).toHaveLength(2);
-    const yaml = screen.getByLabelText('Example LXC deployment YAML');
+    const yaml = await screen.findByLabelText('Example LXC deployment YAML');
     expect(yaml).toHaveTextContent('Fixture comment must remain visible');
     expect(yaml).toHaveTextContent('host.index + 1');
     const request = fetchFn.mock.calls[0]?.[0] as Request;
@@ -120,6 +174,26 @@ describe('GuestDetailPage', () => {
     expect(screen.getAllByText('No YAML')).toHaveLength(10);
     expect(screen.getByText('No raw configuration returned.')).toBeVisible();
     expect(screen.queryByTestId('yaml-code-viewer')).toBeNull();
+  });
+
+  it('opens the YAML editor, applies saved content, and keeps viewers read-only', async () => {
+    installDetailApi();
+    const user = userEvent.setup();
+    const adminView = renderDetail();
+    await screen.findByRole('heading', { name: 'Example LXC' });
+    await user.click(screen.getByRole('button', { name: 'Edit YAML' }));
+    expect(screen.getByText('Mock YAML editor')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Mock save' }));
+    await user.click(screen.getByRole('button', { name: 'Mock cancel' }));
+    expect(
+      await screen.findByLabelText('Example LXC deployment YAML'),
+    ).toHaveTextContent('ram: 2048');
+    adminView.unmount();
+
+    installDetailApi();
+    renderDetail('/resources/fixture-host/112?type=lxc', 'viewer');
+    await screen.findByRole('heading', { name: 'Example LXC' });
+    expect(screen.getByRole('button', { name: 'Edit YAML' })).toBeDisabled();
   });
 
   it('rejects an invalid route without making an API call', async () => {
