@@ -53,7 +53,7 @@ This document tracks progress on the autonomous implementation of HAC Manager (H
 
 ### 1. Prerequisites
 
-- Node 22 LTS
+- Node 26 (or Node 22+)
 - pnpm
 
 ### 2. Start the Development Servers
