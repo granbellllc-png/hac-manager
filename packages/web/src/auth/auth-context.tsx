@@ -32,12 +32,6 @@ export interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const isTestEnv =
-  typeof globalThis !== 'undefined' &&
-  'process' in globalThis &&
-  (globalThis as unknown as { process?: { env?: { NODE_ENV?: string } } })
-    .process?.env?.NODE_ENV === 'test';
-
 export function AuthProvider({
   children,
   initialUser,
@@ -47,15 +41,9 @@ export function AuthProvider({
   readonly initialUser?: AuthUser | null;
   readonly initialSetupNeeded?: boolean;
 }) {
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    if (initialUser !== undefined) return initialUser;
-    if (isTestEnv) {
-      return { id: 'test-admin', username: 'admin', role: 'admin' };
-    }
-    return null;
-  });
+  const [user, setUser] = useState<AuthUser | null>(initialUser ?? null);
   const [setupNeeded, setSetupNeeded] = useState(Boolean(initialSetupNeeded));
-  const [loading, setLoading] = useState(!isTestEnv);
+  const [loading, setLoading] = useState(initialUser === undefined);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -64,16 +52,18 @@ export function AuthProvider({
         await apiClient.GET('/api/auth/status');
       if (statusErr || !data) {
         setUser(null);
+        setError('Could not check your session.');
         return;
       }
       if (
-        (data as Record<string, unknown>).setupNeeded === undefined &&
-        (data as Record<string, unknown>).user === undefined
+        typeof data.setupNeeded !== 'boolean' ||
+        (data.user !== null &&
+          (!data.user ||
+            typeof data.user.id !== 'string' ||
+            typeof data.user.username !== 'string' ||
+            !['admin', 'operator', 'viewer'].includes(data.user.role)))
       ) {
-        // Fallback for mocked test environments with generic health responses
-        setUser({ id: 'mock-admin', username: 'admin', role: 'admin' });
-        setSetupNeeded(false);
-        return;
+        throw new Error('Invalid authentication response.');
       }
       setSetupNeeded(Boolean(data.setupNeeded));
       setUser(data.user ? (data.user as AuthUser) : null);
@@ -87,10 +77,10 @@ export function AuthProvider({
   }, []);
 
   useEffect(() => {
-    if (!isTestEnv) {
+    if (initialUser === undefined) {
       void refresh();
     }
-  }, [refresh]);
+  }, [refresh, initialUser]);
 
   const login = async (
     username: string,
@@ -103,12 +93,15 @@ export function AuthProvider({
         username: string;
         password: string;
         totpCode?: string;
+        recoveryCode?: string;
       } = {
         username,
         password,
       };
       if (totpCode) {
-        loginBody.totpCode = totpCode;
+        const code = totpCode.replace(/\s+/g, '');
+        if (/^\d{6}$/.test(code)) loginBody.totpCode = code;
+        else loginBody.recoveryCode = code;
       }
 
       const { data, error: apiErr } = await apiClient.POST('/api/auth/login', {
@@ -121,6 +114,13 @@ export function AuthProvider({
             ? String((apiErr as { message: string }).message)
             : 'Login failed';
         setError(msg);
+        return false;
+      }
+
+      if (data.totpRequired) {
+        setError(
+          'Enter your two-factor authentication code or a recovery code.',
+        );
         return false;
       }
 

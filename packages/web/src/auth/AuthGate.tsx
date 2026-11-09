@@ -47,10 +47,7 @@ export function AuthGate({ children }: { readonly children: ReactNode }) {
 
     setSubmitting(true);
     try {
-      const ok = await setup(username.trim(), password);
-      if (!ok) {
-        setLocalError(error ?? 'Failed to initialize administrator account.');
-      }
+      await setup(username.trim(), password);
     } finally {
       setSubmitting(false);
     }
@@ -67,14 +64,7 @@ export function AuthGate({ children }: { readonly children: ReactNode }) {
 
     setSubmitting(true);
     try {
-      const ok = await login(
-        username.trim(),
-        password,
-        totpCode.trim() || undefined,
-      );
-      if (!ok) {
-        setLocalError(error ?? 'Invalid username or password.');
-      }
+      await login(username.trim(), password, totpCode.trim() || undefined);
     } finally {
       setSubmitting(false);
     }

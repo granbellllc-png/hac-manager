@@ -7,11 +7,11 @@ import { App } from './App';
 import { navItems } from './nav';
 import { ThemeProvider, useTheme } from './theme';
 
-function renderApp(path = '/') {
+async function renderApp(path = '/') {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <ThemeProvider>
         <MemoryRouter initialEntries={[path]}>
@@ -19,6 +19,24 @@ function renderApp(path = '/') {
         </MemoryRouter>
       </ThemeProvider>
     </QueryClientProvider>,
+  );
+  await screen.findByRole('navigation', { name: 'Primary' });
+  return view;
+}
+
+function mockApi(reply: () => Promise<Response>) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockImplementation(async (request: Request) => {
+      if (request.url.endsWith('/api/auth/status'))
+        return Response.json({
+          setupNeeded: false,
+          user: { id: 'fixture-admin', username: 'admin', role: 'admin' },
+        });
+      if (request.url.includes('/api/audit'))
+        return Response.json({ items: [], total: 0, limit: 20, offset: 0 });
+      return reply();
+    }),
   );
 }
 
@@ -30,14 +48,7 @@ beforeEach(() => {
   window.localStorage.clear();
   document.documentElement.classList.remove('dark');
   mockMatchMedia(false);
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ status: 'ok', service: 'HAC Manager' }), {
-        headers: { 'content-type': 'application/json' },
-      }),
-    ),
-  );
+  mockApi(async () => Response.json({ status: 'ok', service: 'HAC Manager' }));
 });
 
 afterEach(() => {
@@ -45,21 +56,45 @@ afterEach(() => {
 });
 
 describe('application shell', () => {
-  it('renders every planned module in the sidebar', () => {
-    renderApp();
+  it('signs out through the authenticated header and returns to the login form', async () => {
+    let signedIn = true;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (request: Request) => {
+        if (request.url.endsWith('/api/auth/logout')) signedIn = false;
+        if (request.url.endsWith('/api/auth/status'))
+          return Response.json({
+            setupNeeded: false,
+            user: signedIn
+              ? { id: 'fixture', username: 'fixture', role: 'admin' }
+              : null,
+          });
+        return Response.json({ hosts: [], status: 'ok', message: 'ok' });
+      }),
+    );
+    await renderApp();
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(
+      await screen.findByRole('button', { name: 'Sign In' }),
+    ).toBeInTheDocument();
+  });
+  it('renders every planned module in the sidebar', async () => {
+    await renderApp();
     const primary = screen.getByRole('navigation', { name: 'Primary' });
     for (const item of navItems) {
       expect(primary).toHaveTextContent(item.label);
     }
   });
 
-  it('renders a placeholder page per route', () => {
-    renderApp('/audit');
+  it('renders a placeholder page per route', async () => {
+    await renderApp('/audit');
     expect(screen.getByRole('heading', { name: 'Audit' })).toBeInTheDocument();
   });
 
-  it('renders a not-found page for unknown routes', () => {
-    renderApp('/nope');
+  it('renders a not-found page for unknown routes', async () => {
+    await renderApp('/nope');
     expect(
       screen.getByRole('heading', { name: 'Not found' }),
     ).toBeInTheDocument();
@@ -67,7 +102,7 @@ describe('application shell', () => {
 
   it('opens and closes the mobile drawer, closing on navigation', async () => {
     const user = userEvent.setup();
-    renderApp();
+    await renderApp();
     await user.click(screen.getByRole('button', { name: 'Open navigation' }));
     const mobile = screen.getByRole('navigation', { name: 'Mobile' });
     await user.click(screen.getByRole('button', { name: 'Close navigation' }));
@@ -91,7 +126,7 @@ describe('application shell', () => {
 
   it('toggles and persists the theme', async () => {
     const user = userEvent.setup();
-    renderApp();
+    await renderApp();
     await user.click(
       screen.getByRole('button', { name: 'Switch to dark theme' }),
     );
@@ -103,15 +138,15 @@ describe('application shell', () => {
     expect(document.documentElement).not.toHaveClass('dark');
   });
 
-  it('honours a stored or system theme preference', () => {
+  it('honours a stored or system theme preference', async () => {
     window.localStorage.setItem('hacm-theme', 'dark');
-    renderApp();
+    await renderApp();
     expect(document.documentElement).toHaveClass('dark');
   });
 
-  it('falls back to the system dark preference', () => {
+  it('falls back to the system dark preference', async () => {
     mockMatchMedia(true);
-    renderApp();
+    await renderApp();
     expect(document.documentElement).toHaveClass('dark');
   });
 
@@ -128,31 +163,25 @@ describe('application shell', () => {
 
 describe('server status', () => {
   it('shows online when the health endpoint answers', async () => {
-    renderApp();
+    await renderApp();
     await waitFor(() => {
       expect(screen.getByText('API online')).toBeInTheDocument();
     });
   });
 
   it('shows offline when the health endpoint fails', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')));
-    renderApp();
+    mockApi(async () => {
+      throw new Error('down');
+    });
+    await renderApp();
     await waitFor(() => {
       expect(screen.getByText('API offline')).toBeInTheDocument();
     });
   });
 
   it('shows offline for an error response', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ message: 'boom' }), {
-          status: 500,
-          headers: { 'content-type': 'application/json' },
-        }),
-      ),
-    );
-    renderApp();
+    mockApi(async () => Response.json({ message: 'boom' }, { status: 500 }));
+    await renderApp();
     await waitFor(() => {
       expect(screen.getByText('API offline')).toBeInTheDocument();
     });

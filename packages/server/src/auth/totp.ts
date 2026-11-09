@@ -12,7 +12,7 @@ export function base32Encode(buffer: Buffer): string {
   let output = '';
 
   for (let i = 0; i < buffer.length; i++) {
-    const byte = buffer[i] ?? 0;
+    const byte = buffer[i]!;
     value = (value << 8) | byte;
     bits += 8;
 
@@ -39,7 +39,7 @@ export function base32Decode(input: string): Buffer {
   const bytes: number[] = [];
 
   for (let i = 0; i < cleaned.length; i++) {
-    const char = cleaned[i] ?? '';
+    const char = cleaned[i]!;
     const idx = BASE32_ALPHABET.indexOf(char);
     if (idx === -1) {
       throw new Error(`Invalid Base32 character: ${char}`);
@@ -98,18 +98,10 @@ export function generateHotp(secret: Buffer, counter: number): string {
   hmac.update(counterBuffer);
   const digest = hmac.digest();
 
-  const lastByte = digest[digest.length - 1] ?? 0;
+  const lastByte = digest[digest.length - 1]!;
   const offset = lastByte & 0x0f;
-  const byte0 = digest[offset] ?? 0;
-  const byte1 = digest[offset + 1] ?? 0;
-  const byte2 = digest[offset + 2] ?? 0;
-  const byte3 = digest[offset + 3] ?? 0;
-
-  const binary =
-    ((byte0 & 0x7f) << 24) |
-    ((byte1 & 0xff) << 16) |
-    ((byte2 & 0xff) << 8) |
-    (byte3 & 0xff);
+  // RFC 4226 dynamic truncation: the 4-bit offset always fits in SHA-1's 20 bytes.
+  const binary = digest.readUInt32BE(offset) & 0x7fffffff;
 
   const otp = (binary % 1_000_000).toString().padStart(6, '0');
   return otp;
