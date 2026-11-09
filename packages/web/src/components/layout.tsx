@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { navItems } from '../nav';
 import { useTheme } from '../theme';
+import { useAuth } from '../auth/auth-context';
 import { cn } from '../lib/utils';
 import { Button } from './ui/button';
 import { ServerStatus } from './server-status';
@@ -36,6 +37,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 export function Layout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { theme, toggle } = useTheme();
+  const { user, logout } = useAuth();
   return (
     <div className="flex min-h-screen">
       <aside className="hidden w-60 shrink-0 flex-col gap-4 border-r border-border p-4 md:flex">
@@ -60,6 +62,26 @@ export function Layout() {
           <span className="font-semibold md:hidden">{projectName}</span>
           <div className="ml-auto flex items-center gap-3">
             <ServerStatus />
+            {user && (
+              <div className="flex items-center gap-2 border-l border-border pl-3 text-xs">
+                <span className="font-medium text-foreground">
+                  {user.username}
+                </span>
+                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase font-semibold text-muted-foreground">
+                  {user.role}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    void logout();
+                  }}
+                >
+                  Sign out
+                </Button>
+              </div>
+            )}
             <Button
               variant="ghost"
               size="icon"
