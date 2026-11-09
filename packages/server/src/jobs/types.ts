@@ -1,5 +1,6 @@
 import type { JobRow } from '../db/schema.js';
 import type { JobLogStream } from '../db/repositories/types.js';
+import type { AuditReason } from '../db/repositories/types.js';
 
 export const JOB_PRIORITY = {
   low: -50,
@@ -15,6 +16,7 @@ export interface EnqueueJobInput {
   readonly hostId: string;
   readonly vmid?: number | undefined;
   readonly type: string;
+  readonly reason?: AuditReason | undefined;
   readonly payload?: unknown;
   readonly priority?: NamedJobPriority | number | undefined;
   readonly triggeredBy?: string | undefined;

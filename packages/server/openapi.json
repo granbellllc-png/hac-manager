@@ -5194,6 +5194,17 @@
                         "type": {
                           "type": "string"
                         },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "manual",
+                            "drift_push",
+                            "drift_pull",
+                            "schedule",
+                            "conflict_resolution",
+                            "orphan_action"
+                          ]
+                        },
                         "status": {
                           "type": "string",
                           "enum": [
@@ -5221,6 +5232,7 @@
                         "hostId",
                         "lane",
                         "type",
+                        "reason",
                         "status",
                         "priority",
                         "createdAt"
@@ -5421,6 +5433,17 @@
                           "type": {
                             "type": "string"
                           },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "manual",
+                              "drift_push",
+                              "drift_pull",
+                              "schedule",
+                              "conflict_resolution",
+                              "orphan_action"
+                            ]
+                          },
                           "status": {
                             "type": "string",
                             "enum": [
@@ -5466,6 +5489,7 @@
                           "hostId",
                           "lane",
                           "type",
+                          "reason",
                           "status",
                           "priority",
                           "createdAt"
@@ -5547,6 +5571,17 @@
                         "type": {
                           "type": "string"
                         },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "manual",
+                            "drift_push",
+                            "drift_pull",
+                            "schedule",
+                            "conflict_resolution",
+                            "orphan_action"
+                          ]
+                        },
                         "status": {
                           "type": "string",
                           "enum": [
@@ -5592,6 +5627,7 @@
                         "hostId",
                         "lane",
                         "type",
+                        "reason",
                         "status",
                         "priority",
                         "createdAt"
@@ -5970,6 +6006,17 @@
                         "type": {
                           "type": "string"
                         },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "manual",
+                            "drift_push",
+                            "drift_pull",
+                            "schedule",
+                            "conflict_resolution",
+                            "orphan_action"
+                          ]
+                        },
                         "status": {
                           "type": "string",
                           "enum": [
@@ -6015,6 +6062,7 @@
                         "hostId",
                         "lane",
                         "type",
+                        "reason",
                         "status",
                         "priority",
                         "createdAt"

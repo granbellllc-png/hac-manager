@@ -31,6 +31,7 @@ import { DurableJobQueue } from './jobs/queue.js';
 import { JobEventBroker } from './events/job-events.js';
 import { PromptService } from './prompts/service.js';
 import { PlanService } from './plans/service.js';
+import { DriftScheduler } from './scheduler/service.js';
 import {
   SessionService,
   SESSION_COOKIE_NAME,
@@ -56,6 +57,7 @@ export interface BuildAppOptions {
   readonly eventsHeartbeatMs?: number | undefined;
   readonly promptService?: PromptService;
   readonly planService?: PlanService;
+  readonly scheduler?: DriftScheduler;
 }
 
 export async function buildApp(
@@ -247,8 +249,24 @@ export async function buildApp(
       : new PlanService(repositories, jobQueue, inventoryService, hostRegistry);
   planService.registerQueueHandler();
   app.decorate('planService', planService);
+  const scheduler =
+    'scheduler' in configOrOptions && configOrOptions.scheduler
+      ? configOrOptions.scheduler
+      : new DriftScheduler(
+          repositories,
+          jobQueue,
+          hostRegistry,
+          inventoryService,
+          {
+            onError: (error) =>
+              app.log.error({ err: error }, 'Drift scheduler tick failed'),
+          },
+        );
+  scheduler.registerQueueHandler();
+  app.decorate('scheduler', scheduler);
 
   app.addHook('onClose', async () => {
+    scheduler.stop();
     eventBroker.close();
     await jobQueue.stop({ interruptRunning: true });
     hostRegistry.close();

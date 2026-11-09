@@ -27,6 +27,7 @@ export async function installFixtureApi(
     vmid: 112,
     lane: 'guest',
     type: 'plan.apply',
+    reason: 'manual',
     status: 'running',
     priority: 0,
     triggeredBy: user.id,

@@ -67,6 +67,14 @@ const jobSchema = z.object({
   vmid: z.number().optional(),
   lane: z.enum(['guest', 'host']),
   type: z.string(),
+  reason: z.enum([
+    'manual',
+    'drift_push',
+    'drift_pull',
+    'schedule',
+    'conflict_resolution',
+    'orphan_action',
+  ]),
   status: z.enum([
     'queued',
     'running',
@@ -95,6 +103,7 @@ function publicJob(job: JobRow) {
     ...(job.vmid !== null ? { vmid: job.vmid } : {}),
     lane: job.lane,
     type: job.type,
+    reason: job.reason,
     status: job.status,
     priority: job.priority,
     ...(job.triggeredBy !== null ? { triggeredBy: job.triggeredBy } : {}),

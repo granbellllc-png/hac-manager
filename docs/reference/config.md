@@ -37,6 +37,9 @@ Files: `hosts/*/host.yaml`
 | `ignored_guests[].vmid` | integer | yes |  |  |
 | `ignored_guests[].name` | string | yes |  |  |
 | `ignored_guests[].fingerprint` | string | no |  | Extra identity (creation info) so a reused VMID is not silently ignored (D-62). |
+| `drift_schedule` | object | no |  |  |
+| `drift_schedule.enabled` | boolean | no |  |  |
+| `drift_schedule.cron` | string | yes |  | Five-field UTC cron expression for scheduled drift checks (D-34). |
 | `extra` | object | no |  |  |
 
 ## `deployment`

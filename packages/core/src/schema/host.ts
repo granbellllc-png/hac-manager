@@ -45,6 +45,17 @@ export const ignoredGuestSchema = z.strictObject({
     ),
 });
 
+export const driftScheduleSchema = z.strictObject({
+  enabled: z.boolean().default(true),
+  cron: z
+    .string()
+    .min(9)
+    .max(100)
+    .describe(
+      'Five-field UTC cron expression for scheduled drift checks (D-34).',
+    ),
+});
+
 export const hostFileSchema = z.strictObject({
   schema_version: schemaVersionField,
   id: z
@@ -74,6 +85,7 @@ export const hostFileSchema = z.strictObject({
       'Override the default-deployment/default-filemappings file names.',
     ),
   ignored_guests: includable(z.array(ignoredGuestSchema)).default([]),
+  drift_schedule: driftScheduleSchema.optional(),
   extra: z.record(z.string(), z.unknown()).optional(),
 });
 

@@ -147,4 +147,20 @@ describe('Fastify API', () => {
       await rm(web, { recursive: true, force: true });
     }
   });
+
+  it('allows injecting custom services including scheduler and promptService', async () => {
+    const mockScheduler = {
+      registerQueueHandler: () => undefined,
+      stop: () => undefined,
+      tick: async () => 0,
+      start: () => undefined,
+    } as unknown as import('./scheduler/service.js').DriftScheduler;
+    const app = await buildApp({
+      config,
+      scheduler: mockScheduler,
+    });
+    apps.push(app);
+    const res = await app.inject('/api/health');
+    expect(res.statusCode).toBe(200);
+  });
 });

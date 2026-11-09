@@ -267,6 +267,18 @@ export const plansMigration: Migration = {
   },
 };
 
+export const jobReasonMigration: Migration = {
+  id: '0007_job_reason',
+  up: (db) => {
+    db.exec(`
+      ALTER TABLE jobs
+        ADD COLUMN reason TEXT NOT NULL DEFAULT 'manual';
+      CREATE INDEX IF NOT EXISTS idx_jobs_reason_created
+        ON jobs(reason, created_at);
+    `);
+  },
+};
+
 export const allMigrations: readonly Migration[] = [
   initialMigration,
   totpMigration,
@@ -274,6 +286,7 @@ export const allMigrations: readonly Migration[] = [
   jobsQueueMigration,
   promptsMigration,
   plansMigration,
+  jobReasonMigration,
 ];
 
 export function runMigrations(

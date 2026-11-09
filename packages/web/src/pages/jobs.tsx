@@ -29,6 +29,13 @@ interface JobSummary {
   readonly vmid?: number | undefined;
   readonly lane: 'guest' | 'host';
   readonly type: string;
+  readonly reason:
+    | 'manual'
+    | 'drift_push'
+    | 'drift_pull'
+    | 'schedule'
+    | 'conflict_resolution'
+    | 'orphan_action';
   readonly status: JobStatus;
   readonly priority: number;
   readonly triggeredBy?: string | undefined;
@@ -573,6 +580,7 @@ export function JobsPage() {
                       {job.vmid !== undefined
                         ? ` · guest ${job.vmid}`
                         : ' · host lane'}
+                      {job.reason !== 'manual' ? ` · ${job.reason}` : ''}
                     </p>
                     <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
                       {job.id}

@@ -2721,6 +2721,8 @@ export interface paths {
                                 lane: "guest" | "host";
                                 type: string;
                                 /** @enum {string} */
+                                reason: "manual" | "drift_push" | "drift_pull" | "schedule" | "conflict_resolution" | "orphan_action";
+                                /** @enum {string} */
                                 status: "queued" | "running" | "waiting_input" | "completed" | "failed" | "cancelled" | "interrupted";
                                 priority: number;
                                 triggeredBy?: string;
@@ -2830,6 +2832,8 @@ export interface paths {
                                 lane: "guest" | "host";
                                 type: string;
                                 /** @enum {string} */
+                                reason: "manual" | "drift_push" | "drift_pull" | "schedule" | "conflict_resolution" | "orphan_action";
+                                /** @enum {string} */
                                 status: "queued" | "running" | "waiting_input" | "completed" | "failed" | "cancelled" | "interrupted";
                                 priority: number;
                                 triggeredBy?: string;
@@ -2900,6 +2904,8 @@ export interface paths {
                                 /** @enum {string} */
                                 lane: "guest" | "host";
                                 type: string;
+                                /** @enum {string} */
+                                reason: "manual" | "drift_push" | "drift_pull" | "schedule" | "conflict_resolution" | "orphan_action";
                                 /** @enum {string} */
                                 status: "queued" | "running" | "waiting_input" | "completed" | "failed" | "cancelled" | "interrupted";
                                 priority: number;
@@ -3104,6 +3110,8 @@ export interface paths {
                                 /** @enum {string} */
                                 lane: "guest" | "host";
                                 type: string;
+                                /** @enum {string} */
+                                reason: "manual" | "drift_push" | "drift_pull" | "schedule" | "conflict_resolution" | "orphan_action";
                                 /** @enum {string} */
                                 status: "queued" | "running" | "waiting_input" | "completed" | "failed" | "cancelled" | "interrupted";
                                 priority: number;

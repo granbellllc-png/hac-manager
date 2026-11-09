@@ -11,3 +11,4 @@ export * from './jobs/index.js';
 export * from './events/index.js';
 export * from './prompts/index.js';
 export * from './plans/index.js';
+export * from './scheduler/index.js';

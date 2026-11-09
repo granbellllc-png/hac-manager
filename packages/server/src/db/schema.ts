@@ -99,6 +99,18 @@ export const jobsTable = sqliteTable(
     vmid: integer('vmid'),
     lane: text('lane', { enum: ['guest', 'host'] }).notNull(),
     type: text('type').notNull(),
+    reason: text('reason', {
+      enum: [
+        'manual',
+        'drift_push',
+        'drift_pull',
+        'schedule',
+        'conflict_resolution',
+        'orphan_action',
+      ],
+    })
+      .notNull()
+      .default('manual'),
     status: text('status', {
       enum: [
         'queued',
@@ -128,6 +140,7 @@ export const jobsTable = sqliteTable(
     index('idx_jobs_host_status').on(table.hostId, table.status),
     index('idx_jobs_guest_status').on(table.hostId, table.vmid, table.status),
     index('idx_jobs_dependency').on(table.dependsOnJobId),
+    index('idx_jobs_reason_created').on(table.reason, table.createdAt),
   ],
 );
 

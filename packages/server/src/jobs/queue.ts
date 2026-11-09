@@ -163,6 +163,7 @@ export class DurableJobQueue extends EventEmitter {
       vmid: input.vmid ?? null,
       lane: input.vmid === undefined ? 'host' : 'guest',
       type: input.type,
+      reason: input.reason ?? 'manual',
       status: 'queued',
       priority: resolvePriority(input.priority, input.type),
       payloadJson:
