@@ -1,11 +1,13 @@
-import { writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { writeFile, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { buildApp, loadConfig } from '../src/index.js';
 
+const tempDir = await mkdtemp(join(tmpdir(), 'hacm-openapi-'));
 const app = await buildApp(
   loadConfig({
-    HACM_DATA_DIR: '/example-data',
-    HACM_STATE_DIR: '/example-state',
+    HACM_DATA_DIR: join(tempDir, 'data'),
+    HACM_STATE_DIR: join(tempDir, 'state'),
     HACM_LOG_LEVEL: 'silent',
   }),
 );
@@ -17,4 +19,5 @@ try {
   );
 } finally {
   await app.close();
+  await rm(tempDir, { recursive: true, force: true });
 }

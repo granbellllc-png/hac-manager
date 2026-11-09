@@ -1,17 +1,28 @@
 import { once } from 'node:events';
 import { createServer } from 'node:net';
-import { expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterAll, expect, it, vi } from 'vitest';
 import { loadConfig } from './config.js';
 import { startServer } from './start.js';
 
+const testDir = mkdtempSync(join(tmpdir(), 'hacm-start-test-'));
+const dataDir = join(testDir, 'data');
+const stateDir = join(testDir, 'state');
+
 const config = {
   ...loadConfig({
-    HACM_DATA_DIR: '/example-data',
-    HACM_STATE_DIR: '/example-state',
+    HACM_DATA_DIR: dataDir,
+    HACM_STATE_DIR: stateDir,
     HACM_LOG_LEVEL: 'silent',
   }),
   HACM_PORT: 0,
 };
+
+afterAll(() => {
+  rmSync(testDir, { recursive: true, force: true });
+});
 
 it('logs shutdown errors so cancellation failures remain observable', async () => {
   const shutdown = new AbortController();

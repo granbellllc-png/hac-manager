@@ -1,15 +1,24 @@
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp, loadConfig } from './index.js';
 import { createLogger } from './logger.js';
 
+const testDir = mkdtempSync(join(tmpdir(), 'hacm-app-test-'));
+const dataDir = join(testDir, 'data');
+const stateDir = join(testDir, 'state');
+
 const config = loadConfig({
-  HACM_DATA_DIR: '/example-data',
-  HACM_STATE_DIR: '/example-state',
+  HACM_DATA_DIR: dataDir,
+  HACM_STATE_DIR: stateDir,
   HACM_LOG_LEVEL: 'silent',
+});
+
+afterAll(() => {
+  rmSync(testDir, { recursive: true, force: true });
 });
 const apps: FastifyInstance[] = [];
 afterEach(async () => {

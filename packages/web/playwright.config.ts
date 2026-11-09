@@ -3,7 +3,7 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: 'e2e',
   webServer: {
-    command: 'pnpm exec vite --port 5173 --strictPort',
+    command: 'pnpm exec vite --host 127.0.0.1 --port 5173 --strictPort',
     url: 'http://127.0.0.1:5173',
     reuseExistingServer: true,
   },
