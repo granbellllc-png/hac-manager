@@ -1,4 +1,5 @@
-import { Agent } from 'undici';
+import { TLSSocket } from 'node:tls';
+import { Agent, buildConnector } from 'undici';
 import {
   ProxmoxApiError,
   ProxmoxTaskError,
@@ -48,24 +49,46 @@ export class ProxmoxClient {
       !options.fetchFn &&
       (options.pinnedFingerprint || options.caCertificate)
     ) {
+      const connector = buildConnector({
+        ca: options.caCertificate,
+        rejectUnauthorized:
+          !options.pinnedFingerprint || Boolean(options.caCertificate),
+        // A pinned connection needs the complete peer certificate on every handshake.
+        maxCachedSessions: options.pinnedFingerprint ? 0 : 100,
+      });
       this.dispatcher = new Agent({
-        connect: {
-          ca: options.caCertificate,
-          rejectUnauthorized: Boolean(options.caCertificate),
-          checkServerIdentity: (hostname, cert) => {
+        connect: (connectOptions, callback) => {
+          connector(connectOptions, (error, socket) => {
+            if (error || !socket) {
+              callback(error, socket);
+              return;
+            }
             if (options.pinnedFingerprint) {
-              const expected = normalizeFingerprint(options.pinnedFingerprint);
-              const actual = normalizeFingerprint(cert.fingerprint256);
-              if (expected !== actual) {
-                throw new TlsFingerprintMismatchError(
-                  hostname,
-                  options.pinnedFingerprint,
-                  `SHA256:${cert.fingerprint256}`,
+              // Node does not call checkServerIdentity with rejectUnauthorized=false.
+              // Check the pin before giving the socket to HTTP, so no credentials
+              // can reach an untrusted peer, including self-signed deployments.
+              const actual =
+                socket instanceof TLSSocket
+                  ? (socket.getPeerCertificate().fingerprint256 ?? '')
+                  : '';
+              if (
+                normalizeFingerprint(options.pinnedFingerprint) !==
+                normalizeFingerprint(actual)
+              ) {
+                socket.destroy();
+                callback(
+                  new TlsFingerprintMismatchError(
+                    connectOptions.hostname,
+                    options.pinnedFingerprint,
+                    `SHA256:${actual}`,
+                  ),
+                  null,
                 );
+                return;
               }
             }
-            return undefined;
-          },
+            callback(null, socket);
+          });
         },
       });
     }

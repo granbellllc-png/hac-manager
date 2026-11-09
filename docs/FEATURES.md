@@ -128,7 +128,7 @@ Resolved plaintext is never written to Git-tracked files. _M2._
 
 **D-23. Persistent SSH pool with exec channels.** One long-lived `ssh2` connection per host, multiplexed exec channels per command (no parsing of an interactive shell), keepalive, reconnect with backoff, respect for `MaxSessions`, scripts passed on stdin. _M4._
 
-**D-24. Host key pinning.** Trust on first use with stored fingerprint and an explicit re-trust flow. TLS for the API uses a pinned fingerprint or custom CA. _M4._
+**D-24. Host key pinning.** Trust on first use with stored fingerprint and an explicit re-trust flow. TLS for the API uses a pinned fingerprint or custom CA. A configured pin is verified after the TLS handshake and before HTTP sends credentials, including self-signed certificates. If both a CA and a pin are configured, both must match; a trust failure rejects the request without crashing the process. _M4._
 
 **D-25. Capability probe per host.** PVE version, cluster membership, storage types, tools (`acl`, `rsync`, `restic`, `nsenter`), guest-agent availability. Clustered hosts show a warning. _M4._
 
