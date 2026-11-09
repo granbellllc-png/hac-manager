@@ -1,4 +1,5 @@
 import type { MutationPlan } from '@hacm/core';
+import type { GuestDeleteOptions, GuestDeleteTarget } from '@hacm/core';
 import type { JobRow, PlanRow } from '../db/schema.js';
 import type { GuestPowerAction } from '../guests/service.js';
 
@@ -29,6 +30,13 @@ export interface GuestUpdatePlanPayload {
   readonly restartRequired: boolean;
 }
 
+export interface GuestDeletePlanPayload {
+  readonly generatedAt: string;
+  readonly reason: string;
+  readonly options: GuestDeleteOptions;
+  readonly target: GuestDeleteTarget;
+}
+
 export interface CreateGuestPowerPlanInput {
   readonly hostId: string;
   readonly vmid: number;
@@ -56,6 +64,20 @@ export interface CreateGuestCreatePlanInput {
 export interface CreateGuestUpdatePlanInput {
   readonly hostId: string;
   readonly vmid: number;
+  readonly createdBy?: string | undefined;
+  readonly createdByRole?: 'admin' | 'operator' | 'viewer' | undefined;
+}
+
+export interface CreateGuestDeletePlanInput {
+  readonly hostId: string;
+  readonly vmid: number;
+  /** Human reason recorded in the audit log. */
+  readonly reason: string;
+  readonly backup?: boolean | undefined;
+  readonly backupStorage?: string | undefined;
+  readonly purge?: boolean | undefined;
+  /** Required for a protected guest; lifts protection just before deletion. */
+  readonly unprotect?: boolean | undefined;
   readonly createdBy?: string | undefined;
   readonly createdByRole?: 'admin' | 'operator' | 'viewer' | undefined;
 }

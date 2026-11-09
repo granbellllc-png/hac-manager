@@ -488,6 +488,59 @@ describe('plans API', () => {
     }
   });
 
+  it('creates guest deletion plans for granted hosts and restricts other hosts', async () => {
+    const fixture = await createFixture();
+    try {
+      const created = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/plans/guest-delete',
+        headers: {
+          cookie: fixture.operator.cookie,
+          [CSRF_HEADER_NAME]: fixture.operator.csrf,
+        },
+        payload: {
+          hostId: 'pve-01',
+          vmid: 112,
+          reason: 'decommission old service',
+        },
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json()).toMatchObject({
+        operation: 'guest.delete',
+        target: { hostId: 'pve-01', vmid: 112, resourceType: 'guest' },
+        status: 'ready',
+        destructive: true,
+        confirmationText: 'DELETE pve-01/112',
+      });
+
+      const denied = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/plans/guest-delete',
+        headers: {
+          cookie: fixture.operator.cookie,
+          [CSRF_HEADER_NAME]: fixture.operator.csrf,
+        },
+        payload: { hostId: 'pve-02', vmid: 212, reason: 'retire' },
+      });
+      expect(denied.statusCode).toBe(403);
+      expect(denied.json().message).toContain("Access denied to host 'pve-02'");
+
+      const missingReason = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/plans/guest-delete',
+        headers: {
+          cookie: fixture.operator.cookie,
+          [CSRF_HEADER_NAME]: fixture.operator.csrf,
+        },
+        payload: { hostId: 'pve-01', vmid: 112 },
+      });
+      expect(missingReason.statusCode).toBe(400);
+    } finally {
+      await fixture.app.close();
+      fixture.handle.close();
+    }
+  });
+
   it('creates LXC update plans for granted hosts and restricts other hosts', async () => {
     const fixture = await createFixture();
     try {

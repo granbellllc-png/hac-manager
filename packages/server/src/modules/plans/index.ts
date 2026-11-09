@@ -415,7 +415,7 @@ export const plansModule: FastifyPluginAsyncZod<PlansModuleOptions> = async (
     {
       schema: {
         tags: ['Plans'],
-        summary: 'Create a durable LXC configuration update plan',
+        summary: 'Create a durable guest configuration update plan',
         body: z.object({
           hostId: z.string(),
           vmid: z.number().int(),
@@ -440,6 +440,63 @@ export const plansModule: FastifyPluginAsyncZod<PlansModuleOptions> = async (
       }
       try {
         const plan = await options.planService.createGuestUpdatePlan({
+          ...request.body,
+          createdBy: request.user?.id,
+          createdByRole: knownRole(request.user?.role),
+        });
+        return reply.code(201).send(plan);
+      } catch (error) {
+        const mapped = planError(error);
+        if (mapped) {
+          return reply.code(mapped.code).send({
+            statusCode: mapped.code,
+            error: mapped.error,
+            message: mapped.message,
+            ...(mapped.confirmationText
+              ? { confirmationText: mapped.confirmationText }
+              : {}),
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post(
+    '/api/plans/guest-delete',
+    {
+      schema: {
+        tags: ['Plans'],
+        summary: 'Create a durable guest deletion plan',
+        body: z.object({
+          hostId: z.string(),
+          vmid: z.number().int(),
+          reason: z.string().trim().min(1).max(500),
+          backup: z.boolean().optional(),
+          backupStorage: z.string().min(1).optional(),
+          purge: z.boolean().optional(),
+          unprotect: z.boolean().optional(),
+        }),
+        response: {
+          201: planSchema,
+          400: errorSchema,
+          403: errorSchema,
+          404: errorSchema,
+          409: errorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const allowed = await options.hostRegistry.listHosts(request.user);
+      if (!allowed.some((host) => host.id === request.body.hostId)) {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: `Access denied to host '${request.body.hostId}'`,
+        });
+      }
+      try {
+        const plan = await options.planService.createGuestDeletePlan({
           ...request.body,
           createdBy: request.user?.id,
           createdByRole: knownRole(request.user?.role),

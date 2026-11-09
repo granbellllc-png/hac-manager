@@ -7,27 +7,34 @@ import {
   createLxcProvisionSteps,
   createLxcUpdateSteps,
   createMutationPlan,
+  createGuestDeleteSteps,
   createVmProvisionSteps,
   createVmUpdateSteps,
   deploymentDefaultsFileSchema,
   describeLxcCreation,
   describeVmCreation,
   executeMutationPlan,
+  guestDeleteState,
   hashContent,
+  isIgnoredGuest,
   isManagedGuestTag,
   loadYamlDocument,
   lxcUpdateState,
   managedGuestUuid,
   parseManagedGuestUuid,
   planGuestImport,
+  planGuestDeletion,
   planLxcUpdate,
   planVmUpdate,
+  removeIgnoredGuest,
   resolveConfigTags,
   runJournaledSteps,
   sanitizeAuditPayload,
   StalePlanError,
   toErrorMessage,
   type DeploymentDefaultsFile,
+  type GuestDeleteOptions,
+  type GuestDeleteTarget,
   type GuestDeployment,
   type GuestImportPlan,
   type MutationPlan,
@@ -61,11 +68,13 @@ import {
   PlanOverwriteRequiredError,
   PlanStateError,
   type CreateGuestCreatePlanInput,
+  type CreateGuestDeletePlanInput,
   type CreateGuestImportPlanInput,
   type CreateGuestPowerPlanInput,
   type CreateGuestStampPlanInput,
   type CreateGuestUpdatePlanInput,
   type GuestCreatePlanPayload,
+  type GuestDeletePlanPayload,
   type GuestImportPlanPayload,
   type GuestPowerPlanPayload,
   type GuestStampPlanPayload,
@@ -650,6 +659,84 @@ export class PlanService {
     return rowToPublicPlan(row);
   }
 
+  public async createGuestDeletePlan(
+    input: CreateGuestDeletePlanInput,
+  ): Promise<PublicPlan> {
+    const reason = input.reason?.trim();
+    if (!reason) {
+      throw new PlanStateError('A deletion reason is required');
+    }
+    const lifecycle = this.requireLifecycle();
+    const context = await this.buildGuestDeleteContext(
+      input.hostId,
+      input.vmid,
+    );
+    const options: GuestDeleteOptions = {
+      ...(input.backup !== undefined ? { backup: input.backup } : {}),
+      ...(input.backupStorage ? { backupStorage: input.backupStorage } : {}),
+      ...(input.purge !== undefined ? { purge: input.purge } : {}),
+      ...(input.unprotect !== undefined ? { unprotect: input.unprotect } : {}),
+    };
+    const diff = planGuestDeletion(context.target, options);
+    if (diff.blocked) {
+      throw new PlanStateError(diff.blockReason ?? 'Deletion is blocked');
+    }
+    await lifecycle.verifyForMutation(input.hostId, input.vmid, {
+      operation: 'guest.delete',
+      allowProtected: options.unprotect === true,
+    });
+    const ignored = await isIgnoredGuest(
+      this.hostRegistry.dataDir,
+      input.hostId,
+      input.vmid,
+    );
+    const warnings = [
+      ...diff.warnings,
+      ...(ignored
+        ? ['The guest is removed from the host orphan ignore list.']
+        : []),
+    ];
+    const generatedAt = new Date();
+    const plan = createMutationPlan({
+      id: randomUUID(),
+      operation: 'guest.delete',
+      target: {
+        hostId: input.hostId,
+        vmid: input.vmid,
+        resourceType: 'guest',
+      },
+      summary: diff.summary,
+      currentState: guestDeleteState(context.target, options),
+      changes: diff.changes,
+      warnings,
+      confirmationText: `DELETE ${input.hostId}/${input.vmid}`,
+      createdAt: generatedAt,
+    });
+    const payload: GuestDeletePlanPayload = {
+      generatedAt: generatedAt.toISOString(),
+      reason,
+      options,
+      target: context.target,
+    };
+    const row = await this.repos.plans.create({
+      id: plan.id,
+      operation: plan.operation,
+      hostId: input.hostId,
+      vmid: input.vmid,
+      status: 'ready',
+      summary: plan.summary,
+      changesJson: JSON.stringify(plan.changes),
+      warningsJson: JSON.stringify(plan.warnings),
+      destructive: plan.destructive,
+      stateFingerprint: plan.stateFingerprint,
+      confirmationText: plan.confirmationText ?? null,
+      payloadJson: JSON.stringify(payload),
+      createdBy: input.createdBy ?? null,
+      createdAt: new Date(plan.createdAt),
+    });
+    return rowToPublicPlan(row);
+  }
+
   public async get(planId: string): Promise<PublicPlan | null> {
     const row = await this.reconcileApplying(
       await this.repos.plans.get(planId),
@@ -973,6 +1060,7 @@ export class PlanService {
     const guestVmid = row.vmid;
     let steps: readonly JournaledStep<undefined>[];
     let transport: Transport = unavailableTransport;
+    let auditReason: string | undefined;
     if (row.operation === 'guest.create') {
       const snapshot = await this.buildGuestCreateSnapshot(
         row.hostId,
@@ -1072,6 +1160,39 @@ export class PlanService {
         });
       }
       transport = await this.requireConnections().getRouter(row.hostId);
+    } else if (row.operation === 'guest.delete') {
+      const lifecycle = this.requireLifecycle();
+      const payload = parseJson<GuestDeletePlanPayload>(row.payloadJson, {
+        generatedAt: row.createdAt.toISOString(),
+        reason: 'manual',
+        options: {},
+        target: {
+          hostId: row.hostId,
+          vmid: guestVmid,
+          type: 'lxc',
+          name: '',
+          status: 'unknown',
+          protection: false,
+        },
+      });
+      const deleteContext = await this.buildGuestDeleteContext(
+        row.hostId,
+        guestVmid,
+      );
+      assertPlanFresh(
+        plan,
+        guestDeleteState(deleteContext.target, payload.options),
+      );
+      await lifecycle.verifyForMutation(row.hostId, guestVmid, {
+        operation: 'guest.delete',
+        allowProtected: payload.options.unprotect === true,
+      });
+      steps = [
+        ...createGuestDeleteSteps(deleteContext.target, payload.options),
+        this.buildIgnoredGuestCleanupStep(row.hostId, guestVmid),
+      ];
+      transport = await this.requireConnections().getRouter(row.hostId);
+      auditReason = payload.reason;
     } else if (row.operation === 'guest.power') {
       const lifecycle = this.requireLifecycle();
       const payload = parseJson<GuestPowerPlanPayload>(row.payloadJson, {
@@ -1129,7 +1250,10 @@ export class PlanService {
             planId: row.id,
             changes: plan.changes,
           }),
-          metadata: { operation: row.operation },
+          metadata: {
+            operation: row.operation,
+            ...(auditReason !== undefined ? { reason: auditReason } : {}),
+          },
         });
       }
     } catch (error) {
@@ -1250,6 +1374,75 @@ export class PlanService {
     ];
   }
 
+  private async buildGuestDeleteContext(
+    hostId: string,
+    vmid: number,
+  ): Promise<{
+    readonly snapshot: GuestSnapshot;
+    readonly target: GuestDeleteTarget;
+  }> {
+    const lifecycle = this.requireLifecycle();
+    const snapshot = await lifecycle.requireSnapshot(hostId, vmid);
+    const loaded = await this.loadResolvedGuestDeployment(hostId, vmid);
+    const deployment = loaded?.deployment ?? snapshot.deployment;
+    // Bind mounts are a property of the live guest; the YAML may not repeat
+    // them. Prefer the live snapshot so the backup warning is accurate.
+    const liveMounts = snapshot.deployment.mounts;
+    const mounts =
+      liveMounts && liveMounts.length > 0 ? liveMounts : deployment.mounts;
+    const target: GuestDeleteTarget = {
+      hostId,
+      vmid,
+      type: snapshot.type,
+      name: deployment.name,
+      status: snapshot.status,
+      protection:
+        deployment.protection === true ||
+        snapshot.deployment.protection === true,
+      ...(mounts
+        ? {
+            mounts: mounts.map((mount) => ({
+              index: mount.index,
+              host_path: mount.host_path,
+              guest_path: mount.guest_path,
+              ...(mount.backup !== undefined ? { backup: mount.backup } : {}),
+            })),
+          }
+        : {}),
+      ...(deployment.backup_storage
+        ? { backup_storage: deployment.backup_storage }
+        : {}),
+    };
+    return { snapshot, target };
+  }
+
+  private buildIgnoredGuestCleanupStep(
+    hostId: string,
+    vmid: number,
+  ): JournaledStep<undefined> {
+    const dataDir = this.hostRegistry.dataDir;
+    return {
+      name: `remove guest ${vmid} from the orphan ignore list`,
+      check: async () =>
+        (await isIgnoredGuest(dataDir, hostId, vmid))
+          ? { status: 'required' }
+          : { status: 'satisfied', detail: { ignored: false } },
+      apply: async () => {
+        const result = await removeIgnoredGuest(dataDir, hostId, vmid);
+        return { ignored: result.ignored, file: result.file };
+      },
+      verify: async () => {
+        if (await isIgnoredGuest(dataDir, hostId, vmid)) {
+          throw new PlanStateError(
+            `Guest ${vmid} is still listed in the orphan ignore list of host '${hostId}'`,
+          );
+        }
+        return { ignored: false };
+      },
+      rollbackHint: `Re-add guest ${vmid} to ignored_guests in hosts/${hostId}/host.yaml if it should stay ignored.`,
+    };
+  }
+
   private async currentState(row: PlanRow): Promise<unknown> {
     if (row.operation === 'guest.import') {
       if (row.vmid === null) {
@@ -1288,6 +1481,28 @@ export class PlanService {
         desired: loaded?.deployment ?? null,
         live: snapshot.deployment,
       };
+    }
+    if (row.operation === 'guest.delete') {
+      if (row.vmid === null) {
+        throw new PlanStateError(
+          `Plan operation '${row.operation}' requires a guest VMID`,
+        );
+      }
+      const payload = parseJson<GuestDeletePlanPayload>(row.payloadJson, {
+        generatedAt: row.createdAt.toISOString(),
+        reason: 'manual',
+        options: {},
+        target: {
+          hostId: row.hostId,
+          vmid: row.vmid,
+          type: 'lxc',
+          name: '',
+          status: 'unknown',
+          protection: false,
+        },
+      });
+      const context = await this.buildGuestDeleteContext(row.hostId, row.vmid);
+      return guestDeleteState(context.target, payload.options);
     }
     if (row.operation === 'guest.power' || row.operation === 'guest.stamp') {
       if (row.vmid === null) {
