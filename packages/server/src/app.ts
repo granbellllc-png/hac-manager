@@ -26,6 +26,7 @@ import { jobsModule } from './modules/jobs/index.js';
 import { HostRegistry } from './hosts/registry.js';
 import { ConnectionManager } from './router/manager.js';
 import { LiveInventoryService } from './inventory/service.js';
+import { GuestLifecycleService } from './guests/service.js';
 import { authModule } from './auth/module.js';
 import { DurableJobQueue } from './jobs/queue.js';
 import { JobEventBroker } from './events/job-events.js';
@@ -52,6 +53,7 @@ export interface BuildAppOptions {
   readonly hostRegistry?: HostRegistry;
   readonly connectionManager?: ConnectionManager;
   readonly inventoryService?: LiveInventoryService;
+  readonly guestLifecycleService?: GuestLifecycleService;
   readonly jobQueue?: DurableJobQueue;
   readonly eventBroker?: JobEventBroker;
   readonly eventsHeartbeatMs?: number | undefined;
@@ -243,10 +245,34 @@ export async function buildApp(
           connectionManager,
         });
   app.decorate('inventoryService', inventoryService);
+  const guestLifecycleService =
+    'guestLifecycleService' in configOrOptions &&
+    configOrOptions.guestLifecycleService
+      ? configOrOptions.guestLifecycleService
+      : new GuestLifecycleService({
+          inventory: inventoryService,
+          connections: connectionManager,
+          hostRegistry,
+          protectedGuest: {
+            ...(config.HACM_PROTECTED_HOST_ID
+              ? { hostId: config.HACM_PROTECTED_HOST_ID }
+              : {}),
+            ...(config.HACM_PROTECTED_GUEST_ID
+              ? { vmid: config.HACM_PROTECTED_GUEST_ID }
+              : {}),
+          },
+        });
+  app.decorate('guestLifecycleService', guestLifecycleService);
   const planService =
     'planService' in configOrOptions && configOrOptions.planService
       ? configOrOptions.planService
-      : new PlanService(repositories, jobQueue, inventoryService, hostRegistry);
+      : new PlanService(
+          repositories,
+          jobQueue,
+          inventoryService,
+          hostRegistry,
+          guestLifecycleService,
+        );
   planService.registerQueueHandler();
   app.decorate('planService', planService);
   const scheduler =
@@ -286,6 +312,7 @@ export async function buildApp(
   await app.register(inventoryModule, {
     inventoryService,
     hostRegistry,
+    guestLifecycleService,
   });
   await app.register(configEditorModule, {
     hostRegistry,

@@ -15,10 +15,13 @@ import {
   indexConfiguredGuests,
   readGuestConfiguration,
 } from '../../inventory/configuration.js';
+import type { GuestLifecycleService } from '../../guests/service.js';
+import { GuestStateUnavailableError } from '../../guests/types.js';
 
 export interface InventoryModuleOptions {
   readonly inventoryService: LiveInventoryService;
   readonly hostRegistry: HostRegistry;
+  readonly guestLifecycleService?: GuestLifecycleService | undefined;
 }
 
 const channelHealthSchema = z.object({
@@ -277,6 +280,109 @@ export const inventoryModule: FastifyPluginAsyncZod<
           error: 'Not Found',
           message: err instanceof Error ? err.message : String(err),
         });
+      }
+    },
+  );
+
+  app.get(
+    '/api/inventory/guests/:hostId/:vmid/identity',
+    {
+      schema: {
+        tags: ['Inventory'],
+        summary: 'Inspect the anti-collision identity of a guest',
+        params: z.object({
+          hostId: z.string(),
+          vmid: z.coerce.number(),
+        }),
+        querystring: z.object({
+          runChecks: z.coerce.boolean().optional(),
+        }),
+        response: {
+          200: z.object({
+            hostId: z.string(),
+            vmid: z.number(),
+            name: z.string(),
+            type: z.enum(['lxc', 'vm']),
+            status: z.enum([
+              'missing',
+              'verified',
+              'unmanaged',
+              'name-mismatch',
+              'type-mismatch',
+              'stamp-mismatch',
+            ]),
+            managed: z.boolean(),
+            expectedUuid: z.string(),
+            actualUuid: z.string().optional(),
+            messages: z.array(z.string()).readonly(),
+            checks: z
+              .array(
+                z.object({
+                  check: z.string(),
+                  ok: z.boolean(),
+                  exitCode: z.number(),
+                  stderr: z.string(),
+                }),
+              )
+              .readonly(),
+          }),
+          403: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          404: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          409: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const lifecycle = options.guestLifecycleService;
+      if (!lifecycle) {
+        return reply.code(409).send({
+          statusCode: 409,
+          error: 'Conflict',
+          message: 'Guest lifecycle checks are not configured',
+        });
+      }
+      const { hostId, vmid } = request.params;
+      const allowedHosts = await hostRegistry.listHosts(request.user);
+      if (!allowedHosts.some((host) => host.id === hostId)) {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: `Access denied to host '${hostId}'`,
+        });
+      }
+      try {
+        const report = await lifecycle.getIdentityReport(hostId, vmid, {
+          runIdentityChecks: request.query.runChecks ?? false,
+        });
+        if (!report) {
+          return reply.code(404).send({
+            statusCode: 404,
+            error: 'Not Found',
+            message: `Guest ${vmid} has no deployment YAML on host '${hostId}'`,
+          });
+        }
+        return report;
+      } catch (error) {
+        if (error instanceof GuestStateUnavailableError) {
+          return reply.code(409).send({
+            statusCode: 409,
+            error: 'Conflict',
+            message: error.message,
+          });
+        }
+        throw error;
       }
     },
   );

@@ -1384,6 +1384,104 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/inventory/guests/{hostId}/{vmid}/identity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect the anti-collision identity of a guest */
+        get: {
+            parameters: {
+                query?: {
+                    runChecks?: boolean;
+                };
+                header?: never;
+                path: {
+                    hostId: string;
+                    vmid: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            hostId: string;
+                            vmid: number;
+                            name: string;
+                            /** @enum {string} */
+                            type: "lxc" | "vm";
+                            /** @enum {string} */
+                            status: "missing" | "verified" | "unmanaged" | "name-mismatch" | "type-mismatch" | "stamp-mismatch";
+                            managed: boolean;
+                            expectedUuid: string;
+                            actualUuid?: string;
+                            readonly messages: string[];
+                            readonly checks: {
+                                check: string;
+                                ok: boolean;
+                                exitCode: number;
+                                stderr: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/inventory/refresh": {
         parameters: {
             query?: never;
@@ -2334,6 +2432,278 @@ export interface paths {
                         hostId: string;
                         vmid: number;
                         overwrite?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {number} */
+                            schemaVersion: 1;
+                            id: string;
+                            operation: string;
+                            target: {
+                                hostId: string;
+                                vmid?: number;
+                                /** @enum {string} */
+                                resourceType?: "host" | "guest" | "file";
+                            };
+                            summary: string;
+                            readonly changes: {
+                                id: string;
+                                /** @enum {string} */
+                                action: "create" | "update" | "delete" | "execute";
+                                summary: string;
+                                path?: string;
+                                before?: unknown;
+                                after?: unknown;
+                                readonly warnings?: string[];
+                                destructive?: boolean;
+                            }[];
+                            readonly warnings: string[];
+                            destructive: boolean;
+                            stateFingerprint: string;
+                            confirmationText?: string;
+                            createdAt: string;
+                            /** @enum {string} */
+                            status: "ready" | "applying" | "applied" | "stale" | "failed";
+                            createdBy?: string;
+                            approvedBy?: string;
+                            lastJobId?: string;
+                            error?: string;
+                            approvedAt?: string;
+                            appliedAt?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plans/guest-power": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a durable guest power plan */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        hostId: string;
+                        vmid: number;
+                        /** @enum {string} */
+                        action: "start" | "stop" | "shutdown" | "reboot";
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {number} */
+                            schemaVersion: 1;
+                            id: string;
+                            operation: string;
+                            target: {
+                                hostId: string;
+                                vmid?: number;
+                                /** @enum {string} */
+                                resourceType?: "host" | "guest" | "file";
+                            };
+                            summary: string;
+                            readonly changes: {
+                                id: string;
+                                /** @enum {string} */
+                                action: "create" | "update" | "delete" | "execute";
+                                summary: string;
+                                path?: string;
+                                before?: unknown;
+                                after?: unknown;
+                                readonly warnings?: string[];
+                                destructive?: boolean;
+                            }[];
+                            readonly warnings: string[];
+                            destructive: boolean;
+                            stateFingerprint: string;
+                            confirmationText?: string;
+                            createdAt: string;
+                            /** @enum {string} */
+                            status: "ready" | "applying" | "applied" | "stale" | "failed";
+                            createdBy?: string;
+                            approvedBy?: string;
+                            lastJobId?: string;
+                            error?: string;
+                            approvedAt?: string;
+                            appliedAt?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plans/guest-stamp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a durable plan to stamp a guest as managed */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        hostId: string;
+                        vmid: number;
                     };
                 };
             };

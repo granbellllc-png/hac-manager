@@ -1,10 +1,36 @@
 import type { MutationPlan } from '@hacm/core';
 import type { JobRow, PlanRow } from '../db/schema.js';
+import type { GuestPowerAction } from '../guests/service.js';
 
 export interface GuestImportPlanPayload {
   readonly overwrite: boolean;
   readonly generatedAt: string;
   readonly requiresAdmin: boolean;
+}
+
+export interface GuestPowerPlanPayload {
+  readonly action: GuestPowerAction;
+  readonly targetStatus: 'running' | 'stopped';
+  readonly generatedAt: string;
+}
+
+export interface GuestStampPlanPayload {
+  readonly generatedAt: string;
+}
+
+export interface CreateGuestPowerPlanInput {
+  readonly hostId: string;
+  readonly vmid: number;
+  readonly action: GuestPowerAction;
+  readonly createdBy?: string | undefined;
+  readonly createdByRole?: 'admin' | 'operator' | 'viewer' | undefined;
+}
+
+export interface CreateGuestStampPlanInput {
+  readonly hostId: string;
+  readonly vmid: number;
+  readonly createdBy?: string | undefined;
+  readonly createdByRole?: 'admin' | 'operator' | 'viewer' | undefined;
 }
 
 export interface PublicPlan extends MutationPlan {

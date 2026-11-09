@@ -1,3 +1,5 @@
+export { toErrorMessage } from './errors.js';
+
 export const projectName = 'HAC Manager';
 export const guestTypes = ['lxc', 'vm'] as const;
 export type GuestType = (typeof guestTypes)[number];
@@ -46,3 +48,4 @@ export * from './codec/index.js';
 export * from './importer/index.js';
 export * from './steps/index.js';
 export * from './plans/index.js';
+export * from './guest/index.js';

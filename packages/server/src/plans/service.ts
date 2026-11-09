@@ -8,7 +8,10 @@ import {
   deploymentDefaultsFileSchema,
   executeMutationPlan,
   hashContent,
+  isManagedGuestTag,
   loadYamlDocument,
+  managedGuestUuid,
+  parseManagedGuestUuid,
   planGuestImport,
   runJournaledSteps,
   sanitizeAuditPayload,
@@ -16,11 +19,17 @@ import {
   type DeploymentDefaultsFile,
   type GuestImportPlan,
   type MutationPlan,
+  type JournaledStep,
   type PlanChange,
   type Transport,
 } from '@hacm/core';
 import type { DatabaseRepositories } from '../db/repositories/types.js';
 import type { PlanRow } from '../db/schema.js';
+import {
+  GuestLifecycleService,
+  type GuestPowerAction,
+} from '../guests/service.js';
+import type { GuestSnapshot } from '../guests/types.js';
 import type { HostRegistry } from '../hosts/registry.js';
 import type { LiveInventoryService } from '../inventory/service.js';
 import { parseGuestConfigurationForEditor } from '../inventory/configuration.js';
@@ -37,7 +46,11 @@ import {
   PlanOverwriteRequiredError,
   PlanStateError,
   type CreateGuestImportPlanInput,
+  type CreateGuestPowerPlanInput,
+  type CreateGuestStampPlanInput,
   type GuestImportPlanPayload,
+  type GuestPowerPlanPayload,
+  type GuestStampPlanPayload,
   type PublicPlan,
   type QueuePlanApplyInput,
   type QueuePlanApplyResult,
@@ -79,6 +92,32 @@ function parseJson<T>(value: string, fallback: T): T {
 
 function isMissingFile(error: unknown): boolean {
   return (error as { code?: string }).code === 'ENOENT';
+}
+
+function stampFieldsOf(snapshot: GuestSnapshot): {
+  readonly description: string;
+  readonly tags: readonly string[];
+} {
+  const description = snapshot.deployment.extra?.['description'];
+  return {
+    description: typeof description === 'string' ? description : '',
+    tags: [...(snapshot.deployment.tags ?? [])].sort(),
+  };
+}
+
+/**
+ * Stable part of a guest used to fingerprint lifecycle plans. Power state is
+ * deliberately excluded: restarting a guest between planning and applying must
+ * not make an otherwise safe power plan stale.
+ */
+function lifecycleState(snapshot: GuestSnapshot): unknown {
+  return {
+    exists: true,
+    type: snapshot.type,
+    name: snapshot.deployment.name,
+    ...stampFieldsOf(snapshot),
+    expectedUuid: managedGuestUuid(snapshot.hostId, snapshot.vmid),
+  };
 }
 
 function rowToMutationPlan(row: PlanRow): MutationPlan {
@@ -129,6 +168,7 @@ export class PlanService {
       'getGuestLiveConfig'
     >,
     private readonly hostRegistry: Pick<HostRegistry, 'dataDir'>,
+    private readonly lifecycle?: GuestLifecycleService | undefined,
   ) {}
 
   public registerQueueHandler(): void {
@@ -209,6 +249,160 @@ export class PlanService {
         generatedAt: generatedAt.toISOString(),
         requiresAdmin: snapshot.target.requiresAdmin,
       } satisfies GuestImportPlanPayload),
+      createdBy: input.createdBy ?? null,
+      createdAt: new Date(plan.createdAt),
+    });
+    return rowToPublicPlan(row);
+  }
+
+  public async createGuestPowerPlan(
+    input: CreateGuestPowerPlanInput,
+  ): Promise<PublicPlan> {
+    const lifecycle = this.requireLifecycle();
+    const snapshot = await lifecycle.verifyForMutation(
+      input.hostId,
+      input.vmid,
+      {
+        operation: `guest.power.${input.action}`,
+        runIdentityChecks: false,
+      },
+    );
+    const targetStatus: 'running' | 'stopped' =
+      input.action === 'start' || input.action === 'reboot'
+        ? 'running'
+        : 'stopped';
+    const destructive = input.action !== 'start';
+    const generatedAt = new Date();
+    const currentState = lifecycleState(snapshot);
+    const plan = createMutationPlan({
+      id: randomUUID(),
+      operation: 'guest.power',
+      target: {
+        hostId: input.hostId,
+        vmid: input.vmid,
+        resourceType: 'guest',
+      },
+      summary: `${input.action[0]!.toUpperCase()}${input.action.slice(1)} guest ${input.vmid} (${snapshot.deployment.name})`,
+      currentState,
+      changes: [
+        {
+          id: 'power',
+          action: 'execute',
+          summary: `Set guest ${input.vmid} power state to '${targetStatus}' (${input.action})`,
+          before: { status: snapshot.status },
+          after: { status: targetStatus },
+          warnings:
+            input.action === 'stop'
+              ? ['A hard stop may lose unsaved data inside the guest.']
+              : [],
+          destructive,
+        },
+      ],
+      warnings:
+        input.action === 'reboot'
+          ? [
+              'The guest will restart. Long-running work inside it may be interrupted.',
+            ]
+          : input.action === 'stop'
+            ? ['A hard stop may lose unsaved data inside the guest.']
+            : [],
+      createdAt: generatedAt,
+      ...(destructive
+        ? {
+            confirmationText: `${input.action.toUpperCase()} ${input.hostId}/${input.vmid}`,
+          }
+        : {}),
+    });
+    const payload: GuestPowerPlanPayload = {
+      action: input.action,
+      targetStatus,
+      generatedAt: generatedAt.toISOString(),
+    };
+    const row = await this.repos.plans.create({
+      id: plan.id,
+      operation: plan.operation,
+      hostId: input.hostId,
+      vmid: input.vmid,
+      status: 'ready',
+      summary: plan.summary,
+      changesJson: JSON.stringify(plan.changes),
+      warningsJson: JSON.stringify(plan.warnings),
+      destructive: plan.destructive,
+      stateFingerprint: plan.stateFingerprint,
+      confirmationText: plan.confirmationText ?? null,
+      payloadJson: JSON.stringify(payload),
+      createdBy: input.createdBy ?? null,
+      createdAt: new Date(plan.createdAt),
+    });
+    return rowToPublicPlan(row);
+  }
+
+  public async createGuestStampPlan(
+    input: CreateGuestStampPlanInput,
+  ): Promise<PublicPlan> {
+    const lifecycle = this.requireLifecycle();
+    const snapshot = await lifecycle.verifyForMutation(
+      input.hostId,
+      input.vmid,
+      {
+        operation: 'guest.stamp',
+        runIdentityChecks: false,
+        requireManaged: false,
+      },
+    );
+    const stamped = await lifecycle.stampGuest(input.hostId, input.vmid, {
+      dryRun: true,
+    });
+    if (!stamped.changed) {
+      throw new PlanStateError(
+        `Guest ${input.vmid} already carries the current management stamp`,
+      );
+    }
+    const generatedAt = new Date();
+    const plan = createMutationPlan({
+      id: randomUUID(),
+      operation: 'guest.stamp',
+      target: {
+        hostId: input.hostId,
+        vmid: input.vmid,
+        resourceType: 'guest',
+      },
+      summary: `Stamp guest ${input.vmid} (${snapshot.deployment.name}) as managed`,
+      currentState: lifecycleState(snapshot),
+      changes: [
+        {
+          id: 'stamp',
+          action: 'update',
+          summary: 'Add management tag and UUID stamp to Proxmox metadata',
+          before: {
+            tags: snapshot.deployment.tags ?? [],
+            description: snapshot.deployment.extra?.['description'] ?? '',
+          },
+          after: {
+            tags: stamped.tags,
+            description: stamped.description,
+          },
+        },
+      ],
+      warnings: [],
+      createdAt: generatedAt,
+    });
+    const payload: GuestStampPlanPayload = {
+      generatedAt: generatedAt.toISOString(),
+    };
+    const row = await this.repos.plans.create({
+      id: plan.id,
+      operation: plan.operation,
+      hostId: input.hostId,
+      vmid: input.vmid,
+      status: 'ready',
+      summary: plan.summary,
+      changesJson: JSON.stringify(plan.changes),
+      warningsJson: JSON.stringify(plan.warnings),
+      destructive: plan.destructive,
+      stateFingerprint: plan.stateFingerprint,
+      confirmationText: plan.confirmationText ?? null,
+      payloadJson: JSON.stringify(payload),
       createdBy: input.createdBy ?? null,
       createdAt: new Date(plan.createdAt),
     });
@@ -303,6 +497,10 @@ export class PlanService {
         hostId: row.hostId,
         ...(row.vmid !== null ? { vmid: row.vmid } : {}),
         type: 'plan.apply',
+        // A power request must preempt queued low-priority host work (D-28).
+        ...(row.operation === 'guest.power'
+          ? { priority: 'power' as const }
+          : {}),
         payload: { planId, dryRun },
         triggeredBy: input.user.id,
       });
@@ -340,6 +538,10 @@ export class PlanService {
     }
 
     const plan = rowToMutationPlan(row);
+    if (row.operation !== 'guest.import') {
+      await this.executeGuestOperationJob(row, plan, payload.dryRun, context);
+      return;
+    }
     const operationPayload = parseJson<GuestImportPlanPayload>(
       row.payloadJson,
       {
@@ -489,14 +691,228 @@ export class PlanService {
     };
   }
 
-  private async currentState(row: PlanRow): Promise<unknown> {
-    if (row.operation !== 'guest.import' || row.vmid === null) {
+  private requireLifecycle(): GuestLifecycleService {
+    if (!this.lifecycle) {
+      throw new PlanStateError(
+        'Guest lifecycle operations are not configured for this server',
+      );
+    }
+    return this.lifecycle;
+  }
+
+  private async executeGuestOperationJob(
+    row: PlanRow,
+    plan: MutationPlan,
+    dryRun: boolean,
+    context: JobExecutionContext,
+  ): Promise<void> {
+    if (row.vmid === null) {
+      throw new PlanStateError(
+        `Plan operation '${row.operation}' requires a guest VMID`,
+      );
+    }
+    const lifecycle = this.requireLifecycle();
+    let steps: readonly JournaledStep<undefined>[];
+    if (row.operation === 'guest.power') {
+      const payload = parseJson<GuestPowerPlanPayload>(row.payloadJson, {
+        action: 'start',
+        targetStatus: 'running',
+        generatedAt: row.createdAt.toISOString(),
+      });
+      if (
+        payload.action !== 'start' &&
+        payload.action !== 'stop' &&
+        payload.action !== 'shutdown' &&
+        payload.action !== 'reboot'
+      ) {
+        throw new PlanStateError(
+          `Guest power plan contains unknown action '${String(payload.action)}'`,
+        );
+      }
+      const action = payload.action;
+      steps = this.buildPowerSteps(row, plan, action, lifecycle, (message) =>
+        context.log('system', message),
+      );
+    } else if (row.operation === 'guest.stamp') {
+      steps = this.buildStampSteps(row, plan, lifecycle);
+    } else {
       throw new PlanStateError(
         `Plan operation '${row.operation}' is not supported`,
       );
     }
-    return (await this.buildGuestImportSnapshot(row.hostId, row.vmid))
-      .currentState;
+
+    try {
+      await runJournaledSteps({
+        operationId: context.job.id,
+        input: undefined,
+        transport: unavailableTransport,
+        logger: createJobStepLogger(context.log),
+        dryRun,
+        signal: context.signal,
+        journal: new DatabaseStepJournal(this.repos),
+        steps,
+      });
+
+      if (!dryRun) {
+        await this.repos.plans.updateStatus(row.id, 'applied', {
+          appliedAt: new Date(),
+          error: null,
+        });
+        await this.repos.auditLogs.append({
+          userId: row.approvedBy,
+          hostId: row.hostId,
+          vmid: row.vmid,
+          action: 'plan.apply',
+          reason: 'manual',
+          jobId: context.job.id,
+          diff: sanitizeAuditPayload({
+            planId: row.id,
+            changes: plan.changes,
+          }),
+          metadata: { operation: row.operation },
+        });
+      }
+    } catch (error) {
+      const stale =
+        error instanceof StalePlanError ||
+        (error instanceof Error && error.cause instanceof StalePlanError);
+      if (stale) {
+        await this.repos.plans.updateStatus(row.id, 'stale', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      } else if (!dryRun) {
+        await this.repos.plans.updateStatus(row.id, 'failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      throw error;
+    }
+  }
+
+  private buildPowerSteps(
+    row: PlanRow,
+    plan: MutationPlan,
+    action: GuestPowerAction,
+    lifecycle: GuestLifecycleService,
+    log: (message: string) => Promise<void>,
+  ): readonly JournaledStep<undefined>[] {
+    const hostId = row.hostId;
+    const vmid = row.vmid!;
+    const targetStatus =
+      action === 'start' || action === 'reboot' ? 'running' : 'stopped';
+    return [
+      {
+        name: `power ${action} guest ${vmid}`,
+        check: async () => {
+          const snapshot = await lifecycle.requireSnapshot(hostId, vmid);
+          assertPlanFresh(plan, lifecycleState(snapshot));
+          if (action !== 'reboot' && snapshot.status === targetStatus) {
+            return {
+              status: 'satisfied',
+              detail: { status: snapshot.status },
+            };
+          }
+          return { status: 'required', detail: { status: snapshot.status } };
+        },
+        apply: async () => {
+          await lifecycle.verifyForMutation(hostId, vmid, {
+            operation: `guest.power.${action}`,
+            runIdentityChecks: false,
+          });
+          const result = await lifecycle.executePower(hostId, vmid, action, {
+            log,
+          });
+          return {
+            status: 'applied',
+            detail: {
+              source: result.source,
+              ...(result.upid ? { upid: result.upid } : {}),
+            },
+          };
+        },
+        verify: async () => lifecycle.waitForPowerState(hostId, vmid, action),
+        rollbackHint: `Use the opposite power action for ${hostId}/${vmid} if the guest state is unexpected.`,
+      },
+    ];
+  }
+
+  private buildStampSteps(
+    row: PlanRow,
+    plan: MutationPlan,
+    lifecycle: GuestLifecycleService,
+  ): readonly JournaledStep<undefined>[] {
+    const hostId = row.hostId;
+    const vmid = row.vmid!;
+    const expectedUuid = managedGuestUuid(hostId, vmid);
+    return [
+      {
+        name: `stamp guest ${vmid} as managed`,
+        check: async () => {
+          const snapshot = await lifecycle.requireSnapshot(hostId, vmid);
+          assertPlanFresh(plan, lifecycleState(snapshot));
+          const fields = stampFieldsOf(snapshot);
+          if (
+            isManagedGuestTag(fields.tags) &&
+            parseManagedGuestUuid(fields.description) === expectedUuid
+          ) {
+            return {
+              status: 'satisfied',
+              detail: { uuid: expectedUuid },
+            };
+          }
+          return { status: 'required' };
+        },
+        apply: async () => {
+          await lifecycle.verifyForMutation(hostId, vmid, {
+            operation: 'guest.stamp',
+            runIdentityChecks: false,
+            requireManaged: false,
+          });
+          await lifecycle.stampGuest(hostId, vmid);
+          return { status: 'applied', detail: { uuid: expectedUuid } };
+        },
+        verify: async () => {
+          const snapshot = await lifecycle.requireSnapshot(hostId, vmid);
+          const fields = stampFieldsOf(snapshot);
+          if (
+            !isManagedGuestTag(fields.tags) ||
+            parseManagedGuestUuid(fields.description) !== expectedUuid
+          ) {
+            throw new PlanStateError(
+              `Guest ${hostId}/${vmid} does not carry the expected management stamp after apply`,
+            );
+          }
+          return { uuid: expectedUuid };
+        },
+        rollbackHint:
+          'Recreate the guest metadata from its reviewed YAML if the stamp is wrong.',
+      },
+    ];
+  }
+
+  private async currentState(row: PlanRow): Promise<unknown> {
+    if (row.operation === 'guest.import') {
+      if (row.vmid === null) {
+        throw new PlanStateError(
+          `Plan operation '${row.operation}' requires a guest VMID`,
+        );
+      }
+      return (await this.buildGuestImportSnapshot(row.hostId, row.vmid))
+        .currentState;
+    }
+    if (row.operation === 'guest.power' || row.operation === 'guest.stamp') {
+      if (row.vmid === null) {
+        throw new PlanStateError(
+          `Plan operation '${row.operation}' requires a guest VMID`,
+        );
+      }
+      const lifecycle = this.requireLifecycle();
+      const snapshot = await lifecycle.requireSnapshot(row.hostId, row.vmid);
+      return lifecycleState(snapshot);
+    }
+    throw new PlanStateError(
+      `Plan operation '${row.operation}' is not supported`,
+    );
   }
 
   private async reconcileApplying(

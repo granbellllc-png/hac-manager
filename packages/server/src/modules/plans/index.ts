@@ -11,6 +11,16 @@ import {
   PlanOverwriteRequiredError,
   PlanStateError,
 } from '../../plans/types.js';
+import {
+  GuestConfigurationError,
+  GuestIdentityCheckError,
+  GuestIdentityError,
+  GuestNotFoundError,
+  GuestProtectionEnabledError,
+  GuestStateUnavailableError,
+  GuestStoppedIdentityError,
+  ProtectedGuestError,
+} from '../../guests/index.js';
 
 export interface PlansModuleOptions {
   readonly hostRegistry: HostRegistry;
@@ -145,6 +155,26 @@ function planError(error: unknown): {
   if (error instanceof StalePlanError || error instanceof PlanStateError) {
     return { code: 409, error: 'Conflict', message: error.message };
   }
+  if (error instanceof GuestNotFoundError) {
+    return { code: 404, error: 'Not Found', message: error.message };
+  }
+  if (error instanceof ProtectedGuestError) {
+    return { code: 403, error: 'Forbidden', message: error.message };
+  }
+  if (
+    error instanceof GuestProtectionEnabledError ||
+    error instanceof GuestIdentityError ||
+    error instanceof GuestStoppedIdentityError ||
+    error instanceof GuestIdentityCheckError
+  ) {
+    return { code: 409, error: 'Conflict', message: error.message };
+  }
+  if (error instanceof GuestConfigurationError) {
+    return { code: 400, error: 'Bad Request', message: error.message };
+  }
+  if (error instanceof GuestStateUnavailableError) {
+    return { code: 409, error: 'Conflict', message: error.message };
+  }
   return null;
 }
 
@@ -205,6 +235,111 @@ export const plansModule: FastifyPluginAsyncZod<PlansModuleOptions> = async (
           error: 'Not Found',
           message: error instanceof Error ? error.message : String(error),
         });
+      }
+    },
+  );
+
+  app.post(
+    '/api/plans/guest-power',
+    {
+      schema: {
+        tags: ['Plans'],
+        summary: 'Create a durable guest power plan',
+        body: z.object({
+          hostId: z.string(),
+          vmid: z.number().int(),
+          action: z.enum(['start', 'stop', 'shutdown', 'reboot']),
+        }),
+        response: {
+          201: planSchema,
+          400: errorSchema,
+          403: errorSchema,
+          404: errorSchema,
+          409: errorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const allowed = await options.hostRegistry.listHosts(request.user);
+      if (!allowed.some((host) => host.id === request.body.hostId)) {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: `Access denied to host '${request.body.hostId}'`,
+        });
+      }
+      try {
+        const plan = await options.planService.createGuestPowerPlan({
+          ...request.body,
+          createdBy: request.user?.id,
+          createdByRole: knownRole(request.user?.role),
+        });
+        return reply.code(201).send(plan);
+      } catch (error) {
+        const mapped = planError(error);
+        if (mapped) {
+          return reply.code(mapped.code).send({
+            statusCode: mapped.code,
+            error: mapped.error,
+            message: mapped.message,
+            ...(mapped.confirmationText
+              ? { confirmationText: mapped.confirmationText }
+              : {}),
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post(
+    '/api/plans/guest-stamp',
+    {
+      schema: {
+        tags: ['Plans'],
+        summary: 'Create a durable plan to stamp a guest as managed',
+        body: z.object({
+          hostId: z.string(),
+          vmid: z.number().int(),
+        }),
+        response: {
+          201: planSchema,
+          400: errorSchema,
+          403: errorSchema,
+          404: errorSchema,
+          409: errorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const allowed = await options.hostRegistry.listHosts(request.user);
+      if (!allowed.some((host) => host.id === request.body.hostId)) {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: `Access denied to host '${request.body.hostId}'`,
+        });
+      }
+      try {
+        const plan = await options.planService.createGuestStampPlan({
+          ...request.body,
+          createdBy: request.user?.id,
+          createdByRole: knownRole(request.user?.role),
+        });
+        return reply.code(201).send(plan);
+      } catch (error) {
+        const mapped = planError(error);
+        if (mapped) {
+          return reply.code(mapped.code).send({
+            statusCode: mapped.code,
+            error: mapped.error,
+            message: mapped.message,
+            ...(mapped.confirmationText
+              ? { confirmationText: mapped.confirmationText }
+              : {}),
+          });
+        }
+        throw error;
       }
     },
   );

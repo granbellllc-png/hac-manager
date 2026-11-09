@@ -163,4 +163,51 @@ describe('Fastify API', () => {
     const res = await app.inject('/api/health');
     expect(res.statusCode).toBe(200);
   });
+
+  it('accepts injected connectivity, inventory, lifecycle and logger services', async () => {
+    const hostRegistry = {
+      dataDir,
+      async sync() {
+        return { synced: 0, removed: 0, issues: [] };
+      },
+      async listHosts() {
+        return [];
+      },
+      close() {},
+    } as unknown as import('./hosts/registry.js').HostRegistry;
+    const connectionManager = {
+      async getRouter() {
+        throw new Error('not used');
+      },
+      async close() {},
+    } as unknown as import('./router/manager.js').ConnectionManager;
+    const inventoryService =
+      {} as unknown as import('./inventory/service.js').LiveInventoryService;
+    const guestLifecycleService =
+      {} as unknown as import('./guests/service.js').GuestLifecycleService;
+    const logger = createLogger(
+      { ...config, HACM_LOG_LEVEL: 'silent' },
+      { write: () => undefined },
+    );
+    const app = await buildApp({
+      config,
+      logger,
+      hostRegistry,
+      connectionManager,
+      inventoryService,
+      guestLifecycleService,
+    });
+    apps.push(app);
+    expect((await app.inject('/api/health')).statusCode).toBe(200);
+  });
+
+  it('configures the protected guest from environment settings', async () => {
+    const app = await buildApp({
+      ...config,
+      HACM_PROTECTED_HOST_ID: 'pve-01',
+      HACM_PROTECTED_GUEST_ID: 900,
+    });
+    apps.push(app);
+    expect((await app.inject('/api/health')).statusCode).toBe(200);
+  });
 });
