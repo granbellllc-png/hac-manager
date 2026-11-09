@@ -196,6 +196,24 @@ describe('GuestDetailPage', () => {
     expect(screen.getByRole('button', { name: 'Edit YAML' })).toBeDisabled();
   });
 
+  it('falls back to viewer power controls without an authenticated role', async () => {
+    installDetailApi();
+    render(
+      <MemoryRouter initialEntries={['/resources/fixture-host/112?type=lxc']}>
+        <AuthProvider initialUser={null}>
+          <Routes>
+            <Route
+              path="/resources/:hostId/:vmid"
+              element={<GuestDetailPage />}
+            />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await screen.findByRole('heading', { name: 'Example LXC' });
+    expect(screen.getByText(/Viewers can inspect/)).toBeVisible();
+  });
+
   it('rejects an invalid route without making an API call', async () => {
     const fetchFn = installDetailApi();
     renderDetail('/resources/fixture-host/not-a-number');

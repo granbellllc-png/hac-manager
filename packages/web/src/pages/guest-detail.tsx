@@ -7,12 +7,12 @@ import {
   Cpu,
   FileCode2,
   MemoryStick,
-  Power,
   ShieldAlert,
 } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { paths } from '../api/schema';
 import { Button } from '../components/ui/button';
+import { GuestPowerActions } from '../components/guest-power-actions';
 import { YamlCodeViewer } from '../components/yaml-code-viewer';
 import {
   GuestYamlEditor,
@@ -183,10 +183,6 @@ export function GuestDetailPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" disabled title="Power jobs arrive in M7">
-              <Power aria-hidden className="mr-2 h-4 w-4" />
-              Power
-            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -198,6 +194,14 @@ export function GuestDetailPage() {
           </div>
         </div>
       </div>
+
+      <GuestPowerActions
+        hostId={detail.summary.hostId}
+        vmid={detail.summary.vmid}
+        name={detail.summary.name}
+        status={detail.summary.status}
+        role={user?.role ?? 'viewer'}
+      />
 
       {configured.status === 'orphan' && (
         <div
