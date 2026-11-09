@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { FakeTransport } from '@hacm/core';
 import { loadConfig } from '../../config.js';
 import { buildApp } from '../../app.js';
 import { createDatabase, createSqliteRepositories } from '../../db/index.js';
 import { HostRegistry } from '../../hosts/registry.js';
+import { ConnectionManager } from '../../router/manager.js';
+import { HostConnectionRouter } from '../../router/router.js';
+import type { SshTransport } from '../../ssh/types.js';
 import {
   SESSION_COOKIE_NAME,
   CSRF_HEADER_NAME,
@@ -77,11 +81,26 @@ connection:
     const dbHandle = createDatabase({ path: ':memory:' });
     const repos = createSqliteRepositories(dbHandle.db);
     const hostRegistry = new HostRegistry({ dataDir: tempDir, repos });
+    const connectionManager = new ConnectionManager({
+      dataDir: tempDir,
+      hostRegistry,
+    });
+
+    connectionManager.registerRouter(
+      'pve-01',
+      new HostConnectionRouter('pve-01', {
+        sshTransport: new FakeTransport().onExec('echo hacm-ping', {
+          exitCode: 0,
+          stdout: 'hacm-ping\n',
+        }) as unknown as SshTransport,
+      }),
+    );
 
     const app = await buildApp({
       config,
       repositories: repos,
       hostRegistry,
+      connectionManager,
     });
 
     try {
@@ -209,6 +228,22 @@ connection:
       });
       expect(adminSyncRes.statusCode).toBe(200);
       expect(adminSyncRes.json().ok).toBe(true);
+
+      // Admin tests connection -> returns status
+      const testConnRes = await app.inject({
+        method: 'POST',
+        url: '/api/hosts/pve-01/test-connection',
+        cookies: {
+          [SESSION_COOKIE_NAME]: adminCookie!,
+          [CSRF_COOKIE_NAME]: adminCsrf!,
+        },
+        headers: {
+          [CSRF_HEADER_NAME]: adminCsrf!,
+        },
+      });
+      expect(testConnRes.statusCode).toBe(200);
+      const testJson = testConnRes.json();
+      expect(testJson.ssh).toBeDefined();
     } finally {
       await app.close();
       dbHandle.close();

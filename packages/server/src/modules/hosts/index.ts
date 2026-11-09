@@ -2,9 +2,11 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { HostRegistry } from '../../hosts/registry.js';
 import type { DatabaseRepositories } from '../../db/repositories/types.js';
+import type { ConnectionManager } from '../../router/manager.js';
 
 export interface HostsModuleOptions {
   readonly hostRegistry: HostRegistry;
+  readonly connectionManager?: ConnectionManager | undefined;
   readonly repos?: DatabaseRepositories | undefined;
 }
 
@@ -73,7 +75,7 @@ export const hostsModule: FastifyPluginAsyncZod<HostsModuleOptions> = async (
   app,
   options,
 ) => {
-  const { hostRegistry } = options;
+  const { hostRegistry, connectionManager } = options;
 
   app.get(
     '/api/hosts',
@@ -113,6 +115,11 @@ export const hostsModule: FastifyPluginAsyncZod<HostsModuleOptions> = async (
             message: z.string(),
           }),
           404: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          500: z.object({
             statusCode: z.number(),
             error: z.string(),
             message: z.string(),
@@ -182,6 +189,96 @@ export const hostsModule: FastifyPluginAsyncZod<HostsModuleOptions> = async (
         removed: result.removed,
         issues: [...result.issues],
       };
+    },
+  );
+
+  app.post(
+    '/api/hosts/:id/test-connection',
+    {
+      schema: {
+        tags: ['Hosts'],
+        summary: 'Test SSH and API connectivity for a host',
+        params: z.object({
+          id: z.string(),
+        }),
+        response: {
+          200: z.object({
+            ok: z.boolean(),
+            ssh: z.object({
+              ok: z.boolean(),
+              status: z.enum([
+                'connected',
+                'unreachable',
+                'error',
+                'not_configured',
+              ]),
+              latencyMs: z.number().optional(),
+              error: z.string().optional(),
+              lastCheckedAt: z.string().optional(),
+            }),
+            api: z
+              .object({
+                ok: z.boolean(),
+                status: z.enum([
+                  'connected',
+                  'unreachable',
+                  'error',
+                  'not_configured',
+                ]),
+                latencyMs: z.number().optional(),
+                error: z.string().optional(),
+                lastCheckedAt: z.string().optional(),
+              })
+              .optional(),
+          }),
+          403: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          404: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+          500: z.object({
+            statusCode: z.number(),
+            error: z.string(),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const host = await hostRegistry.getHost(id, request.user);
+
+      if (!host) {
+        const raw = hostRegistry.getRawHost(id);
+        if (raw) {
+          return reply.status(403).send({
+            statusCode: 403,
+            error: 'Forbidden',
+            message: `Access denied to host '${id}'`,
+          });
+        }
+        return reply.status(404).send({
+          statusCode: 404,
+          error: 'Not Found',
+          message: `Host '${id}' not found`,
+        });
+      }
+
+      if (!connectionManager) {
+        return reply.status(500).send({
+          statusCode: 500,
+          error: 'Internal Server Error',
+          message: 'Connection manager is not initialized',
+        });
+      }
+
+      const result = await connectionManager.testConnection(id);
+      return result;
     },
   );
 };

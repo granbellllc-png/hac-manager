@@ -18,6 +18,7 @@ import { usersModule } from './modules/users/index.js';
 import { auditModule } from './modules/audit/index.js';
 import { hostsModule } from './modules/hosts/index.js';
 import { HostRegistry } from './hosts/registry.js';
+import { ConnectionManager } from './router/manager.js';
 import { authModule } from './auth/module.js';
 import {
   SessionService,
@@ -37,6 +38,7 @@ export interface BuildAppOptions {
   readonly logger?: FastifyBaseLogger;
   readonly repositories?: DatabaseRepositories;
   readonly hostRegistry?: HostRegistry;
+  readonly connectionManager?: ConnectionManager;
 }
 
 export async function buildApp(
@@ -179,15 +181,30 @@ export async function buildApp(
 
   await hostRegistry.sync();
   app.decorate('hostRegistry', hostRegistry);
+
+  const connectionManager =
+    'connectionManager' in configOrOptions && configOrOptions.connectionManager
+      ? configOrOptions.connectionManager
+      : new ConnectionManager({
+          dataDir: config.HACM_DATA_DIR,
+          hostRegistry,
+        });
+  app.decorate('connectionManager', connectionManager);
+
   app.addHook('onClose', async () => {
     hostRegistry.close();
+    await connectionManager.close();
   });
 
   // Register Modules
   await app.register(healthModule);
   await app.register(usersModule, { repos: repositories });
   await app.register(auditModule, { repos: repositories });
-  await app.register(hostsModule, { hostRegistry, repos: repositories });
+  await app.register(hostsModule, {
+    hostRegistry,
+    connectionManager,
+    repos: repositories,
+  });
 
   await app.register(authModule, {
     repos: repositories,

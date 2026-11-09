@@ -5,3 +5,4 @@ export * from './db/index.js';
 export * from './hosts/index.js';
 export * from './ssh/index.js';
 export * from './proxmox/index.js';
+export * from './router/index.js';
