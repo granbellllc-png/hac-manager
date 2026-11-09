@@ -299,6 +299,82 @@ describe('DurableJobQueue', () => {
     }
   });
 
+  it('cancels persisted prompt waits and fails when no prompt handler is configured', async () => {
+    const handle = createDatabase({ path: ':memory:' });
+    try {
+      const repos = createSqliteRepositories(handle.db);
+      const queue = new DurableJobQueue(repos);
+      queues.push(queue);
+      await repos.jobs.create({
+        id: 'persisted-wait',
+        hostId: 'pve-01',
+        vmid: 112,
+        lane: 'guest',
+        type: 'prompted',
+        status: 'waiting_input',
+        priority: 0,
+        createdAt: new Date(),
+      });
+
+      await expect(queue.cancel('persisted-wait')).resolves.toBe(true);
+      expect(await queue.get('persisted-wait')).toMatchObject({
+        status: 'cancelled',
+      });
+      expect(
+        (await repos.jobLogLines.list('persisted-wait')).map(
+          (line) => line.text,
+        ),
+      ).toContain('Job cancelled while waiting for input');
+      await expect(queue.resumeWaitingJob('persisted-wait')).resolves.toBe(
+        false,
+      );
+      await expect(queue.resumeWaitingJob('missing')).resolves.toBe(false);
+
+      queue.registerHandler('prompted', async ({ prompt }) => {
+        await prompt({ kind: 'confirm', message: 'Continue?' });
+      });
+      await queue.enqueue({
+        id: 'missing-prompt-handler',
+        hostId: 'pve-01',
+        vmid: 113,
+        type: 'prompted',
+      });
+      await queue.start();
+
+      await expect(
+        queue.waitForJob('missing-prompt-handler'),
+      ).resolves.toMatchObject({
+        status: 'failed',
+        error: 'No prompt handler configured',
+      });
+
+      queue.setPromptHandler(
+        (_job, _request, signal) =>
+          new Promise<unknown>((_resolve, reject) => {
+            const abort = () => reject(new Error('Prompt wait aborted'));
+            signal.addEventListener('abort', abort, { once: true });
+            if (signal.aborted) abort();
+          }),
+      );
+      queue.registerHandler('prompt-timeout', async ({ prompt }) => {
+        await prompt({ kind: 'confirm', message: 'Wait forever?' });
+      });
+      await queue.enqueue({
+        id: 'prompt-timeout',
+        hostId: 'pve-01',
+        vmid: 114,
+        type: 'prompt-timeout',
+        timeoutMs: 20,
+      });
+      await expect(queue.waitForJob('prompt-timeout')).resolves.toMatchObject({
+        status: 'failed',
+        error: expect.stringContaining('timeout'),
+      });
+    } finally {
+      await stopQueuesAndClose(handle);
+    }
+  });
+
   it('orders dependencies, rejects missing dependencies, and redacts persisted payloads and logs', async () => {
     const handle = createDatabase({ path: ':memory:' });
     globalSecretRedactor.register('fixture-resolved-secret');

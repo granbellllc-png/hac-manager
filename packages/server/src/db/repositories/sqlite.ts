@@ -27,6 +27,7 @@ import type {
   JobsRepository,
   JobLogLinesRepository,
   JobStepsRepository,
+  PromptsRepository,
 } from './types.js';
 
 export function createSqliteRepositories(
@@ -649,6 +650,85 @@ export function createSqliteRepositories(
     },
   };
 
+  const prompts: PromptsRepository = {
+    async create(row) {
+      db.insert(schema.promptsTable).values(row).run();
+      const created = db
+        .select()
+        .from(schema.promptsTable)
+        .where(eq(schema.promptsTable.id, row.id))
+        .get();
+      if (!created) throw new Error(`Failed to create prompt '${row.id}'`);
+      return created;
+    },
+    async get(id) {
+      return (
+        db
+          .select()
+          .from(schema.promptsTable)
+          .where(eq(schema.promptsTable.id, id))
+          .get() ?? null
+      );
+    },
+    async list(filter = {}) {
+      const conditions = [];
+      if (filter.jobId) {
+        conditions.push(eq(schema.promptsTable.jobId, filter.jobId));
+      }
+      if (filter.statuses && filter.statuses.length > 0) {
+        conditions.push(
+          inArray(schema.promptsTable.status, [...filter.statuses]),
+        );
+      }
+      return db
+        .select()
+        .from(schema.promptsTable)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(asc(schema.promptsTable.createdAt))
+        .all();
+    },
+    async resolve(id, input) {
+      return db.transaction((tx) => {
+        const result = tx
+          .update(schema.promptsTable)
+          .set({
+            status: 'resolved',
+            resolutionJson: input.resolutionJson,
+            resolvedBy: input.resolvedBy,
+            resolvedAt: input.resolvedAt ?? new Date(),
+          })
+          .where(
+            and(
+              eq(schema.promptsTable.id, id),
+              eq(schema.promptsTable.status, 'pending'),
+            ),
+          )
+          .run();
+        if (result.changes === 0) return null;
+        return (
+          tx
+            .select()
+            .from(schema.promptsTable)
+            .where(eq(schema.promptsTable.id, id))
+            .get() ?? null
+        );
+      });
+    },
+    async expireDue(now = new Date()) {
+      const result = db
+        .update(schema.promptsTable)
+        .set({ status: 'expired' })
+        .where(
+          and(
+            eq(schema.promptsTable.status, 'pending'),
+            lte(schema.promptsTable.expiresAt, now),
+          ),
+        )
+        .run();
+      return result.changes;
+    },
+  };
+
   return {
     settings,
     hostsCache,
@@ -660,5 +740,6 @@ export function createSqliteRepositories(
     jobs,
     jobLogLines,
     jobSteps,
+    prompts,
   };
 }

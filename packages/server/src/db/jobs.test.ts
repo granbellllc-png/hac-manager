@@ -3,16 +3,19 @@ import { globalSecretRedactor } from '@hacm/core';
 import { getTableConfig } from 'drizzle-orm/sqlite-core';
 import { createDatabase } from './connection.js';
 import { createSqliteRepositories } from './repositories/sqlite.js';
-import { jobLogLinesTable, jobStepsTable } from './schema.js';
+import { jobLogLinesTable, jobStepsTable, promptsTable } from './schema.js';
 
 describe('job repositories', () => {
   it('declares cascading foreign keys for logs and journal steps', () => {
     const logForeignKeys = getTableConfig(jobLogLinesTable).foreignKeys;
     const stepForeignKeys = getTableConfig(jobStepsTable).foreignKeys;
+    const promptForeignKeys = getTableConfig(promptsTable).foreignKeys;
     expect(logForeignKeys).toHaveLength(1);
     expect(stepForeignKeys).toHaveLength(1);
+    expect(promptForeignKeys).toHaveLength(1);
     expect(logForeignKeys[0]?.reference().foreignColumns).toHaveLength(1);
     expect(stepForeignKeys[0]?.reference().foreignColumns).toHaveLength(1);
+    expect(promptForeignKeys[0]?.reference().foreignColumns).toHaveLength(1);
   });
 
   it('persists jobs, filters by target and status, and recovers running work', async () => {
@@ -167,6 +170,72 @@ describe('job repositories', () => {
       ]);
     } finally {
       globalSecretRedactor.unregister('fixture-super-secret');
+      handle.close();
+    }
+  });
+
+  it('persists, resolves, filters, and expires prompts atomically', async () => {
+    const handle = createDatabase({ path: ':memory:' });
+    try {
+      const repos = createSqliteRepositories(handle.db);
+      const now = new Date('2026-01-01T00:00:00.000Z');
+      await repos.jobs.create({
+        id: 'prompt-job',
+        hostId: 'pve-01',
+        vmid: 112,
+        lane: 'guest',
+        type: 'test',
+        status: 'waiting_input',
+        priority: 0,
+        createdAt: now,
+      });
+      await repos.prompts.create({
+        id: 'choice',
+        jobId: 'prompt-job',
+        kind: 'choice',
+        status: 'pending',
+        message: 'Choose',
+        optionsJson: '["a","b"]',
+        createdAt: now,
+      });
+      await repos.prompts.create({
+        id: 'expiring',
+        jobId: 'prompt-job',
+        kind: 'confirm',
+        status: 'pending',
+        message: 'Confirm',
+        createdAt: now,
+        expiresAt: new Date(now.getTime() - 1),
+      });
+      expect(
+        await repos.prompts.list({
+          jobId: 'prompt-job',
+          statuses: ['pending'],
+        }),
+      ).toHaveLength(2);
+
+      await expect(
+        repos.prompts.resolve('choice', {
+          resolutionJson: '{"choice":"a"}',
+          resolvedBy: 'user-1',
+          resolvedAt: now,
+        }),
+      ).resolves.toMatchObject({
+        status: 'resolved',
+        resolvedBy: 'user-1',
+      });
+      await expect(
+        repos.prompts.resolve('choice', {
+          resolutionJson: '{}',
+          resolvedBy: 'user-2',
+        }),
+      ).resolves.toBeNull();
+      await expect(repos.prompts.expireDue(now)).resolves.toBe(1);
+      expect(await repos.prompts.get('expiring')).toMatchObject({
+        status: 'expired',
+      });
+      expect(await repos.prompts.get('missing')).toBeNull();
+    } finally {
       handle.close();
     }
   });

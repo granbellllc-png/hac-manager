@@ -12,6 +12,7 @@ import {
   type EnqueueJobInput,
   type JobExecutionContext,
   type JobHandler,
+  type JobPromptHandler,
   type JobStatusEvent,
   type NamedJobPriority,
 } from './types.js';
@@ -50,6 +51,7 @@ export class DurableJobQueue extends EventEmitter {
   private readonly defaultHostConcurrency: number;
   private readonly hostConcurrency: Readonly<Record<string, number>>;
   private readonly handlers = new Map<string, JobHandler>();
+  private promptHandler?: JobPromptHandler;
   private readonly running = new Map<string, RunningJob>();
   private readonly runningByHost = new Map<string, number>();
   private readonly guestLocks = new Set<string>();
@@ -88,6 +90,10 @@ export class DurableJobQueue extends EventEmitter {
   public registerHandler(type: string, handler: JobHandler): void {
     if (!type) throw new Error('Job handler type must not be empty');
     this.handlers.set(type, handler);
+  }
+
+  public setPromptHandler(handler: JobPromptHandler): void {
+    this.promptHandler = handler;
   }
 
   public async start(): Promise<number> {
@@ -185,7 +191,7 @@ export class DurableJobQueue extends EventEmitter {
     const requestedAt = new Date();
     await this.repos.jobs.requestCancel(jobId, requestedAt);
 
-    if (job.status === 'queued' || job.status === 'waiting_input') {
+    if (job.status === 'queued') {
       await this.transition(job, 'cancelled', {
         finishedAt: requestedAt,
         cancelRequestedAt: requestedAt,
@@ -205,7 +211,38 @@ export class DurableJobQueue extends EventEmitter {
     if (running) {
       running.stopReason = 'cancelled';
       running.controller.abort(new JobCancelledError());
+    } else if (job.status === 'waiting_input') {
+      await this.transition(job, 'cancelled', {
+        finishedAt: requestedAt,
+        cancelRequestedAt: requestedAt,
+        error: null,
+      });
+      await this.appendLog({
+        jobId,
+        stream: 'system',
+        text: 'Job cancelled while waiting for input',
+        ts: requestedAt,
+      });
+      this.requestDrain();
     }
+    return true;
+  }
+
+  public async resumeWaitingJob(jobId: string): Promise<boolean> {
+    const job = await this.repos.jobs.get(jobId);
+    if (!job || job.status !== 'waiting_input' || this.running.has(jobId)) {
+      return false;
+    }
+    await this.transition(job, 'queued', {
+      finishedAt: null,
+      error: null,
+    });
+    await this.appendLog({
+      jobId,
+      stream: 'system',
+      text: 'Job re-queued after prompt resolution',
+    });
+    this.requestDrain();
     return true;
   }
 
@@ -382,6 +419,25 @@ export class DurableJobQueue extends EventEmitter {
             });
           }
         },
+        prompt: async (request) => {
+          if (!this.promptHandler) {
+            throw new Error('No prompt handler configured');
+          }
+          await this.transition(job, 'waiting_input');
+          const resolution = await this.promptHandler(
+            claimed,
+            request,
+            running.controller.signal,
+          );
+          if (running.stopReason === 'cancelled') {
+            throw new JobCancelledError();
+          }
+          if (running.stopReason === 'interrupted') {
+            throw new JobInterruptedError();
+          }
+          await this.transition(job, 'running');
+          return resolution;
+        },
       };
       await handler(context);
 
@@ -407,6 +463,12 @@ export class DurableJobQueue extends EventEmitter {
           error instanceof Error
             ? error.message
             : 'Job interrupted by backend shutdown',
+        );
+      } else if (running.stopReason === 'timeout') {
+        await this.finish(
+          job,
+          'failed',
+          new JobTimeoutError(job.timeoutMs!).message,
         );
       } else {
         const message = globalSecretRedactor.redactLine(

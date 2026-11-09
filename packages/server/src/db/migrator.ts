@@ -205,11 +205,39 @@ export const jobsQueueMigration: Migration = {
   },
 };
 
+export const promptsMigration: Migration = {
+  id: '0005_prompts',
+  up: (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS prompts (
+        id TEXT PRIMARY KEY,
+        job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        status TEXT NOT NULL,
+        message TEXT NOT NULL,
+        payload_json TEXT,
+        options_json TEXT,
+        expected_text TEXT,
+        resolution_json TEXT,
+        resolved_by TEXT,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER,
+        resolved_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_prompts_job_status
+        ON prompts(job_id, status);
+      CREATE INDEX IF NOT EXISTS idx_prompts_status_expiry
+        ON prompts(status, expires_at);
+    `);
+  },
+};
+
 export const allMigrations: readonly Migration[] = [
   initialMigration,
   totpMigration,
   auditLogsMigration,
   jobsQueueMigration,
+  promptsMigration,
 ];
 
 export function runMigrations(

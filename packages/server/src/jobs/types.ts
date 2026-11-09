@@ -27,9 +27,26 @@ export interface JobExecutionContext {
   readonly payload: unknown;
   readonly signal: AbortSignal;
   readonly log: (stream: JobLogStream, text: string) => Promise<void>;
+  readonly prompt: (request: JobPromptRequest) => Promise<unknown>;
 }
 
 export type JobHandler = (context: JobExecutionContext) => Promise<void>;
+
+export interface JobPromptRequest {
+  readonly id?: string | undefined;
+  readonly kind: 'choice' | 'confirm' | 'typed_confirmation';
+  readonly message: string;
+  readonly payload?: unknown;
+  readonly options?: readonly string[] | undefined;
+  readonly expectedText?: string | undefined;
+  readonly expiresAt?: Date | undefined;
+}
+
+export type JobPromptHandler = (
+  job: JobRow,
+  request: JobPromptRequest,
+  signal: AbortSignal,
+) => Promise<unknown>;
 
 export interface DurableJobQueueOptions {
   readonly defaultHostConcurrency?: number | undefined;

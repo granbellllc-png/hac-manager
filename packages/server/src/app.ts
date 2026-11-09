@@ -20,12 +20,14 @@ import { hostsModule } from './modules/hosts/index.js';
 import { inventoryModule } from './modules/inventory/index.js';
 import { configEditorModule } from './modules/config-editor/index.js';
 import { eventsModule } from './modules/events/index.js';
+import { promptsModule } from './modules/prompts/index.js';
 import { HostRegistry } from './hosts/registry.js';
 import { ConnectionManager } from './router/manager.js';
 import { LiveInventoryService } from './inventory/service.js';
 import { authModule } from './auth/module.js';
 import { DurableJobQueue } from './jobs/queue.js';
 import { JobEventBroker } from './events/job-events.js';
+import { PromptService } from './prompts/service.js';
 import {
   SessionService,
   SESSION_COOKIE_NAME,
@@ -49,6 +51,7 @@ export interface BuildAppOptions {
   readonly jobQueue?: DurableJobQueue;
   readonly eventBroker?: JobEventBroker;
   readonly eventsHeartbeatMs?: number | undefined;
+  readonly promptService?: PromptService;
 }
 
 export async function buildApp(
@@ -136,6 +139,20 @@ export async function buildApp(
       ? configOrOptions.eventBroker
       : new JobEventBroker(jobQueue);
   app.decorate('eventBroker', eventBroker);
+  const promptService =
+    'promptService' in configOrOptions && configOrOptions.promptService
+      ? configOrOptions.promptService
+      : new PromptService(repositories, eventBroker, (jobId) =>
+          jobQueue.resumeWaitingJob(jobId),
+        );
+  jobQueue.setPromptHandler((job, request, signal) =>
+    promptService.request({
+      ...request,
+      jobId: job.id,
+      signal,
+    }),
+  );
+  app.decorate('promptService', promptService);
 
   const sessionService = new SessionService(repositories, config);
   const rateLimiter = new LoginRateLimiter();
@@ -254,6 +271,10 @@ export async function buildApp(
     configOrOptions.eventsHeartbeatMs !== undefined
       ? { heartbeatMs: configOrOptions.eventsHeartbeatMs }
       : {}),
+  });
+  await app.register(promptsModule, {
+    hostRegistry,
+    promptService,
   });
 
   await app.register(authModule, {

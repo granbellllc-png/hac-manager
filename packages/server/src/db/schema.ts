@@ -169,6 +169,35 @@ export const jobStepsTable = sqliteTable(
   (table) => [primaryKey({ columns: [table.jobId, table.stepIndex] })],
 );
 
+export const promptsTable = sqliteTable(
+  'prompts',
+  {
+    id: text('id').primaryKey(),
+    jobId: text('job_id')
+      .notNull()
+      .references(() => jobsTable.id, { onDelete: 'cascade' }),
+    kind: text('kind', {
+      enum: ['choice', 'confirm', 'typed_confirmation'],
+    }).notNull(),
+    status: text('status', {
+      enum: ['pending', 'resolved', 'expired'],
+    }).notNull(),
+    message: text('message').notNull(),
+    payloadJson: text('payload_json'),
+    optionsJson: text('options_json'),
+    expectedText: text('expected_text'),
+    resolutionJson: text('resolution_json'),
+    resolvedBy: text('resolved_by'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+    resolvedAt: integer('resolved_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    index('idx_prompts_job_status').on(table.jobId, table.status),
+    index('idx_prompts_status_expiry').on(table.status, table.expiresAt),
+  ],
+);
+
 export const migrationsTable = sqliteTable('__hacm_migrations', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull().unique(),
@@ -204,3 +233,6 @@ export type InsertJobLogLineRow = typeof jobLogLinesTable.$inferInsert;
 
 export type JobStepRow = typeof jobStepsTable.$inferSelect;
 export type InsertJobStepRow = typeof jobStepsTable.$inferInsert;
+
+export type PromptRow = typeof promptsTable.$inferSelect;
+export type InsertPromptRow = typeof promptsTable.$inferInsert;

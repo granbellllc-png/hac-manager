@@ -13,6 +13,8 @@ import type {
   JobLogLineRow,
   JobStepRow,
   InsertJobStepRow,
+  PromptRow,
+  InsertPromptRow,
 } from '../schema.js';
 
 export interface SettingsRepository {
@@ -174,6 +176,25 @@ export interface JobStepsRepository {
   list(jobId: string): Promise<readonly JobStepRow[]>;
 }
 
+export interface PromptListFilter {
+  readonly jobId?: string | undefined;
+  readonly statuses?: readonly PromptRow['status'][] | undefined;
+}
+
+export interface ResolvePromptInput {
+  readonly resolutionJson: string;
+  readonly resolvedBy: string;
+  readonly resolvedAt?: Date | undefined;
+}
+
+export interface PromptsRepository {
+  create(row: InsertPromptRow): Promise<PromptRow>;
+  get(id: string): Promise<PromptRow | null>;
+  list(filter?: PromptListFilter): Promise<readonly PromptRow[]>;
+  resolve(id: string, input: ResolvePromptInput): Promise<PromptRow | null>;
+  expireDue(now?: Date): Promise<number>;
+}
+
 export interface DatabaseRepositories {
   readonly settings: SettingsRepository;
   readonly hostsCache: HostsCacheRepository;
@@ -185,4 +206,5 @@ export interface DatabaseRepositories {
   readonly jobs: JobsRepository;
   readonly jobLogLines: JobLogLinesRepository;
   readonly jobSteps: JobStepsRepository;
+  readonly prompts: PromptsRepository;
 }

@@ -2016,6 +2016,301 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/prompts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List pending prompts for granted hosts */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            prompts: {
+                                id: string;
+                                jobId: string;
+                                hostId: string;
+                                vmid?: number;
+                                /** @enum {string} */
+                                kind: "choice" | "confirm" | "typed_confirmation";
+                                /** @enum {string} */
+                                status: "pending" | "resolved" | "expired";
+                                message: string;
+                                payload: unknown;
+                                readonly options: string[];
+                                resolution?: {
+                                    /** @enum {string} */
+                                    kind: "choice";
+                                    choice: string;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "confirm";
+                                    confirmed: boolean;
+                                } | {
+                                    /** @enum {string} */
+                                    kind: "typed_confirmation";
+                                    text: string;
+                                };
+                                resolvedBy?: string;
+                                createdAt: string;
+                                expiresAt?: string;
+                                resolvedAt?: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/prompts/{promptId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one prompt */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    promptId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            jobId: string;
+                            hostId: string;
+                            vmid?: number;
+                            /** @enum {string} */
+                            kind: "choice" | "confirm" | "typed_confirmation";
+                            /** @enum {string} */
+                            status: "pending" | "resolved" | "expired";
+                            message: string;
+                            payload: unknown;
+                            readonly options: string[];
+                            resolution?: {
+                                /** @enum {string} */
+                                kind: "choice";
+                                choice: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "confirm";
+                                confirmed: boolean;
+                            } | {
+                                /** @enum {string} */
+                                kind: "typed_confirmation";
+                                text: string;
+                            };
+                            resolvedBy?: string;
+                            createdAt: string;
+                            expiresAt?: string;
+                            resolvedAt?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/prompts/{promptId}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve a pending prompt */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    promptId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        kind: "choice";
+                        choice: string;
+                    } | {
+                        /** @enum {string} */
+                        kind: "confirm";
+                        confirmed: boolean;
+                    } | {
+                        /** @enum {string} */
+                        kind: "typed_confirmation";
+                        text: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            jobId: string;
+                            hostId: string;
+                            vmid?: number;
+                            /** @enum {string} */
+                            kind: "choice" | "confirm" | "typed_confirmation";
+                            /** @enum {string} */
+                            status: "pending" | "resolved" | "expired";
+                            message: string;
+                            payload: unknown;
+                            readonly options: string[];
+                            resolution?: {
+                                /** @enum {string} */
+                                kind: "choice";
+                                choice: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "confirm";
+                                confirmed: boolean;
+                            } | {
+                                /** @enum {string} */
+                                kind: "typed_confirmation";
+                                text: string;
+                            };
+                            resolvedBy?: string;
+                            createdAt: string;
+                            expiresAt?: string;
+                            resolvedAt?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                410: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/status": {
         parameters: {
             query?: never;
