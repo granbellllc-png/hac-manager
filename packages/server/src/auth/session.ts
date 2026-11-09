@@ -104,7 +104,7 @@ export class SessionService {
 
     // Slide idle expiration window
     const newExpiresAt = new Date(now.getTime() + SESSION_IDLE_TIMEOUT_MS);
-    await this.repos.sessions.updateLastSeen(session.id, now);
+    await this.repos.sessions.updateLastSeen(session.id, now, newExpiresAt);
     session.lastSeenAt = now;
     session.expiresAt = newExpiresAt;
 

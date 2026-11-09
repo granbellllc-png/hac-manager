@@ -61,7 +61,7 @@ export interface UserHostAccessRepository {
 export interface SessionsRepository {
   get(id: string): Promise<SessionRow | null>;
   create(row: InsertSessionRow): Promise<void>;
-  updateLastSeen(id: string, lastSeenAt: Date): Promise<void>;
+  updateLastSeen(id: string, lastSeenAt: Date, expiresAt?: Date): Promise<void>;
   delete(id: string): Promise<boolean>;
   deleteExpired(now?: Date): Promise<number>;
   deleteByUserId(userId: string): Promise<number>;

@@ -333,9 +333,9 @@ export function createSqliteRepositories(
     async create(row) {
       db.insert(schema.sessionsTable).values(row).run();
     },
-    async updateLastSeen(id: string, lastSeenAt: Date) {
+    async updateLastSeen(id: string, lastSeenAt: Date, expiresAt?: Date) {
       db.update(schema.sessionsTable)
-        .set({ lastSeenAt })
+        .set({ lastSeenAt, expiresAt })
         .where(eq(schema.sessionsTable.id, id))
         .run();
     },

@@ -53,9 +53,8 @@ export class LoginRateLimiter {
   ): { locked: boolean; remaining: number } {
     let entry = this.attempts.get(key);
     if (!entry || now - entry.firstAttemptAt > this.windowMs) {
-      entry = { count: 1, firstAttemptAt: now };
+      entry = { count: 0, firstAttemptAt: now };
       this.attempts.set(key, entry);
-      return { locked: false, remaining: this.maxFailures - 1 };
     }
 
     entry.count += 1;

@@ -262,7 +262,7 @@ Task fields: `name`, `run`, `when`, `creates` (idempotency), `timeout`, `retries
 
 ### 4.14 Users, roles, audit, security
 
-**D-64. Local auth.** First-run admin setup, argon2id, secure cookie sessions, CSRF protection, rate limiting and lockout, security headers. Optional TOTP with recovery codes. API tokens later. No OIDC in v1. _M3, M13._
+**D-64. Local auth.** First-run admin setup, argon2id, secure cookie sessions, CSRF protection, rate limiting and lockout, security headers. Sessions have a two-hour idle expiry that is refreshed in SQLite and a 24-hour absolute lifetime. Optional TOTP with single-use recovery codes; the browser submits the appropriate second factor and derives authenticated state only from a valid server session response. API tokens later. No OIDC in v1. _M3, M13._
 
 **D-65. Roles.** `admin`, `operator`, `viewer`, plus per-host access and the `auto_grant_new_hosts` flag. Single-admin UX first; the schema supports several users.
 
