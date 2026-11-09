@@ -16,6 +16,8 @@ import { createLogger } from './logger.js';
 import { healthModule } from './modules/health/index.js';
 import { usersModule } from './modules/users/index.js';
 import { auditModule } from './modules/audit/index.js';
+import { hostsModule } from './modules/hosts/index.js';
+import { HostRegistry } from './hosts/registry.js';
 import { authModule } from './auth/module.js';
 import {
   SessionService,
@@ -34,6 +36,7 @@ export interface BuildAppOptions {
   readonly config: ServerConfig;
   readonly logger?: FastifyBaseLogger;
   readonly repositories?: DatabaseRepositories;
+  readonly hostRegistry?: HostRegistry;
 }
 
 export async function buildApp(
@@ -165,10 +168,26 @@ export async function buildApp(
     }
   });
 
+  const hostRegistry =
+    'hostRegistry' in configOrOptions && configOrOptions.hostRegistry
+      ? configOrOptions.hostRegistry
+      : new HostRegistry({
+          dataDir: config.HACM_DATA_DIR,
+          repos: repositories,
+          autoWatch: false,
+        });
+
+  await hostRegistry.sync();
+  app.decorate('hostRegistry', hostRegistry);
+  app.addHook('onClose', async () => {
+    hostRegistry.close();
+  });
+
   // Register Modules
   await app.register(healthModule);
   await app.register(usersModule, { repos: repositories });
   await app.register(auditModule, { repos: repositories });
+  await app.register(hostsModule, { hostRegistry, repos: repositories });
 
   await app.register(authModule, {
     repos: repositories,
