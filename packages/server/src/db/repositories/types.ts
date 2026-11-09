@@ -15,6 +15,8 @@ import type {
   InsertJobStepRow,
   PromptRow,
   InsertPromptRow,
+  PlanRow,
+  InsertPlanRow,
 } from '../schema.js';
 
 export interface SettingsRepository {
@@ -195,6 +197,39 @@ export interface PromptsRepository {
   expireDue(now?: Date): Promise<number>;
 }
 
+export interface PlanListFilter {
+  readonly hostId?: string | undefined;
+  readonly statuses?: readonly PlanRow['status'][] | undefined;
+  readonly limit?: number | undefined;
+}
+
+export interface UpdatePlanStatusPatch {
+  readonly approvedBy?: string | null | undefined;
+  readonly lastJobId?: string | null | undefined;
+  readonly error?: string | null | undefined;
+  readonly approvedAt?: Date | null | undefined;
+  readonly appliedAt?: Date | null | undefined;
+}
+
+export interface PlansRepository {
+  create(row: InsertPlanRow): Promise<PlanRow>;
+  get(id: string): Promise<PlanRow | null>;
+  list(filter?: PlanListFilter): Promise<readonly PlanRow[]>;
+  claimApply(
+    id: string,
+    input: {
+      readonly jobId: string;
+      readonly approvedBy: string;
+      readonly approvedAt?: Date | undefined;
+    },
+  ): Promise<PlanRow | null>;
+  updateStatus(
+    id: string,
+    status: PlanRow['status'],
+    patch?: UpdatePlanStatusPatch,
+  ): Promise<boolean>;
+}
+
 export interface DatabaseRepositories {
   readonly settings: SettingsRepository;
   readonly hostsCache: HostsCacheRepository;
@@ -207,4 +242,5 @@ export interface DatabaseRepositories {
   readonly jobLogLines: JobLogLinesRepository;
   readonly jobSteps: JobStepsRepository;
   readonly prompts: PromptsRepository;
+  readonly plans: PlansRepository;
 }

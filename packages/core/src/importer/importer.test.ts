@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseProxmoxConfig, serialiseProxmoxConfig } from '../codec/index.js';
@@ -13,6 +13,9 @@ import { loadYamlDocument } from '../yaml/document.js';
 import { generateDeploymentYaml } from './generate.js';
 import { planGuestImport } from './plan.js';
 import { applyGuestImport } from './apply.js';
+import { hashContent } from '../data-dir/hash.js';
+import { WriteConflictError } from '../data-dir/write-guard.js';
+import type { FileSystem } from '../yaml/file.js';
 
 const fixturesDir = join(__dirname, '../../fixtures/proxmox');
 
@@ -132,6 +135,89 @@ describe('Guest Importer', () => {
         overwrite: true,
       });
       expect(applyRes3.success).toBe(true);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('uses a guarded atomic write when a plan supplies the expected hash', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'hacm-import-guard-'));
+    try {
+      const liveGuest = parseProxmoxConfig(
+        readFileSync(join(fixturesDir, 'lxc-112-unprivileged.conf'), 'utf8'),
+        'lxc',
+        112,
+      );
+      const generatedAt = new Date('2026-01-01T00:00:00.000Z');
+      const initial = await planGuestImport({
+        dataDir: tempDir,
+        hostId: 'pve-01',
+        guest: liveGuest,
+        generatedAt,
+      });
+      await applyGuestImport({ plan: initial, expectedHash: '' });
+      const original = await readFile(initial.fullPath, 'utf8');
+      const expectedHash = await hashContent(original);
+      const overwrite = await planGuestImport({
+        dataDir: tempDir,
+        hostId: 'pve-01',
+        guest: { ...liveGuest, ram: 2_048 },
+        generatedAt,
+      });
+      await writeFile(initial.fullPath, `${original}# external edit\n`, 'utf8');
+
+      await expect(
+        applyGuestImport({
+          plan: overwrite,
+          overwrite: true,
+          expectedHash,
+        }),
+      ).rejects.toBeInstanceOf(WriteConflictError);
+      expect(await readFile(initial.fullPath, 'utf8')).toContain(
+        '# external edit',
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('removes the temporary file when an atomic rename fails', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'hacm-import-rename-'));
+    try {
+      const liveGuest = parseProxmoxConfig(
+        readFileSync(join(fixturesDir, 'lxc-112-unprivileged.conf'), 'utf8'),
+        'lxc',
+        112,
+      );
+      const plan = await planGuestImport({
+        dataDir: tempDir,
+        hostId: 'pve-01',
+        guest: liveGuest,
+      });
+      const unlink = vi.fn(async () => {
+        throw new Error('unlink failed');
+      });
+      const fs: FileSystem = {
+        async readFile() {
+          throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+        },
+        async writeFile() {},
+        async stat() {
+          throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+        },
+        async readdir() {
+          return [];
+        },
+        async rename() {
+          throw new Error('rename failed');
+        },
+        unlink,
+      };
+
+      await expect(
+        applyGuestImport({ plan, fs, expectedHash: '' }),
+      ).rejects.toThrow('rename failed');
+      expect(unlink).toHaveBeenCalledOnce();
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

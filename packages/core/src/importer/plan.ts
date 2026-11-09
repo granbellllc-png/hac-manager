@@ -14,6 +14,7 @@ export interface PlanGuestImportOptions {
   readonly guest: GuestDeployment;
   readonly defaults?: DeploymentDefaultsFile | undefined;
   readonly fs?: FileSystem | undefined;
+  readonly generatedAt?: Date | undefined;
 }
 
 export async function planGuestImport(
@@ -40,6 +41,7 @@ export async function planGuestImport(
   const { yamlContent, omittedDefaults } = generateDeploymentYaml({
     guest,
     defaults,
+    generatedAt: options.generatedAt,
   });
 
   return {

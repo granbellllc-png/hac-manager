@@ -28,6 +28,7 @@ import type {
   JobLogLinesRepository,
   JobStepsRepository,
   PromptsRepository,
+  PlansRepository,
 } from './types.js';
 
 export function createSqliteRepositories(
@@ -729,6 +730,89 @@ export function createSqliteRepositories(
     },
   };
 
+  const plans: PlansRepository = {
+    async create(row) {
+      db.insert(schema.plansTable).values(row).run();
+      const created = db
+        .select()
+        .from(schema.plansTable)
+        .where(eq(schema.plansTable.id, row.id))
+        .get();
+      if (!created) throw new Error(`Failed to create plan '${row.id}'`);
+      return created;
+    },
+    async get(id) {
+      return (
+        db
+          .select()
+          .from(schema.plansTable)
+          .where(eq(schema.plansTable.id, id))
+          .get() ?? null
+      );
+    },
+    async list(filter = {}) {
+      const conditions = [];
+      if (filter.hostId) {
+        conditions.push(eq(schema.plansTable.hostId, filter.hostId));
+      }
+      if (filter.statuses && filter.statuses.length > 0) {
+        conditions.push(
+          inArray(schema.plansTable.status, [...filter.statuses]),
+        );
+      }
+      const query = db
+        .select()
+        .from(schema.plansTable)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(schema.plansTable.createdAt));
+      return filter.limit === undefined
+        ? query.all()
+        : query.limit(filter.limit).all();
+    },
+    async claimApply(id, input) {
+      return db.transaction((tx) => {
+        const result = tx
+          .update(schema.plansTable)
+          .set({
+            status: 'applying',
+            approvedBy: input.approvedBy,
+            approvedAt: input.approvedAt ?? new Date(),
+            lastJobId: input.jobId,
+            error: null,
+          })
+          .where(
+            and(
+              eq(schema.plansTable.id, id),
+              inArray(schema.plansTable.status, ['ready', 'failed']),
+            ),
+          )
+          .run();
+        if (result.changes === 0) return null;
+        return (
+          tx
+            .select()
+            .from(schema.plansTable)
+            .where(eq(schema.plansTable.id, id))
+            .get() ?? null
+        );
+      });
+    },
+    async updateStatus(id, status, patch = {}) {
+      const values: Partial<schema.InsertPlanRow> = { status };
+      if (patch.approvedBy !== undefined) values.approvedBy = patch.approvedBy;
+      if (patch.lastJobId !== undefined) values.lastJobId = patch.lastJobId;
+      if (patch.error !== undefined) values.error = patch.error;
+      if (patch.approvedAt !== undefined) values.approvedAt = patch.approvedAt;
+      if (patch.appliedAt !== undefined) values.appliedAt = patch.appliedAt;
+      const result = db
+        .update(schema.plansTable)
+        .set(values)
+        .where(eq(schema.plansTable.id, id))
+        .run();
+      return result.changes > 0;
+    },
+  };
+
   return {
     settings,
     hostsCache,
@@ -741,5 +825,6 @@ export function createSqliteRepositories(
     jobLogLines,
     jobSteps,
     prompts,
+    plans,
   };
 }

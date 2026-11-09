@@ -41,6 +41,10 @@ pnpm --filter cli exec hacm init --data-dir ../my-homelab --host pve-01
 
 # Validate syntax, schemas, VMID uniqueness, and tags
 pnpm --filter cli exec hacm validate --data-dir ../my-homelab
+
+# Review and save an import plan, then apply the exact fingerprinted state
+pnpm --filter cli exec hacm plan --data-dir ../my-homelab --host pve-01 --file ./pct-112.conf --vmid 112 --out ./import-112.plan.json
+pnpm --filter cli exec hacm apply --data-dir ../my-homelab --plan ./import-112.plan.json
 ```
 
 Adjust connection details in `hosts/<host>/host.yaml` and configure credentials in untracked `secrets.yaml` (automatically ignored by git). `.env.example` documents runtime configuration; development and production start scripts load the root `.env` when present. Required data and state paths are parsed at startup; the state dir must be outside the data dir. Invalid configuration aborts with field diagnostics without printing environment values.

@@ -239,4 +239,99 @@ describe('job repositories', () => {
       handle.close();
     }
   });
+
+  it('persists plans and atomically claims one apply job', async () => {
+    const handle = createDatabase({ path: ':memory:' });
+    try {
+      const repos = createSqliteRepositories(handle.db);
+      const now = new Date('2026-01-01T00:00:00.000Z');
+      await repos.jobs.create({
+        id: 'apply-job',
+        hostId: 'pve-01',
+        vmid: 112,
+        lane: 'guest',
+        type: 'plan.apply',
+        status: 'queued',
+        priority: 0,
+        createdAt: now,
+      });
+      await repos.plans.create({
+        id: 'plan-1',
+        operation: 'guest.import',
+        hostId: 'pve-01',
+        vmid: 112,
+        status: 'ready',
+        summary: 'Import guest',
+        changesJson: '[]',
+        warningsJson: '[]',
+        destructive: false,
+        stateFingerprint: 'a'.repeat(64),
+        payloadJson: '{}',
+        createdAt: now,
+      });
+      expect(await repos.plans.list({ hostId: 'pve-01' })).toHaveLength(1);
+      expect(
+        await repos.plans.list({ statuses: ['ready'], limit: 1 }),
+      ).toHaveLength(1);
+      expect(await repos.plans.get('missing-plan')).toBeNull();
+      await expect(
+        repos.plans.claimApply('plan-1', {
+          jobId: 'apply-job',
+          approvedBy: 'operator-1',
+          approvedAt: now,
+        }),
+      ).resolves.toMatchObject({
+        status: 'applying',
+        lastJobId: 'apply-job',
+      });
+      await expect(
+        repos.plans.claimApply('plan-1', {
+          jobId: 'apply-job',
+          approvedBy: 'operator-2',
+        }),
+      ).resolves.toBeNull();
+      await expect(
+        repos.plans.updateStatus('plan-1', 'applied', {
+          appliedAt: now,
+          error: null,
+        }),
+      ).resolves.toBe(true);
+      expect(await repos.plans.get('plan-1')).toMatchObject({
+        status: 'applied',
+        appliedAt: now,
+      });
+      await repos.plans.create({
+        id: 'plan-2',
+        operation: 'guest.import',
+        hostId: 'pve-02',
+        status: 'failed',
+        summary: 'Retry import',
+        changesJson: '[]',
+        warningsJson: '[]',
+        destructive: false,
+        stateFingerprint: 'b'.repeat(64),
+        payloadJson: '{}',
+        createdAt: new Date(now.getTime() + 1),
+      });
+      await expect(
+        repos.plans.claimApply('plan-2', {
+          jobId: 'retry-job',
+          approvedBy: 'operator-2',
+        }),
+      ).resolves.toMatchObject({ status: 'applying' });
+      await expect(
+        repos.plans.updateStatus('plan-2', 'failed', {
+          approvedBy: null,
+          lastJobId: null,
+          approvedAt: null,
+          error: 'retry failed',
+        }),
+      ).resolves.toBe(true);
+      expect(await repos.plans.list({ limit: 1 })).toEqual([
+        expect.objectContaining({ id: 'plan-2' }),
+      ]);
+    } finally {
+      handle.close();
+    }
+  });
 });

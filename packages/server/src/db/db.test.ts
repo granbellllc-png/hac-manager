@@ -28,6 +28,7 @@ describe('Database foundation', () => {
       expect(names).toContain('job_log_lines');
       expect(names).toContain('job_steps');
       expect(names).toContain('prompts');
+      expect(names).toContain('plans');
     } finally {
       handle.close();
     }

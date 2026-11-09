@@ -6,6 +6,7 @@ import type {
 export interface GenerateDeploymentYamlOptions {
   readonly guest: GuestDeployment;
   readonly defaults?: DeploymentDefaultsFile | undefined;
+  readonly generatedAt?: Date | undefined;
 }
 
 export interface GenerateDeploymentYamlResult {

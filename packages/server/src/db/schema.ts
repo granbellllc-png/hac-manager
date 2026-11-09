@@ -198,6 +198,38 @@ export const promptsTable = sqliteTable(
   ],
 );
 
+export const plansTable = sqliteTable(
+  'plans',
+  {
+    id: text('id').primaryKey(),
+    operation: text('operation').notNull(),
+    hostId: text('host_id').notNull(),
+    vmid: integer('vmid'),
+    status: text('status', {
+      enum: ['ready', 'applying', 'applied', 'stale', 'failed'],
+    }).notNull(),
+    summary: text('summary').notNull(),
+    changesJson: text('changes_json').notNull(),
+    warningsJson: text('warnings_json').notNull(),
+    destructive: integer('destructive', { mode: 'boolean' }).notNull(),
+    stateFingerprint: text('state_fingerprint').notNull(),
+    confirmationText: text('confirmation_text'),
+    payloadJson: text('payload_json').notNull(),
+    createdBy: text('created_by'),
+    approvedBy: text('approved_by'),
+    lastJobId: text('last_job_id'),
+    error: text('error'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    approvedAt: integer('approved_at', { mode: 'timestamp_ms' }),
+    appliedAt: integer('applied_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    index('idx_plans_host_status').on(table.hostId, table.status),
+    index('idx_plans_created_at').on(table.createdAt),
+    index('idx_plans_last_job').on(table.lastJobId),
+  ],
+);
+
 export const migrationsTable = sqliteTable('__hacm_migrations', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull().unique(),
@@ -236,3 +268,6 @@ export type InsertJobStepRow = typeof jobStepsTable.$inferInsert;
 
 export type PromptRow = typeof promptsTable.$inferSelect;
 export type InsertPromptRow = typeof promptsTable.$inferInsert;
+
+export type PlanRow = typeof plansTable.$inferSelect;
+export type InsertPlanRow = typeof plansTable.$inferInsert;

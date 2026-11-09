@@ -2,6 +2,8 @@ import { runInit } from './commands/init.js';
 import { runSchemaExport } from './commands/schema.js';
 import { runValidate } from './commands/validate.js';
 import { runImport } from './commands/import.js';
+import { runPlan } from './commands/plan.js';
+import { runApply } from './commands/apply.js';
 
 export function printHelp(): void {
   process.stdout.write(`hacm - Homelab as Code Manager CLI
@@ -14,6 +16,8 @@ Commands:
   validate                 Validate data directory schemas, merge, tags and layout
   schema export            Export JSON Schemas and document yaml-language-server modeline
   import                   Import live guests into YAML deployment files
+  plan                     Create a fingerprinted guest-import plan file
+  apply                    Verify and apply a saved plan
 
 Init Options:
   -d, --data-dir <path>    Path to directory to scaffold (defaults to current directory)
@@ -35,6 +39,23 @@ Import Options:
   --type <lxc|vm>          Guest type (auto-detected if omitted)
   --dry-run                Preview generated YAML and plan without writing to disk
   --overwrite              Allow overwriting existing deployment.yaml
+  --json                   Output machine-readable JSON
+
+Plan Options:
+  -d, --data-dir <path>    Path to data directory
+  --host <id>              Host ID to import under
+  --file <path>            Path to a Proxmox config file
+  --vmid <number>          VMID to assign to the imported guest
+  --type <lxc|vm>          Guest type (auto-detected if omitted)
+  --overwrite              Plan replacement of an existing deployment.yaml
+  -o, --out <path>         Save the reusable plan document
+  --json                   Output the complete plan document as JSON
+
+Apply Options:
+  -d, --data-dir <path>    Path to data directory
+  --plan <path>            Saved plan document to verify and apply
+  --dry-run                Run freshness checks without writing
+  --confirm <text>         Typed confirmation for destructive plans
   --json                   Output machine-readable JSON
 
 Schema Export Options:
@@ -168,6 +189,74 @@ export async function runCli(argv: string[]): Promise<number> {
       overwrite,
       json,
     });
+  }
+
+  if (command === 'plan') {
+    let dataDir: string | undefined;
+    let host: string | undefined;
+    let file: string | undefined;
+    let vmid: number | undefined;
+    let type: 'lxc' | 'vm' | undefined;
+    let overwrite = false;
+    let out: string | undefined;
+    let json = false;
+
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i]!;
+      if (arg === '--json') json = true;
+      else if (arg === '--overwrite') overwrite = true;
+      else if (arg === '-d' || arg === '--data-dir') dataDir = args[++i];
+      else if (arg.startsWith('--data-dir='))
+        dataDir = arg.slice('--data-dir='.length);
+      else if (arg === '--host') host = args[++i];
+      else if (arg.startsWith('--host=')) host = arg.slice('--host='.length);
+      else if (arg === '--file') file = args[++i];
+      else if (arg.startsWith('--file=')) file = arg.slice('--file='.length);
+      else if (arg === '--vmid') vmid = Number(args[++i]);
+      else if (arg.startsWith('--vmid='))
+        vmid = Number(arg.slice('--vmid='.length));
+      else if (arg === '--type') {
+        const value = args[++i];
+        if (value === 'lxc' || value === 'vm') type = value;
+      } else if (arg.startsWith('--type=')) {
+        const value = arg.slice('--type='.length);
+        if (value === 'lxc' || value === 'vm') type = value;
+      } else if (arg === '-o' || arg === '--out') out = args[++i];
+      else if (arg.startsWith('--out=')) out = arg.slice('--out='.length);
+    }
+    return runPlan({
+      dataDir,
+      host,
+      file,
+      vmid,
+      type,
+      overwrite,
+      out,
+      json,
+    });
+  }
+
+  if (command === 'apply') {
+    let dataDir: string | undefined;
+    let plan: string | undefined;
+    let dryRun = false;
+    let confirmation: string | undefined;
+    let json = false;
+
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i]!;
+      if (arg === '--json') json = true;
+      else if (arg === '--dry-run') dryRun = true;
+      else if (arg === '-d' || arg === '--data-dir') dataDir = args[++i];
+      else if (arg.startsWith('--data-dir='))
+        dataDir = arg.slice('--data-dir='.length);
+      else if (arg === '--plan') plan = args[++i];
+      else if (arg.startsWith('--plan=')) plan = arg.slice('--plan='.length);
+      else if (arg === '--confirm') confirmation = args[++i];
+      else if (arg.startsWith('--confirm='))
+        confirmation = arg.slice('--confirm='.length);
+    }
+    return runApply({ dataDir, plan, dryRun, confirmation, json });
   }
 
   if (command === 'schema') {

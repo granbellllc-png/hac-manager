@@ -232,12 +232,48 @@ export const promptsMigration: Migration = {
   },
 };
 
+export const plansMigration: Migration = {
+  id: '0006_plans',
+  up: (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS plans (
+        id TEXT PRIMARY KEY,
+        operation TEXT NOT NULL,
+        host_id TEXT NOT NULL,
+        vmid INTEGER,
+        status TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        changes_json TEXT NOT NULL,
+        warnings_json TEXT NOT NULL,
+        destructive INTEGER NOT NULL,
+        state_fingerprint TEXT NOT NULL,
+        confirmation_text TEXT,
+        payload_json TEXT NOT NULL,
+        created_by TEXT,
+        approved_by TEXT,
+        last_job_id TEXT,
+        error TEXT,
+        created_at INTEGER NOT NULL,
+        approved_at INTEGER,
+        applied_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_plans_host_status
+        ON plans(host_id, status);
+      CREATE INDEX IF NOT EXISTS idx_plans_created_at
+        ON plans(created_at);
+      CREATE INDEX IF NOT EXISTS idx_plans_last_job
+        ON plans(last_job_id);
+    `);
+  },
+};
+
 export const allMigrations: readonly Migration[] = [
   initialMigration,
   totpMigration,
   auditLogsMigration,
   jobsQueueMigration,
   promptsMigration,
+  plansMigration,
 ];
 
 export function runMigrations(

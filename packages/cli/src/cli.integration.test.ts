@@ -192,6 +192,150 @@ describe('CLI command integration', () => {
     );
   });
 
+  it('creates reusable plans, dry-runs the same path, applies, and refuses stale input', async () => {
+    await runInit({ dataDir: directory });
+    const planFile = join(directory, 'guest.plan.json');
+    const args = [
+      'plan',
+      `--data-dir=${directory}`,
+      '--host=pve-01',
+      `--file=${fixture}`,
+      '--vmid=112',
+      '--type=lxc',
+      `--out=${planFile}`,
+    ];
+    expect(await runCli(args)).toBe(0);
+    expect(stdout).toContain('Fingerprint:');
+    const document = JSON.parse(await readFile(planFile, 'utf8')) as {
+      plan: { id: string };
+    };
+    expect(document.plan.id).toBeTruthy();
+
+    stdout = '';
+    expect(
+      await runCli([
+        'apply',
+        `--data-dir=${directory}`,
+        `--plan=${planFile}`,
+        '--dry-run',
+        '--json',
+      ]),
+    ).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({ dryRun: true });
+    const deployment = join(
+      directory,
+      'hosts/pve-01/112-example-lxc/deployment.yaml',
+    );
+    await expect(readFile(deployment, 'utf8')).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+
+    stdout = '';
+    expect(
+      await runCli(['apply', `--data-dir=${directory}`, `--plan=${planFile}`]),
+    ).toBe(0);
+    expect(await readFile(deployment, 'utf8')).toContain('id: 112');
+
+    const staleSource = join(directory, 'stale.conf');
+    await writeFile(staleSource, await readFile(fixture, 'utf8'), 'utf8');
+    const stalePlan = join(directory, 'stale.plan.json');
+    stdout = '';
+    expect(
+      await runCli([
+        'plan',
+        `--data-dir=${directory}`,
+        '--host=pve-01',
+        `--file=${staleSource}`,
+        '--vmid=113',
+        `--out=${stalePlan}`,
+      ]),
+    ).toBe(0);
+    await writeFile(staleSource, 'hostname: changed\ncores: 4\n', 'utf8');
+    stderr = '';
+    expect(
+      await runCli(['apply', `--data-dir=${directory}`, `--plan=${stalePlan}`]),
+    ).toBe(1);
+    expect(stderr).toContain('stale');
+  });
+
+  it('parses separated and equals-style plan/apply options', async () => {
+    const separatedPlan = join(directory, 'separated.plan.json');
+    expect(
+      await runCli([
+        'plan',
+        '-d',
+        directory,
+        '--host',
+        'pve-01',
+        '--file',
+        fixture,
+        '--vmid',
+        '114',
+        '--type',
+        'lxc',
+        '--overwrite',
+        '-o',
+        separatedPlan,
+        '--json',
+      ]),
+    ).toBe(0);
+    stdout = '';
+    expect(
+      await runCli([
+        'apply',
+        '-d',
+        directory,
+        '--plan',
+        separatedPlan,
+        '--confirm',
+        'unused',
+        '--dry-run',
+        '--json',
+      ]),
+    ).toBe(0);
+
+    const equalsPlan = join(directory, 'equals.plan.json');
+    stdout = '';
+    expect(
+      await runCli([
+        'plan',
+        `--data-dir=${directory}`,
+        '--host=pve-01',
+        `--file=${fixture}`,
+        '--vmid=115',
+        '--type=invalid',
+        `--out=${equalsPlan}`,
+      ]),
+    ).toBe(0);
+    stdout = '';
+    expect(
+      await runCli([
+        'apply',
+        `--data-dir=${directory}`,
+        `--plan=${equalsPlan}`,
+        '--confirm=unused',
+        '--dry-run',
+      ]),
+    ).toBe(0);
+
+    stdout = '';
+    expect(
+      await runCli([
+        'plan',
+        '-d',
+        directory,
+        '--host',
+        'pve-01',
+        '--file',
+        fixture,
+        '--vmid',
+        '116',
+        '--type',
+        'invalid',
+      ]),
+    ).toBe(0);
+  });
+
   it('returns errors for missing required options and unreadable input', async () => {
     expect(await runImport()).toBe(1);
     expect(stderr).toContain('--host');

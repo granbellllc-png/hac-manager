@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "plan-fixture-001",
+  "operation": "guest.import",
+  "target": {
+    "hostId": "pve-01",
+    "vmid": 112,
+    "resourceType": "guest"
+  },
+  "summary": "Import LXC 112 into YAML",
+  "changes": [
+    {
+      "id": "deployment-file",
+      "action": "create",
+      "summary": "Create deployment YAML",
+      "path": "hosts/pve-01/112-example/deployment.yaml",
+      "before": null,
+      "after": {
+        "id": 112,
+        "name": "example",
+        "ssh": {
+          "password": "***"
+        }
+      }
+    }
+  ],
+  "warnings": ["Review generated networking before apply"],
+  "destructive": false,
+  "stateFingerprint": "6419b52e1d1c6529b637d405d5930986223e94e290c4c0a426ae8a20fc24d3b7",
+  "createdAt": "2026-01-02T03:04:05.000Z"
+}

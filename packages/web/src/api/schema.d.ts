@@ -2311,6 +2311,488 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/plans/guest-import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a durable guest-import plan */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        hostId: string;
+                        vmid: number;
+                        overwrite?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {number} */
+                            schemaVersion: 1;
+                            id: string;
+                            operation: string;
+                            target: {
+                                hostId: string;
+                                vmid?: number;
+                                /** @enum {string} */
+                                resourceType?: "host" | "guest" | "file";
+                            };
+                            summary: string;
+                            readonly changes: {
+                                id: string;
+                                /** @enum {string} */
+                                action: "create" | "update" | "delete" | "execute";
+                                summary: string;
+                                path?: string;
+                                before?: unknown;
+                                after?: unknown;
+                                readonly warnings?: string[];
+                                destructive?: boolean;
+                            }[];
+                            readonly warnings: string[];
+                            destructive: boolean;
+                            stateFingerprint: string;
+                            confirmationText?: string;
+                            createdAt: string;
+                            /** @enum {string} */
+                            status: "ready" | "applying" | "applied" | "stale" | "failed";
+                            createdBy?: string;
+                            approvedBy?: string;
+                            lastJobId?: string;
+                            error?: string;
+                            approvedAt?: string;
+                            appliedAt?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List plans for granted hosts */
+        get: {
+            parameters: {
+                query?: {
+                    hostId?: string;
+                    status?: "ready" | "applying" | "applied" | "stale" | "failed";
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            plans: {
+                                /** @enum {number} */
+                                schemaVersion: 1;
+                                id: string;
+                                operation: string;
+                                target: {
+                                    hostId: string;
+                                    vmid?: number;
+                                    /** @enum {string} */
+                                    resourceType?: "host" | "guest" | "file";
+                                };
+                                summary: string;
+                                readonly changes: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    action: "create" | "update" | "delete" | "execute";
+                                    summary: string;
+                                    path?: string;
+                                    before?: unknown;
+                                    after?: unknown;
+                                    readonly warnings?: string[];
+                                    destructive?: boolean;
+                                }[];
+                                readonly warnings: string[];
+                                destructive: boolean;
+                                stateFingerprint: string;
+                                confirmationText?: string;
+                                createdAt: string;
+                                /** @enum {string} */
+                                status: "ready" | "applying" | "applied" | "stale" | "failed";
+                                createdBy?: string;
+                                approvedBy?: string;
+                                lastJobId?: string;
+                                error?: string;
+                                approvedAt?: string;
+                                appliedAt?: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plans/{planId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** View one plan */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    planId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {number} */
+                            schemaVersion: 1;
+                            id: string;
+                            operation: string;
+                            target: {
+                                hostId: string;
+                                vmid?: number;
+                                /** @enum {string} */
+                                resourceType?: "host" | "guest" | "file";
+                            };
+                            summary: string;
+                            readonly changes: {
+                                id: string;
+                                /** @enum {string} */
+                                action: "create" | "update" | "delete" | "execute";
+                                summary: string;
+                                path?: string;
+                                before?: unknown;
+                                after?: unknown;
+                                readonly warnings?: string[];
+                                destructive?: boolean;
+                            }[];
+                            readonly warnings: string[];
+                            destructive: boolean;
+                            stateFingerprint: string;
+                            confirmationText?: string;
+                            createdAt: string;
+                            /** @enum {string} */
+                            status: "ready" | "applying" | "applied" | "stale" | "failed";
+                            createdBy?: string;
+                            approvedBy?: string;
+                            lastJobId?: string;
+                            error?: string;
+                            approvedAt?: string;
+                            appliedAt?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plans/{planId}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a plan and queue its apply job */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    planId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        dryRun?: boolean;
+                        confirmation?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            plan: {
+                                /** @enum {number} */
+                                schemaVersion: 1;
+                                id: string;
+                                operation: string;
+                                target: {
+                                    hostId: string;
+                                    vmid?: number;
+                                    /** @enum {string} */
+                                    resourceType?: "host" | "guest" | "file";
+                                };
+                                summary: string;
+                                readonly changes: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    action: "create" | "update" | "delete" | "execute";
+                                    summary: string;
+                                    path?: string;
+                                    before?: unknown;
+                                    after?: unknown;
+                                    readonly warnings?: string[];
+                                    destructive?: boolean;
+                                }[];
+                                readonly warnings: string[];
+                                destructive: boolean;
+                                stateFingerprint: string;
+                                confirmationText?: string;
+                                createdAt: string;
+                                /** @enum {string} */
+                                status: "ready" | "applying" | "applied" | "stale" | "failed";
+                                createdBy?: string;
+                                approvedBy?: string;
+                                lastJobId?: string;
+                                error?: string;
+                                approvedAt?: string;
+                                appliedAt?: string;
+                            };
+                            job: {
+                                id: string;
+                                hostId: string;
+                                vmid?: number;
+                                /** @enum {string} */
+                                lane: "guest" | "host";
+                                type: string;
+                                /** @enum {string} */
+                                status: "queued" | "running" | "waiting_input" | "completed" | "failed" | "cancelled" | "interrupted";
+                                priority: number;
+                                triggeredBy?: string;
+                                createdAt: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/status": {
         parameters: {
             query?: never;
