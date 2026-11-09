@@ -206,6 +206,47 @@ describe('schema behaviour', () => {
     });
   });
 
+  it('accepts per-mount owners and an explicit LXC idmap', () => {
+    const parsed = guestDeploymentSchema.parse({
+      ...guest,
+      unprivileged: true,
+      idmap: { uid_base: 200_000, gid_base: 300_000, size: 65_536 },
+      mounts: [
+        {
+          host_path: '/opt/data',
+          guest_path: '/opt',
+          owner: { uid: 1000, gid: 1000 },
+          permissions: 'world_writable',
+        },
+      ],
+    });
+    expect(parsed).toMatchObject({
+      idmap: { uid_base: 200_000, gid_base: 300_000, size: 65_536 },
+    });
+    expect(parsed.mounts?.[0]).toMatchObject({
+      owner: { uid: 1000, gid: 1000 },
+      permissions: 'world_writable',
+    });
+    expect(
+      guestDeploymentSchema.safeParse({
+        ...guest,
+        mounts: [
+          {
+            host_path: '/opt/data',
+            guest_path: '/opt',
+            owner: { uid: -1, gid: 0 },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      guestDeploymentSchema.safeParse({
+        ...guest,
+        idmap: { uid_base: -1 },
+      }).success,
+    ).toBe(false);
+  });
+
   it('accepts every installation variant', () => {
     const installs = [
       { type: 'template', template: 'local:vztmpl/x.tar.zst' },

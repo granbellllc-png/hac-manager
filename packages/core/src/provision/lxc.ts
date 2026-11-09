@@ -3,6 +3,7 @@ import { MANAGED_GUEST_TAG, managedGuestUuid } from '../guest/identity.js';
 import type { GuestDeployment } from '../schema/deployment.js';
 import { isTagValue } from '../schema/common.js';
 import type { JournaledStep } from '../steps/types.js';
+import { createHostDirectorySteps } from '../storage/host-dirs.js';
 import { Secret } from '../tags/secret.js';
 
 /** A parsed `storage:vztmpl/file.tar.zst` reference. */
@@ -331,6 +332,7 @@ export function createLxcProvisionSteps(
   const configPath = lxcConfigPath(guest.id);
 
   return [
+    ...createHostDirectorySteps(guest),
     {
       name: `ensure template ${template.volume}`,
       check: async ({ transport }) => {

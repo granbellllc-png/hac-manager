@@ -198,7 +198,7 @@ Goal: persistent app data lives on the host at `/opt/server-data/<host>/<guest>/
 2. Pre-mount rootfs shadowing and split-brain: attaching `mp0` after an app installed into the rootfs hides its files; if `mp0` later fails to mount, the CT silently writes to the rootfs.
 3. Hot-plug `[PENDING]` and stale mount namespaces in long-running daemons (`dockerd`, `containerd`, `postgres`).
 
-**D-43. Host directory preparation.** Created before provisioning with ownership computed from the guest's idmap. Defaults are **minimal permissions**; world-writable `2777` with default ACLs is an **explicit opt-in** only. _M9._
+**D-43. Host directory preparation.** Created before provisioning with ownership computed from the guest's idmap (`mounts[].owner`, shifted by `idmap`; unprivileged default base `100000`). Defaults are **minimal permissions** (`0750`); world-writable `2777` with default ACLs is an **explicit opt-in** only and requires the host `acl` tooling (Tier-2 helper). _M9._
 
 **D-44. Zero-shadowing attachment.** For template-based LXCs `mp0` is attached at `pct create` before first boot. `mp0` is **never hot-applied**: stop, attach, start, and verify `[PENDING]` is empty. _M9._
 

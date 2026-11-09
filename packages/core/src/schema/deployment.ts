@@ -50,6 +50,15 @@ export const mountSchema = z.strictObject({
     .enum(['minimal', 'world_writable'])
     .default('minimal')
     .describe('world_writable (2777 + default ACLs) is an explicit opt-in.'),
+  owner: z
+    .strictObject({
+      uid: z.number().int().min(0).max(4_294_967_295),
+      gid: z.number().int().min(0).max(4_294_967_295),
+    })
+    .optional()
+    .describe(
+      'Guest-side UID/GID owning the host directory, shifted by the guest idmap.',
+    ),
 });
 
 export const networkSchema = z.strictObject({
@@ -135,6 +144,16 @@ const commonShape = {
 
 const lxcShape = {
   unprivileged: z.boolean().optional(),
+  idmap: z
+    .strictObject({
+      uid_base: z.number().int().min(0).max(4_294_967_295).optional(),
+      gid_base: z.number().int().min(0).max(4_294_967_295).optional(),
+      size: z.number().int().positive().max(4_294_967_295).optional(),
+    })
+    .optional()
+    .describe(
+      'Host UID/GID bases for the container idmap. Defaults to 100000 for unprivileged guests and 0 otherwise.',
+    ),
   swap: taggedInt.optional(),
   features: lxcFeatures.optional(),
   ostype: z.string().min(1).optional(),

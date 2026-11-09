@@ -6,6 +6,8 @@ import { renderConfigReference } from './reference.js';
 export interface SchemaExportOptions {
   readonly outDir?: string | undefined;
   readonly docs?: boolean | undefined;
+  /** Absolute path of the generated Markdown reference. */
+  readonly docsPath?: string | undefined;
 }
 
 export interface SchemaExportResult {
@@ -71,7 +73,9 @@ export function exportSchemas(
   }
 
   if (options.docs) {
-    const docs = resolve(outDir, '../../docs/reference/config.md');
+    const docs = resolve(
+      options.docsPath ?? resolve(outDir, '../../docs/reference/config.md'),
+    );
     mkdirSync(dirname(docs), { recursive: true });
     writeFileSync(docs, `${renderConfigReference()}\n`);
   }

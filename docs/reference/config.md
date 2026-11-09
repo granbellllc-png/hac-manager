@@ -83,6 +83,9 @@ Files: `hosts/*/*/deployment.yaml`
 | `mounts[].backup` | boolean | no | type = lxc |  |
 | `mounts[].readonly` | boolean | no | type = lxc |  |
 | `mounts[].permissions` | `minimal` \| `world_writable` | no | type = lxc | world_writable (2777 + default ACLs) is an explicit opt-in. |
+| `mounts[].owner` | object | no | type = lxc | Guest-side UID/GID owning the host directory, shifted by the guest idmap. |
+| `mounts[].owner.uid` | integer | yes | type = lxc |  |
+| `mounts[].owner.gid` | integer | yes | type = lxc |  |
 | `tags` | array of string | no | type = lxc |  |
 | `tags[]` | string | yes | type = lxc |  |
 | `protection` | boolean \| string | no | type = lxc | Blocks deletion and destructive changes. |
@@ -116,6 +119,10 @@ Files: `hosts/*/*/deployment.yaml`
 | `backup_storage` | string | no | type = lxc |  |
 | `extra` | object | no | type = lxc | Proxmox keys that HAC Manager does not model; preserved as-is. |
 | `unprivileged` | any | no | type = lxc |  |
+| `idmap` | object | no | type = lxc | Host UID/GID bases for the container idmap. Defaults to 100000 for unprivileged guests and 0 otherwise. |
+| `idmap.uid_base` | integer | no | type = lxc |  |
+| `idmap.gid_base` | integer | no | type = lxc |  |
+| `idmap.size` | integer | no | type = lxc |  |
 | `swap` | integer \| string | no | type = lxc |  |
 | `features` | object | no | type = lxc |  |
 | `features.nesting` | boolean | no | type = lxc |  |
@@ -161,6 +168,9 @@ Files: `hosts/*/*/deployment.yaml`
 | `mounts[].backup` | boolean | no | type = vm |  |
 | `mounts[].readonly` | boolean | no | type = vm |  |
 | `mounts[].permissions` | `minimal` \| `world_writable` | no | type = vm | world_writable (2777 + default ACLs) is an explicit opt-in. |
+| `mounts[].owner` | object | no | type = vm | Guest-side UID/GID owning the host directory, shifted by the guest idmap. |
+| `mounts[].owner.uid` | integer | yes | type = vm |  |
+| `mounts[].owner.gid` | integer | yes | type = vm |  |
 | `tags` | array of string | no | type = vm |  |
 | `tags[]` | string | yes | type = vm |  |
 | `protection` | boolean \| string | no | type = vm | Blocks deletion and destructive changes. |
@@ -242,6 +252,9 @@ Files: `hosts/*/default-deployment.yaml`
 | `mounts[].backup` | boolean | no |  |  |
 | `mounts[].readonly` | boolean | no |  |  |
 | `mounts[].permissions` | `minimal` \| `world_writable` | no |  | world_writable (2777 + default ACLs) is an explicit opt-in. |
+| `mounts[].owner` | object | no |  | Guest-side UID/GID owning the host directory, shifted by the guest idmap. |
+| `mounts[].owner.uid` | integer | yes |  |  |
+| `mounts[].owner.gid` | integer | yes |  |  |
 | `tags` | array of string | no |  |  |
 | `tags[]` | string | yes |  |  |
 | `protection` | boolean \| string | no |  | Blocks deletion and destructive changes. |
@@ -275,6 +288,10 @@ Files: `hosts/*/default-deployment.yaml`
 | `backup_storage` | string | no |  |  |
 | `extra` | object | no |  | Proxmox keys that HAC Manager does not model; preserved as-is. |
 | `unprivileged` | any | no |  |  |
+| `idmap` | object | no |  | Host UID/GID bases for the container idmap. Defaults to 100000 for unprivileged guests and 0 otherwise. |
+| `idmap.uid_base` | integer | no |  |  |
+| `idmap.gid_base` | integer | no |  |  |
+| `idmap.size` | integer | no |  |  |
 | `swap` | integer \| string | no |  |  |
 | `features` | object | no |  |  |
 | `features.nesting` | boolean | no |  |  |

@@ -327,6 +327,15 @@ describe('LXC provisioning steps', () => {
     const guest = lxc();
     const stamp = managedGuestUuid('pve-01', guest.id);
     const transport = new FakeTransport()
+      .onExec('stat -c %u:%g:%a /srv/hacm/pve-01/example-lxc/opt', {
+        stdout: '100000:100000:750',
+      })
+      .onExec(/^install -d /, { stdout: '' }, { once: true })
+      .onExec(
+        'stat -c %u:%g:%a /srv/hacm/pve-01/example-lxc/opt',
+        { exitCode: 1 },
+        { once: true },
+      )
       .onExec('pct config 112', {
         stdout: [
           'hostname: example-lxc',
@@ -363,6 +372,19 @@ describe('LXC provisioning steps', () => {
     ).resolves.toMatchObject({ operationId: 'lxc-create-112' });
 
     expect(transport.execArgv).toEqual([
+      ['stat', '-c', '%u:%g:%a', '/srv/hacm/pve-01/example-lxc/opt'],
+      [
+        'install',
+        '-d',
+        '-m',
+        '0750',
+        '-o',
+        '100000',
+        '-g',
+        '100000',
+        '/srv/hacm/pve-01/example-lxc/opt',
+      ],
+      ['stat', '-c', '%u:%g:%a', '/srv/hacm/pve-01/example-lxc/opt'],
       ['pveam', 'list', 'local'],
       ['pveam', 'download', 'local', 'debian-12-standard.tar.zst'],
       ['pveam', 'list', 'local'],
@@ -380,6 +402,9 @@ describe('LXC provisioning steps', () => {
   it('does not mutate during a dry run and skips a present template', async () => {
     const guest = lxc();
     const transport = new FakeTransport()
+      .onExec('stat -c %u:%g:%a /srv/hacm/pve-01/example-lxc/opt', {
+        exitCode: 1,
+      })
       .onExec('pveam list local', {
         stdout: 'local:vztmpl/debian-12-standard.tar.zst 120 MB',
       })
@@ -397,6 +422,7 @@ describe('LXC provisioning steps', () => {
     });
 
     expect(transport.execArgv).toEqual([
+      ['stat', '-c', '%u:%g:%a', '/srv/hacm/pve-01/example-lxc/opt'],
       ['pveam', 'list', 'local'],
       ['test', '-f', lxcConfigPath(112)],
     ]);
@@ -404,6 +430,15 @@ describe('LXC provisioning steps', () => {
 
   it('refuses to overwrite a VMID with a different workload', async () => {
     const transport = new FakeTransport()
+      .onExec('stat -c %u:%g:%a /srv/hacm/pve-01/example-lxc/opt', {
+        stdout: '100000:100000:750',
+      })
+      .onExec(/^install -d /, { stdout: '' }, { once: true })
+      .onExec(
+        'stat -c %u:%g:%a /srv/hacm/pve-01/example-lxc/opt',
+        { exitCode: 1 },
+        { once: true },
+      )
       .onExec('test -f /etc/pve/local/lxc/112.conf', { exitCode: 0 })
       .onExec('pct config 112', { stdout: 'hostname: other-workload' })
       .onExec('pveam list local', {
@@ -431,7 +466,7 @@ describe('LXC provisioning steps', () => {
 
   it('surfaces template list and download failures with and without stderr', async () => {
     const steps = createLxcProvisionSteps(lxc(), { hostId: 'pve-01' });
-    const ensureTemplate = steps[0]!;
+    const ensureTemplate = steps[1]!;
     await expect(
       ensureTemplate.check(
         context(
@@ -487,7 +522,7 @@ describe('LXC provisioning steps', () => {
   it('surfaces create and verification failures with and without stderr', async () => {
     const guest = lxc();
     const steps = createLxcProvisionSteps(guest, { hostId: 'pve-01' });
-    const create = steps[1]!;
+    const create = steps[2]!;
     const stamp = managedGuestUuid('pve-01', guest.id);
 
     await expect(
