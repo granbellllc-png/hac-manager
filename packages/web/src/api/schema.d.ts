@@ -598,6 +598,1035 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List available hosts */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            hosts: {
+                                id: string;
+                                name: string;
+                                /** @enum {string} */
+                                type: "proxmox";
+                                index: number;
+                                /** @enum {string} */
+                                status: "unknown" | "healthy" | "degraded" | "unreachable" | "error";
+                                runtime: {
+                                    /** @enum {string} */
+                                    overall: "unknown" | "healthy" | "degraded" | "unreachable" | "error";
+                                    ssh: {
+                                        /** @enum {string} */
+                                        status: "unknown" | "connected" | "unreachable" | "error";
+                                        error?: string;
+                                        lastCheckedAt?: string;
+                                    };
+                                    api: {
+                                        /** @enum {string} */
+                                        status: "unknown" | "connected" | "unreachable" | "error";
+                                        error?: string;
+                                        lastCheckedAt?: string;
+                                        configured: boolean;
+                                    };
+                                    vault: {
+                                        /** @enum {string} */
+                                        status: "not_configured" | "unlocked" | "locked";
+                                        error?: string;
+                                    };
+                                    queue: {
+                                        /** @enum {string} */
+                                        status: "idle" | "busy" | "paused";
+                                        activeJobId?: string;
+                                    };
+                                    lastSeenAt?: string;
+                                    readonly issues: string[];
+                                };
+                                updatedAt: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/hosts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get details for a single host */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            host: {
+                                id: string;
+                                name: string;
+                                /** @enum {string} */
+                                type: "proxmox";
+                                index: number;
+                                /** @enum {string} */
+                                status: "unknown" | "healthy" | "degraded" | "unreachable" | "error";
+                                runtime: {
+                                    /** @enum {string} */
+                                    overall: "unknown" | "healthy" | "degraded" | "unreachable" | "error";
+                                    ssh: {
+                                        /** @enum {string} */
+                                        status: "unknown" | "connected" | "unreachable" | "error";
+                                        error?: string;
+                                        lastCheckedAt?: string;
+                                    };
+                                    api: {
+                                        /** @enum {string} */
+                                        status: "unknown" | "connected" | "unreachable" | "error";
+                                        error?: string;
+                                        lastCheckedAt?: string;
+                                        configured: boolean;
+                                    };
+                                    vault: {
+                                        /** @enum {string} */
+                                        status: "not_configured" | "unlocked" | "locked";
+                                        error?: string;
+                                    };
+                                    queue: {
+                                        /** @enum {string} */
+                                        status: "idle" | "busy" | "paused";
+                                        activeJobId?: string;
+                                    };
+                                    lastSeenAt?: string;
+                                    readonly issues: string[];
+                                };
+                                updatedAt: string;
+                                connection: {
+                                    ssh: {
+                                        host: string;
+                                        port: number;
+                                        username: string;
+                                        fingerprint?: string;
+                                        /** @enum {string} */
+                                        authMethod: "key" | "password" | "none";
+                                    };
+                                    api?: {
+                                        url: string;
+                                        tokenId: string;
+                                        fingerprint?: string;
+                                        configured: boolean;
+                                    };
+                                };
+                                ignoredGuestsCount: number;
+                                defaults?: {
+                                    deployment?: string;
+                                    filemappings?: string;
+                                };
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/hosts/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger synchronization from host.yaml files */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {boolean} */
+                            ok: true;
+                            synced: number;
+                            removed: number;
+                            issues: string[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/hosts/{id}/test-connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test SSH and API connectivity for a host */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            ok: boolean;
+                            ssh: {
+                                ok: boolean;
+                                /** @enum {string} */
+                                status: "connected" | "unreachable" | "error" | "not_configured";
+                                latencyMs?: number;
+                                error?: string;
+                                lastCheckedAt?: string;
+                            };
+                            api?: {
+                                ok: boolean;
+                                /** @enum {string} */
+                                status: "connected" | "unreachable" | "error" | "not_configured";
+                                latencyMs?: number;
+                                error?: string;
+                                lastCheckedAt?: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/hosts/{id}/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get capability probe results for host */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            hostId: string;
+                            pveVersion: string;
+                            isCluster: boolean;
+                            clusterName?: string;
+                            readonly storages: {
+                                name: string;
+                                type: string;
+                                readonly content: string[];
+                                total?: number;
+                                used?: number;
+                                avail?: number;
+                                shared: boolean;
+                            }[];
+                            tools: {
+                                [key: string]: boolean;
+                            };
+                            readonly warnings: string[];
+                            probedAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Run capability probe on host */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            hostId: string;
+                            pveVersion: string;
+                            isCluster: boolean;
+                            clusterName?: string;
+                            readonly storages: {
+                                name: string;
+                                type: string;
+                                readonly content: string[];
+                                total?: number;
+                                used?: number;
+                                avail?: number;
+                                shared: boolean;
+                            }[];
+                            tools: {
+                                [key: string]: boolean;
+                            };
+                            readonly warnings: string[];
+                            probedAt: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventory/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List live inventory status for all hosts */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            hosts: {
+                                hostId: string;
+                                name: string;
+                                /** @enum {string} */
+                                status: "online" | "offline" | "degraded" | "error";
+                                guestCount: number;
+                                channels: {
+                                    ssh: {
+                                        ok: boolean;
+                                        status: string;
+                                        error?: string;
+                                        lastCheckedAt?: string;
+                                    };
+                                    api: {
+                                        ok: boolean;
+                                        status: string;
+                                        error?: string;
+                                        lastCheckedAt?: string;
+                                    };
+                                };
+                                lastRefreshedAt: string;
+                                error?: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventory/guests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List live guests across hosts */
+        get: {
+            parameters: {
+                query?: {
+                    hostId?: string;
+                    type?: "lxc" | "vm";
+                    status?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            guests: {
+                                hostId: string;
+                                vmid: number;
+                                name: string;
+                                /** @enum {string} */
+                                type: "lxc" | "vm";
+                                status: string;
+                                node: string;
+                                cpu?: number;
+                                maxcpu?: number;
+                                mem?: number;
+                                maxmem?: number;
+                                uptime?: number;
+                                lock?: string;
+                                readonly tags?: string[];
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventory/guests/{hostId}/{vmid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get live config and canonical details for a guest */
+        get: {
+            parameters: {
+                query?: {
+                    type?: "lxc" | "vm";
+                };
+                header?: never;
+                path: {
+                    hostId: string;
+                    vmid: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            summary: {
+                                hostId: string;
+                                vmid: number;
+                                name: string;
+                                /** @enum {string} */
+                                type: "lxc" | "vm";
+                                status: string;
+                                node: string;
+                                cpu?: number;
+                                maxcpu?: number;
+                                mem?: number;
+                                maxmem?: number;
+                                uptime?: number;
+                                lock?: string;
+                                readonly tags?: string[];
+                            };
+                            rawConfig: string;
+                            canonicalConfig: {
+                                [key: string]: unknown;
+                            };
+                            /** @enum {string} */
+                            source: "api" | "ssh";
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventory/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Manually trigger inventory refresh */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        hostId?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            refreshed: boolean;
+                            timestamp: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventory/hosts/{hostId}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Manually refresh inventory for a single host */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    hostId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            host: {
+                                hostId: string;
+                                name: string;
+                                /** @enum {string} */
+                                status: "online" | "offline" | "degraded" | "error";
+                                guestCount: number;
+                                channels: {
+                                    ssh: {
+                                        ok: boolean;
+                                        status: string;
+                                        error?: string;
+                                        lastCheckedAt?: string;
+                                    };
+                                    api: {
+                                        ok: boolean;
+                                        status: string;
+                                        error?: string;
+                                        lastCheckedAt?: string;
+                                    };
+                                };
+                                lastRefreshedAt: string;
+                                error?: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventory/guests/{hostId}/{vmid}/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import a live guest into YAML configuration */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    hostId: string;
+                    vmid: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        dryRun?: boolean;
+                        overwrite?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success: boolean;
+                            /** @enum {string} */
+                            status: "new" | "already_exists";
+                            relativeFile: string;
+                            fullPath: string;
+                            yamlContent: string;
+                            readonly omittedDefaults: string[];
+                            reason?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventory/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bulk import live guests into YAML */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        hostId: string;
+                        vmids: number[];
+                        dryRun?: boolean;
+                        overwrite?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            results: {
+                                vmid: number;
+                                success: boolean;
+                                /** @enum {string} */
+                                status: "new" | "already_exists";
+                                relativeFile: string;
+                                readonly omittedDefaults: string[];
+                                reason?: string;
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/status": {
         parameters: {
             query?: never;

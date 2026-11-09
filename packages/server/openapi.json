@@ -1078,6 +1078,1915 @@
         }
       }
     },
+    "/api/hosts": {
+      "get": {
+        "summary": "List available hosts",
+        "tags": ["Hosts"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hosts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": ["proxmox"]
+                          },
+                          "index": {
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "unknown",
+                              "healthy",
+                              "degraded",
+                              "unreachable",
+                              "error"
+                            ]
+                          },
+                          "runtime": {
+                            "type": "object",
+                            "properties": {
+                              "overall": {
+                                "type": "string",
+                                "enum": [
+                                  "unknown",
+                                  "healthy",
+                                  "degraded",
+                                  "unreachable",
+                                  "error"
+                                ]
+                              },
+                              "ssh": {
+                                "type": "object",
+                                "properties": {
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "unknown",
+                                      "connected",
+                                      "unreachable",
+                                      "error"
+                                    ]
+                                  },
+                                  "error": {
+                                    "type": "string"
+                                  },
+                                  "lastCheckedAt": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["status"],
+                                "additionalProperties": false
+                              },
+                              "api": {
+                                "type": "object",
+                                "properties": {
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "unknown",
+                                      "connected",
+                                      "unreachable",
+                                      "error"
+                                    ]
+                                  },
+                                  "error": {
+                                    "type": "string"
+                                  },
+                                  "lastCheckedAt": {
+                                    "type": "string"
+                                  },
+                                  "configured": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": ["status", "configured"],
+                                "additionalProperties": false
+                              },
+                              "vault": {
+                                "type": "object",
+                                "properties": {
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "not_configured",
+                                      "unlocked",
+                                      "locked"
+                                    ]
+                                  },
+                                  "error": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["status"],
+                                "additionalProperties": false
+                              },
+                              "queue": {
+                                "type": "object",
+                                "properties": {
+                                  "status": {
+                                    "type": "string",
+                                    "enum": ["idle", "busy", "paused"]
+                                  },
+                                  "activeJobId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["status"],
+                                "additionalProperties": false
+                              },
+                              "lastSeenAt": {
+                                "type": "string"
+                              },
+                              "issues": {
+                                "readOnly": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "overall",
+                              "ssh",
+                              "api",
+                              "vault",
+                              "queue",
+                              "issues"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "updatedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "type",
+                          "index",
+                          "status",
+                          "runtime",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["hosts"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hosts/{id}": {
+      "get": {
+        "summary": "Get details for a single host",
+        "tags": ["Hosts"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "host": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": ["proxmox"]
+                        },
+                        "index": {
+                          "type": "number"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "unknown",
+                            "healthy",
+                            "degraded",
+                            "unreachable",
+                            "error"
+                          ]
+                        },
+                        "runtime": {
+                          "type": "object",
+                          "properties": {
+                            "overall": {
+                              "type": "string",
+                              "enum": [
+                                "unknown",
+                                "healthy",
+                                "degraded",
+                                "unreachable",
+                                "error"
+                              ]
+                            },
+                            "ssh": {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "unknown",
+                                    "connected",
+                                    "unreachable",
+                                    "error"
+                                  ]
+                                },
+                                "error": {
+                                  "type": "string"
+                                },
+                                "lastCheckedAt": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["status"],
+                              "additionalProperties": false
+                            },
+                            "api": {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "unknown",
+                                    "connected",
+                                    "unreachable",
+                                    "error"
+                                  ]
+                                },
+                                "error": {
+                                  "type": "string"
+                                },
+                                "lastCheckedAt": {
+                                  "type": "string"
+                                },
+                                "configured": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": ["status", "configured"],
+                              "additionalProperties": false
+                            },
+                            "vault": {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "not_configured",
+                                    "unlocked",
+                                    "locked"
+                                  ]
+                                },
+                                "error": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["status"],
+                              "additionalProperties": false
+                            },
+                            "queue": {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string",
+                                  "enum": ["idle", "busy", "paused"]
+                                },
+                                "activeJobId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["status"],
+                              "additionalProperties": false
+                            },
+                            "lastSeenAt": {
+                              "type": "string"
+                            },
+                            "issues": {
+                              "readOnly": true,
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "overall",
+                            "ssh",
+                            "api",
+                            "vault",
+                            "queue",
+                            "issues"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        },
+                        "connection": {
+                          "type": "object",
+                          "properties": {
+                            "ssh": {
+                              "type": "object",
+                              "properties": {
+                                "host": {
+                                  "type": "string"
+                                },
+                                "port": {
+                                  "type": "number"
+                                },
+                                "username": {
+                                  "type": "string"
+                                },
+                                "fingerprint": {
+                                  "type": "string"
+                                },
+                                "authMethod": {
+                                  "type": "string",
+                                  "enum": ["key", "password", "none"]
+                                }
+                              },
+                              "required": [
+                                "host",
+                                "port",
+                                "username",
+                                "authMethod"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "api": {
+                              "type": "object",
+                              "properties": {
+                                "url": {
+                                  "type": "string"
+                                },
+                                "tokenId": {
+                                  "type": "string"
+                                },
+                                "fingerprint": {
+                                  "type": "string"
+                                },
+                                "configured": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": ["url", "tokenId", "configured"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["ssh"],
+                          "additionalProperties": false
+                        },
+                        "ignoredGuestsCount": {
+                          "type": "number"
+                        },
+                        "defaults": {
+                          "type": "object",
+                          "properties": {
+                            "deployment": {
+                              "type": "string"
+                            },
+                            "filemappings": {
+                              "type": "string"
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "type",
+                        "index",
+                        "status",
+                        "runtime",
+                        "updatedAt",
+                        "connection",
+                        "ignoredGuestsCount"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["host"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hosts/sync": {
+      "post": {
+        "summary": "Trigger synchronization from host.yaml files",
+        "tags": ["Hosts"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [true]
+                    },
+                    "synced": {
+                      "type": "number"
+                    },
+                    "removed": {
+                      "type": "number"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": ["ok", "synced", "removed", "issues"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hosts/{id}/test-connection": {
+      "post": {
+        "summary": "Test SSH and API connectivity for a host",
+        "tags": ["Hosts"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "ssh": {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "connected",
+                            "unreachable",
+                            "error",
+                            "not_configured"
+                          ]
+                        },
+                        "latencyMs": {
+                          "type": "number"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "lastCheckedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["ok", "status"],
+                      "additionalProperties": false
+                    },
+                    "api": {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "connected",
+                            "unreachable",
+                            "error",
+                            "not_configured"
+                          ]
+                        },
+                        "latencyMs": {
+                          "type": "number"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "lastCheckedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["ok", "status"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["ok", "ssh"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hosts/{id}/probe": {
+      "post": {
+        "summary": "Run capability probe on host",
+        "tags": ["Hosts"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hostId": {
+                      "type": "string"
+                    },
+                    "pveVersion": {
+                      "type": "string"
+                    },
+                    "isCluster": {
+                      "type": "boolean"
+                    },
+                    "clusterName": {
+                      "type": "string"
+                    },
+                    "storages": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "content": {
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "total": {
+                            "type": "number"
+                          },
+                          "used": {
+                            "type": "number"
+                          },
+                          "avail": {
+                            "type": "number"
+                          },
+                          "shared": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["name", "type", "content", "shared"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "tools": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    },
+                    "warnings": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "probedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "hostId",
+                    "pveVersion",
+                    "isCluster",
+                    "storages",
+                    "tools",
+                    "warnings",
+                    "probedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Get capability probe results for host",
+        "tags": ["Hosts"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hostId": {
+                      "type": "string"
+                    },
+                    "pveVersion": {
+                      "type": "string"
+                    },
+                    "isCluster": {
+                      "type": "boolean"
+                    },
+                    "clusterName": {
+                      "type": "string"
+                    },
+                    "storages": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "content": {
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "total": {
+                            "type": "number"
+                          },
+                          "used": {
+                            "type": "number"
+                          },
+                          "avail": {
+                            "type": "number"
+                          },
+                          "shared": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["name", "type", "content", "shared"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "tools": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    },
+                    "warnings": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "probedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "hostId",
+                    "pveVersion",
+                    "isCluster",
+                    "storages",
+                    "tools",
+                    "warnings",
+                    "probedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/hosts": {
+      "get": {
+        "summary": "List live inventory status for all hosts",
+        "tags": ["Inventory"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hosts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "hostId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["online", "offline", "degraded", "error"]
+                          },
+                          "guestCount": {
+                            "type": "number"
+                          },
+                          "channels": {
+                            "type": "object",
+                            "properties": {
+                              "ssh": {
+                                "type": "object",
+                                "properties": {
+                                  "ok": {
+                                    "type": "boolean"
+                                  },
+                                  "status": {
+                                    "type": "string"
+                                  },
+                                  "error": {
+                                    "type": "string"
+                                  },
+                                  "lastCheckedAt": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["ok", "status"],
+                                "additionalProperties": false
+                              },
+                              "api": {
+                                "type": "object",
+                                "properties": {
+                                  "ok": {
+                                    "type": "boolean"
+                                  },
+                                  "status": {
+                                    "type": "string"
+                                  },
+                                  "error": {
+                                    "type": "string"
+                                  },
+                                  "lastCheckedAt": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["ok", "status"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": ["ssh", "api"],
+                            "additionalProperties": false
+                          },
+                          "lastRefreshedAt": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "hostId",
+                          "name",
+                          "status",
+                          "guestCount",
+                          "channels",
+                          "lastRefreshedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["hosts"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/guests": {
+      "get": {
+        "summary": "List live guests across hosts",
+        "tags": ["Inventory"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "hostId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["lxc", "vm"]
+            },
+            "in": "query",
+            "name": "type",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "guests": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "hostId": {
+                            "type": "string"
+                          },
+                          "vmid": {
+                            "type": "number"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": ["lxc", "vm"]
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "node": {
+                            "type": "string"
+                          },
+                          "cpu": {
+                            "type": "number"
+                          },
+                          "maxcpu": {
+                            "type": "number"
+                          },
+                          "mem": {
+                            "type": "number"
+                          },
+                          "maxmem": {
+                            "type": "number"
+                          },
+                          "uptime": {
+                            "type": "number"
+                          },
+                          "lock": {
+                            "type": "string"
+                          },
+                          "tags": {
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "hostId",
+                          "vmid",
+                          "name",
+                          "type",
+                          "status",
+                          "node"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["guests"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/guests/{hostId}/{vmid}": {
+      "get": {
+        "summary": "Get live config and canonical details for a guest",
+        "tags": ["Inventory"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["lxc", "vm"]
+            },
+            "in": "query",
+            "name": "type",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "hostId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "vmid",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "hostId": {
+                          "type": "string"
+                        },
+                        "vmid": {
+                          "type": "number"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": ["lxc", "vm"]
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "node": {
+                          "type": "string"
+                        },
+                        "cpu": {
+                          "type": "number"
+                        },
+                        "maxcpu": {
+                          "type": "number"
+                        },
+                        "mem": {
+                          "type": "number"
+                        },
+                        "maxmem": {
+                          "type": "number"
+                        },
+                        "uptime": {
+                          "type": "number"
+                        },
+                        "lock": {
+                          "type": "string"
+                        },
+                        "tags": {
+                          "readOnly": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "hostId",
+                        "vmid",
+                        "name",
+                        "type",
+                        "status",
+                        "node"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "rawConfig": {
+                      "type": "string"
+                    },
+                    "canonicalConfig": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": ["api", "ssh"]
+                    }
+                  },
+                  "required": [
+                    "summary",
+                    "rawConfig",
+                    "canonicalConfig",
+                    "source"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/refresh": {
+      "post": {
+        "summary": "Manually trigger inventory refresh",
+        "tags": ["Inventory"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "hostId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "refreshed": {
+                      "type": "boolean"
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["refreshed", "timestamp"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/hosts/{hostId}/refresh": {
+      "post": {
+        "summary": "Manually refresh inventory for a single host",
+        "tags": ["Inventory"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "hostId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "host": {
+                      "type": "object",
+                      "properties": {
+                        "hostId": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["online", "offline", "degraded", "error"]
+                        },
+                        "guestCount": {
+                          "type": "number"
+                        },
+                        "channels": {
+                          "type": "object",
+                          "properties": {
+                            "ssh": {
+                              "type": "object",
+                              "properties": {
+                                "ok": {
+                                  "type": "boolean"
+                                },
+                                "status": {
+                                  "type": "string"
+                                },
+                                "error": {
+                                  "type": "string"
+                                },
+                                "lastCheckedAt": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["ok", "status"],
+                              "additionalProperties": false
+                            },
+                            "api": {
+                              "type": "object",
+                              "properties": {
+                                "ok": {
+                                  "type": "boolean"
+                                },
+                                "status": {
+                                  "type": "string"
+                                },
+                                "error": {
+                                  "type": "string"
+                                },
+                                "lastCheckedAt": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["ok", "status"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["ssh", "api"],
+                          "additionalProperties": false
+                        },
+                        "lastRefreshedAt": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "hostId",
+                        "name",
+                        "status",
+                        "guestCount",
+                        "channels",
+                        "lastRefreshedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["host"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/guests/{hostId}/{vmid}/import": {
+      "post": {
+        "summary": "Import a live guest into YAML configuration",
+        "tags": ["Inventory"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dryRun": {
+                    "type": "boolean"
+                  },
+                  "overwrite": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "hostId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "number"
+            },
+            "in": "path",
+            "name": "vmid",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["new", "already_exists"]
+                    },
+                    "relativeFile": {
+                      "type": "string"
+                    },
+                    "fullPath": {
+                      "type": "string"
+                    },
+                    "yamlContent": {
+                      "type": "string"
+                    },
+                    "omittedDefaults": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "status",
+                    "relativeFile",
+                    "fullPath",
+                    "yamlContent",
+                    "omittedDefaults"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inventory/import": {
+      "post": {
+        "summary": "Bulk import live guests into YAML",
+        "tags": ["Inventory"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "hostId": {
+                    "type": "string"
+                  },
+                  "vmids": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  },
+                  "dryRun": {
+                    "type": "boolean"
+                  },
+                  "overwrite": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["hostId", "vmids"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "vmid": {
+                            "type": "number"
+                          },
+                          "success": {
+                            "type": "boolean"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["new", "already_exists"]
+                          },
+                          "relativeFile": {
+                            "type": "string"
+                          },
+                          "omittedDefaults": {
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "vmid",
+                          "success",
+                          "status",
+                          "relativeFile",
+                          "omittedDefaults"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["results"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/status": {
       "get": {
         "tags": ["auth"],
