@@ -48,6 +48,13 @@ export class ConnectionManager {
     this.routers.set(hostId, router);
   }
 
+  public async getApiClient(
+    hostId: string,
+  ): Promise<ProxmoxClient | undefined> {
+    const router = await this.getRouter(hostId);
+    return router.client;
+  }
+
   private async buildRouter(host: HostFile): Promise<HostConnectionRouter> {
     // Resolve tags in connection object
     const resolution = await resolveConfigTags<HostFile['connection']>(

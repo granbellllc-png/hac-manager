@@ -17,8 +17,10 @@ import { healthModule } from './modules/health/index.js';
 import { usersModule } from './modules/users/index.js';
 import { auditModule } from './modules/audit/index.js';
 import { hostsModule } from './modules/hosts/index.js';
+import { inventoryModule } from './modules/inventory/index.js';
 import { HostRegistry } from './hosts/registry.js';
 import { ConnectionManager } from './router/manager.js';
+import { LiveInventoryService } from './inventory/service.js';
 import { authModule } from './auth/module.js';
 import {
   SessionService,
@@ -39,6 +41,7 @@ export interface BuildAppOptions {
   readonly repositories?: DatabaseRepositories;
   readonly hostRegistry?: HostRegistry;
   readonly connectionManager?: ConnectionManager;
+  readonly inventoryService?: LiveInventoryService;
 }
 
 export async function buildApp(
@@ -191,6 +194,15 @@ export async function buildApp(
         });
   app.decorate('connectionManager', connectionManager);
 
+  const inventoryService =
+    'inventoryService' in configOrOptions && configOrOptions.inventoryService
+      ? configOrOptions.inventoryService
+      : new LiveInventoryService({
+          hostRegistry,
+          connectionManager,
+        });
+  app.decorate('inventoryService', inventoryService);
+
   app.addHook('onClose', async () => {
     hostRegistry.close();
     await connectionManager.close();
@@ -204,6 +216,10 @@ export async function buildApp(
     hostRegistry,
     connectionManager,
     repos: repositories,
+  });
+  await app.register(inventoryModule, {
+    inventoryService,
+    hostRegistry,
   });
 
   await app.register(authModule, {

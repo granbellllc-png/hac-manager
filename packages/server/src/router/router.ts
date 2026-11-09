@@ -41,6 +41,14 @@ export class HostConnectionRouter implements Transport {
     };
   }
 
+  public get client(): ProxmoxClient | undefined {
+    return this.apiClient;
+  }
+
+  public get transport(): SshTransport | undefined {
+    return this.sshTransport;
+  }
+
   public get health(): {
     readonly ssh: ChannelHealth;
     readonly api: ChannelHealth;
