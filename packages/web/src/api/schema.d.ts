@@ -2054,6 +2054,300 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/drift/{hostId}/{vmid}/pull": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pull live values into the guest YAML, preserving comments and tags */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    hostId: string;
+                    vmid: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        paths?: string[];
+                        dryRun?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            hostId: string;
+                            vmid: number;
+                            dryRun: boolean;
+                            readonly applied: {
+                                path: string;
+                                targetFile: string;
+                                /** @enum {string} */
+                                layer: "override" | "default";
+                                previousValue: unknown;
+                                newValue: unknown;
+                            }[];
+                            readonly failures: {
+                                path: string;
+                                /** @enum {string} */
+                                reason: "not_pullable" | "missing_in_live" | "path_not_found" | "apply_failed" | "tag_protected" | "target_not_found" | "write_conflict" | "invalid_path";
+                                message: string;
+                            }[];
+                            snapshot: {
+                                id: string;
+                                hostId: string;
+                                vmid: number;
+                                /** @enum {string} */
+                                type: "lxc" | "vm";
+                                /** @enum {string} */
+                                status: "in_sync" | "drifted";
+                                readonly changes: {
+                                    path: string;
+                                    /** @enum {string} */
+                                    category: "config" | "network" | "disk" | "mount" | "feature" | "tags" | "protection" | "cloud_init" | "identity";
+                                    /** @enum {string} */
+                                    kind: "changed" | "missing_in_live" | "missing_in_yaml";
+                                    desired: unknown;
+                                    actual: unknown;
+                                    pullable: boolean;
+                                    computed: boolean;
+                                    secret: boolean;
+                                    /** @enum {string} */
+                                    tag?: "env" | "secret" | "expr" | "cmd" | "include";
+                                    provenance?: {
+                                        /** @enum {string} */
+                                        layer: "default" | "override";
+                                        file: string;
+                                        path: string;
+                                        sourcePath: string;
+                                    };
+                                    desiredHash?: string;
+                                    actualHash?: string;
+                                    readonly warnings?: string[];
+                                }[];
+                                readonly computedFields: string[];
+                                readonly ignoredPaths: string[];
+                                checkedAt: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/drift/{hostId}/{vmid}/enforce": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Build and queue a plan that enforces YAML on the live guest */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    hostId: string;
+                    vmid: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        dryRun?: boolean;
+                        confirmation?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            plan: {
+                                /** @enum {number} */
+                                schemaVersion: 1;
+                                id: string;
+                                operation: string;
+                                target: {
+                                    hostId: string;
+                                    vmid?: number;
+                                    /** @enum {string} */
+                                    resourceType?: "host" | "guest" | "file";
+                                };
+                                summary: string;
+                                readonly changes: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    action: "create" | "update" | "delete" | "execute";
+                                    summary: string;
+                                    path?: string;
+                                    before?: unknown;
+                                    after?: unknown;
+                                    readonly warnings?: string[];
+                                    destructive?: boolean;
+                                }[];
+                                readonly warnings: string[];
+                                destructive: boolean;
+                                stateFingerprint: string;
+                                confirmationText?: string;
+                                createdAt: string;
+                                /** @enum {string} */
+                                status: "ready" | "applying" | "applied" | "stale" | "failed";
+                                createdBy?: string;
+                                approvedBy?: string;
+                                lastJobId?: string;
+                                error?: string;
+                                approvedAt?: string;
+                                appliedAt?: string;
+                            };
+                            job: {
+                                id: string;
+                                hostId: string;
+                                vmid?: number;
+                                /** @enum {string} */
+                                lane: "guest" | "host";
+                                type: string;
+                                /** @enum {string} */
+                                reason: "manual" | "drift_push" | "drift_pull" | "schedule" | "conflict_resolution" | "orphan_action";
+                                /** @enum {string} */
+                                status: "queued" | "running" | "waiting_input" | "completed" | "failed" | "cancelled" | "interrupted";
+                                priority: number;
+                                triggeredBy?: string;
+                                createdAt: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/drift/hosts/{hostId}/check": {
         parameters: {
             query?: never;

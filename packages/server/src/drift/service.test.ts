@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -11,7 +11,11 @@ import { createDatabase } from '../db/connection.js';
 import { createSqliteRepositories } from '../db/repositories/sqlite.js';
 import type { DatabaseRepositories } from '../db/repositories/types.js';
 import type { LiveInventoryService } from '../inventory/service.js';
-import { DriftGuestNotFoundError, DriftService } from './service.js';
+import {
+  DriftGuestNotFoundError,
+  DriftResolutionForbiddenError,
+  DriftService,
+} from './service.js';
 
 const baseDeployment = `schema_version: 1
 id: 112
@@ -343,6 +347,240 @@ network:
       await expect(service.checkGuest('pve-01', 999)).rejects.toBeInstanceOf(
         DriftGuestNotFoundError,
       );
+    } finally {
+      handle.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('pulls live values through the CST, preserving comments and tags', async () => {
+    const dataDir = await createDataDir();
+    const yaml = `# top comment
+schema_version: 1
+id: 112
+name: adguard
+type: lxc
+# cpu comment
+cpu: 2
+ram: 2048 # ram comment
+disks: []
+network: []
+`;
+    await writeGuest(dataDir, 112, 'adguard', yaml);
+    const { handle, repos } = repoFixture();
+    try {
+      const service = new DriftService({
+        repos,
+        hostRegistry: hostRegistryStub(dataDir),
+        inventoryService: inventoryStub(
+          live('hostname: adguard\ncores: 2\nmemory: 4096\n'),
+        ),
+      });
+      const snapshot = await service.checkGuest('pve-01', 112);
+      expect(snapshot.changes).toHaveLength(1);
+
+      const result = await service.pull('pve-01', 112, {
+        user: { id: 'admin-1', role: 'admin' },
+      });
+      expect(result).toMatchObject({
+        hostId: 'pve-01',
+        vmid: 112,
+        dryRun: false,
+        failures: [],
+        snapshot: { status: 'in_sync', changes: [] },
+      });
+      expect(result.applied).toEqual([
+        expect.objectContaining({
+          path: 'ram',
+          layer: 'override',
+          previousValue: 2048,
+          newValue: 4096,
+        }),
+      ]);
+
+      const written = await readFile(
+        join(dataDir, 'hosts', 'pve-01', '112-adguard', 'deployment.yaml'),
+        'utf8',
+      );
+      expect(written).toContain('# top comment');
+      expect(written).toContain('# cpu comment');
+      expect(written).toContain('# ram comment');
+      expect(written).toContain('ram: 4096');
+      expect(written).toContain('cpu: 2');
+
+      expect(await service.checkGuest('pve-01', 112)).toMatchObject({
+        status: 'in_sync',
+        changes: [],
+      });
+      expect(
+        await repos.auditLogs.search({ action: 'drift.pull' }),
+      ).toMatchObject({
+        total: 1,
+        items: [expect.objectContaining({ reason: 'drift_pull' })],
+      });
+    } finally {
+      handle.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports non-pullable, missing-in-live and unknown pull paths', async () => {
+    const dataDir = await createDataDir();
+    const yaml = `schema_version: 1
+id: 112
+name: adguard
+type: lxc
+cpu: !expr "host.index + 1"
+ram: 2048
+swap: 512
+disks: []
+network: []
+`;
+    await writeGuest(dataDir, 112, 'adguard', yaml);
+    const { handle, repos } = repoFixture();
+    try {
+      const service = new DriftService({
+        repos,
+        hostRegistry: hostRegistryStub(dataDir),
+        inventoryService: inventoryStub(
+          live('hostname: adguard\ncores: 8\nmemory: 2048\n'),
+        ),
+      });
+
+      const result = await service.pull('pve-01', 112, {
+        user: { id: 'operator-1', role: 'operator' },
+        paths: ['cpu', 'swap', 'missing.path', 'ram'],
+      });
+      expect(result.applied).toEqual([]);
+      expect(result.failures).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: 'cpu', reason: 'not_pullable' }),
+          expect.objectContaining({ path: 'swap', reason: 'missing_in_live' }),
+          expect.objectContaining({
+            path: 'missing.path',
+            reason: 'path_not_found',
+          }),
+        ]),
+      );
+      expect(result.snapshot.status).toBe('drifted');
+      expect(
+        await readFile(
+          join(dataDir, 'hosts', 'pve-01', '112-adguard', 'deployment.yaml'),
+          'utf8',
+        ),
+      ).toBe(yaml);
+    } finally {
+      handle.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not write on a dry-run pull or audit it', async () => {
+    const dataDir = await createDataDir();
+    await writeGuest(dataDir, 112, 'adguard', baseDeployment);
+    const { handle, repos } = repoFixture();
+    try {
+      const service = new DriftService({
+        repos,
+        hostRegistry: hostRegistryStub(dataDir),
+        inventoryService: inventoryStub(
+          live('hostname: adguard\ncores: 2\nmemory: 4096\n'),
+        ),
+      });
+
+      const result = await service.pull('pve-01', 112, {
+        user: { id: 'operator-1', role: 'operator' },
+        dryRun: true,
+      });
+      expect(result).toMatchObject({
+        dryRun: true,
+        failures: [],
+        snapshot: { status: 'drifted' },
+      });
+      expect(result.applied).toHaveLength(1);
+      expect(
+        await readFile(
+          join(dataDir, 'hosts', 'pve-01', '112-adguard', 'deployment.yaml'),
+          'utf8',
+        ),
+      ).toBe(baseDeployment);
+      expect(
+        await repos.auditLogs.search({ action: 'drift.pull' }),
+      ).toMatchObject({ total: 0 });
+    } finally {
+      handle.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('restricts operator pulls when the YAML has admin-only surfaces', async () => {
+    const dataDir = await createDataDir();
+    const yaml = `schema_version: 1
+id: 112
+name: adguard
+type: lxc
+cpu: 2
+ram: 2048
+disks: []
+network: []
+installation:
+  type: community_script
+  url: https://example.invalid/install.sh
+`;
+    await writeGuest(dataDir, 112, 'adguard', yaml);
+    const { handle, repos } = repoFixture();
+    try {
+      const service = new DriftService({
+        repos,
+        hostRegistry: hostRegistryStub(dataDir),
+        inventoryService: inventoryStub(
+          live('hostname: adguard\ncores: 2\nmemory: 4096\n'),
+        ),
+      });
+
+      await expect(
+        service.pull('pve-01', 112, {
+          user: { id: 'operator-1', role: 'operator' },
+        }),
+      ).rejects.toMatchObject({
+        name: 'DriftResolutionForbiddenError',
+        adminOnly: ['installation_url'],
+      });
+
+      const result = await service.pull('pve-01', 112, {
+        user: { id: 'admin-1', role: 'admin' },
+      });
+      expect(result.applied).toHaveLength(1);
+      expect(result.snapshot.status).toBe('in_sync');
+    } finally {
+      handle.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects viewer pulls and missing guests', async () => {
+    const dataDir = await createDataDir();
+    await writeGuest(dataDir, 112, 'adguard', baseDeployment);
+    const { handle, repos } = repoFixture();
+    try {
+      const service = new DriftService({
+        repos,
+        hostRegistry: hostRegistryStub(dataDir),
+        inventoryService: inventoryStub(
+          live('hostname: adguard\ncores: 2\nmemory: 4096\n'),
+        ),
+      });
+
+      await expect(
+        service.pull('pve-01', 112, {
+          user: { id: 'viewer-1', role: 'viewer' },
+        }),
+      ).rejects.toBeInstanceOf(DriftResolutionForbiddenError);
+      await expect(
+        service.pull('pve-01', 999, {
+          user: { id: 'admin-1', role: 'admin' },
+        }),
+      ).rejects.toBeInstanceOf(DriftGuestNotFoundError);
     } finally {
       handle.close();
       await rm(dataDir, { recursive: true, force: true });

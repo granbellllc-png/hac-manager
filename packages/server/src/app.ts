@@ -331,6 +331,7 @@ export async function buildApp(
   });
   await app.register(driftModule, {
     driftService,
+    planService,
     hostRegistry,
   });
   await app.register(configEditorModule, {

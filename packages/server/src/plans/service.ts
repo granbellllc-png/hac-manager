@@ -831,6 +831,7 @@ export class PlanService {
         hostId: row.hostId,
         ...(row.vmid !== null ? { vmid: row.vmid } : {}),
         type: 'plan.apply',
+        reason: input.reason ?? 'manual',
         // A power request must preempt queued low-priority host work (D-28).
         ...(row.operation === 'guest.power'
           ? { priority: 'power' as const }
@@ -1060,7 +1061,7 @@ export class PlanService {
     const guestVmid = row.vmid;
     let steps: readonly JournaledStep<undefined>[];
     let transport: Transport = unavailableTransport;
-    let auditReason: string | undefined;
+    let auditReason: string | undefined = context.job.reason;
     if (row.operation === 'guest.create') {
       const snapshot = await this.buildGuestCreateSnapshot(
         row.hostId,
@@ -1244,7 +1245,7 @@ export class PlanService {
           hostId: row.hostId,
           vmid: row.vmid,
           action: 'plan.apply',
-          reason: 'manual',
+          reason: context.job.reason,
           jobId: context.job.id,
           diff: sanitizeAuditPayload({
             planId: row.id,

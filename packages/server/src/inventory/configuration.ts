@@ -67,7 +67,7 @@ function guestKey(hostId: string, vmid: number): string {
   return `${hostId}:${vmid}`;
 }
 
-function collectAdminOnlySurfaces(
+export function collectAdminOnlySurfaces(
   value: unknown,
   relativePath: string,
 ): readonly AdminOnlyConfigSurface[] {

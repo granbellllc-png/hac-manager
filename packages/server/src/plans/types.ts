@@ -1,6 +1,7 @@
 import type { MutationPlan } from '@hacm/core';
 import type { GuestDeleteOptions, GuestDeleteTarget } from '@hacm/core';
 import type { JobRow, PlanRow } from '../db/schema.js';
+import type { AuditReason } from '../db/repositories/types.js';
 import type { GuestPowerAction } from '../guests/service.js';
 
 export interface GuestImportPlanPayload {
@@ -103,6 +104,8 @@ export interface CreateGuestImportPlanInput {
 export interface QueuePlanApplyInput {
   readonly dryRun?: boolean | undefined;
   readonly confirmation?: string | undefined;
+  /** Audit reason for the apply job. Defaults to `manual`. */
+  readonly reason?: AuditReason | undefined;
   readonly user: {
     readonly id: string;
     readonly username: string;

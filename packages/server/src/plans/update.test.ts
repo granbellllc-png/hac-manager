@@ -319,13 +319,23 @@ describe('PlanService LXC configuration updates', () => {
       await fixture.queue.start();
       const queued = await fixture.service.queueApply(plan.id, {
         confirmation: 'UPDATE pve-01/112',
+        reason: 'drift_push',
         user: { id: 'operator-1', username: 'operator', role: 'operator' },
       });
       await expect(
         fixture.queue.waitForJob(queued.job.id),
-      ).resolves.toMatchObject({ status: 'completed' });
+      ).resolves.toMatchObject({ status: 'completed', reason: 'drift_push' });
       expect(await fixture.service.get(plan.id)).toMatchObject({
         status: 'applied',
+      });
+      expect(
+        await fixture.repos.auditLogs.search({
+          action: 'plan.apply',
+          reason: 'drift_push',
+        }),
+      ).toMatchObject({
+        total: 1,
+        items: [expect.objectContaining({ reason: 'drift_push' })],
       });
       expect(fixture.transport.execArgv).toEqual(
         expect.arrayContaining([

@@ -3981,6 +3981,736 @@
         }
       }
     },
+    "/api/drift/{hostId}/{vmid}/pull": {
+      "post": {
+        "summary": "Pull live values into the guest YAML, preserving comments and tags",
+        "tags": ["Drift"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "paths": {
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "dryRun": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "hostId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "vmid",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hostId": {
+                      "type": "string"
+                    },
+                    "vmid": {
+                      "type": "number"
+                    },
+                    "dryRun": {
+                      "type": "boolean"
+                    },
+                    "applied": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "targetFile": {
+                            "type": "string"
+                          },
+                          "layer": {
+                            "type": "string",
+                            "enum": ["override", "default"]
+                          },
+                          "previousValue": {},
+                          "newValue": {}
+                        },
+                        "required": [
+                          "path",
+                          "targetFile",
+                          "layer",
+                          "previousValue",
+                          "newValue"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "failures": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "not_pullable",
+                              "missing_in_live",
+                              "path_not_found",
+                              "apply_failed",
+                              "tag_protected",
+                              "target_not_found",
+                              "write_conflict",
+                              "invalid_path"
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["path", "reason", "message"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "snapshot": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "hostId": {
+                          "type": "string"
+                        },
+                        "vmid": {
+                          "type": "number"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": ["lxc", "vm"]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["in_sync", "drifted"]
+                        },
+                        "changes": {
+                          "readOnly": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "category": {
+                                "type": "string",
+                                "enum": [
+                                  "config",
+                                  "network",
+                                  "disk",
+                                  "mount",
+                                  "feature",
+                                  "tags",
+                                  "protection",
+                                  "cloud_init",
+                                  "identity"
+                                ]
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "changed",
+                                  "missing_in_live",
+                                  "missing_in_yaml"
+                                ]
+                              },
+                              "desired": {},
+                              "actual": {},
+                              "pullable": {
+                                "type": "boolean"
+                              },
+                              "computed": {
+                                "type": "boolean"
+                              },
+                              "secret": {
+                                "type": "boolean"
+                              },
+                              "tag": {
+                                "type": "string",
+                                "enum": [
+                                  "env",
+                                  "secret",
+                                  "expr",
+                                  "cmd",
+                                  "include"
+                                ]
+                              },
+                              "provenance": {
+                                "type": "object",
+                                "properties": {
+                                  "layer": {
+                                    "type": "string",
+                                    "enum": ["default", "override"]
+                                  },
+                                  "file": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "sourcePath": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "layer",
+                                  "file",
+                                  "path",
+                                  "sourcePath"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "desiredHash": {
+                                "type": "string"
+                              },
+                              "actualHash": {
+                                "type": "string"
+                              },
+                              "warnings": {
+                                "readOnly": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "category",
+                              "kind",
+                              "desired",
+                              "actual",
+                              "pullable",
+                              "computed",
+                              "secret"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "computedFields": {
+                          "readOnly": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "ignoredPaths": {
+                          "readOnly": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "checkedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "hostId",
+                        "vmid",
+                        "type",
+                        "status",
+                        "changes",
+                        "computedFields",
+                        "ignoredPaths",
+                        "checkedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "hostId",
+                    "vmid",
+                    "dryRun",
+                    "applied",
+                    "failures",
+                    "snapshot"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/drift/{hostId}/{vmid}/enforce": {
+      "post": {
+        "summary": "Build and queue a plan that enforces YAML on the live guest",
+        "tags": ["Drift"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dryRun": {
+                    "type": "boolean"
+                  },
+                  "confirmation": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "hostId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "vmid",
+            "required": true
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "plan": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "enum": [1]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "operation": {
+                          "type": "string"
+                        },
+                        "target": {
+                          "type": "object",
+                          "properties": {
+                            "hostId": {
+                              "type": "string"
+                            },
+                            "vmid": {
+                              "type": "number"
+                            },
+                            "resourceType": {
+                              "type": "string",
+                              "enum": ["host", "guest", "file"]
+                            }
+                          },
+                          "required": ["hostId"],
+                          "additionalProperties": false
+                        },
+                        "summary": {
+                          "type": "string"
+                        },
+                        "changes": {
+                          "readOnly": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "action": {
+                                "type": "string",
+                                "enum": [
+                                  "create",
+                                  "update",
+                                  "delete",
+                                  "execute"
+                                ]
+                              },
+                              "summary": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "before": {},
+                              "after": {},
+                              "warnings": {
+                                "readOnly": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "destructive": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": ["id", "action", "summary"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "warnings": {
+                          "readOnly": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "destructive": {
+                          "type": "boolean"
+                        },
+                        "stateFingerprint": {
+                          "type": "string"
+                        },
+                        "confirmationText": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ready",
+                            "applying",
+                            "applied",
+                            "stale",
+                            "failed"
+                          ]
+                        },
+                        "createdBy": {
+                          "type": "string"
+                        },
+                        "approvedBy": {
+                          "type": "string"
+                        },
+                        "lastJobId": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "approvedAt": {
+                          "type": "string"
+                        },
+                        "appliedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "id",
+                        "operation",
+                        "target",
+                        "summary",
+                        "changes",
+                        "warnings",
+                        "destructive",
+                        "stateFingerprint",
+                        "createdAt",
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "job": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "hostId": {
+                          "type": "string"
+                        },
+                        "vmid": {
+                          "type": "number"
+                        },
+                        "lane": {
+                          "type": "string",
+                          "enum": ["guest", "host"]
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "manual",
+                            "drift_push",
+                            "drift_pull",
+                            "schedule",
+                            "conflict_resolution",
+                            "orphan_action"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "running",
+                            "waiting_input",
+                            "completed",
+                            "failed",
+                            "cancelled",
+                            "interrupted"
+                          ]
+                        },
+                        "priority": {
+                          "type": "number"
+                        },
+                        "triggeredBy": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "hostId",
+                        "lane",
+                        "type",
+                        "reason",
+                        "status",
+                        "priority",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["plan", "job"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "confirmationText": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "confirmationText": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "confirmationText": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "confirmationText": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/drift/hosts/{hostId}/check": {
       "post": {
         "summary": "Run on-demand drift checks for every configured guest on a host",

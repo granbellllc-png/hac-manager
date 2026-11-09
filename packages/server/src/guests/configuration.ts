@@ -22,6 +22,9 @@ export interface LoadedGuestDeployment {
   readonly deployment: GuestDeployment;
   readonly provenance: ProvenanceMap;
   readonly relativePath: string;
+  readonly deploymentFile: string;
+  readonly defaultDeploymentFile?: string | undefined;
+  readonly relativeDefaultDeploymentFile?: string | undefined;
 }
 
 async function parseYamlConfig<K extends 'deployment' | 'deployment-defaults'>(
@@ -96,6 +99,13 @@ export async function loadGuestDeployment(
       deployment: merged.deployment,
       provenance: merged.provenance,
       relativePath: guest.relativeDeploymentFile,
+      deploymentFile: guest.deploymentFile,
+      ...(host.defaultDeploymentFile && host.relativeDefaultDeploymentFile
+        ? {
+            defaultDeploymentFile: host.defaultDeploymentFile,
+            relativeDefaultDeploymentFile: host.relativeDefaultDeploymentFile,
+          }
+        : {}),
     };
   } catch (error) {
     throw new GuestConfigurationError(

@@ -1,26 +1,9 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { StalePlanError } from '@hacm/core';
 import type { HostRegistry } from '../../hosts/registry.js';
 import type { JobRow } from '../../db/schema.js';
 import { PlanService } from '../../plans/service.js';
-import {
-  PlanConfirmationError,
-  PlanAdminRequiredError,
-  PlanNotFoundError,
-  PlanOverwriteRequiredError,
-  PlanStateError,
-} from '../../plans/types.js';
-import {
-  GuestConfigurationError,
-  GuestIdentityCheckError,
-  GuestIdentityError,
-  GuestNotFoundError,
-  GuestProtectionEnabledError,
-  GuestStateUnavailableError,
-  GuestStoppedIdentityError,
-  ProtectedGuestError,
-} from '../../guests/index.js';
+import { planError } from '../../plans/errors.js';
 
 export interface PlansModuleOptions {
   readonly hostRegistry: HostRegistry;
@@ -35,7 +18,7 @@ const planStatusSchema = z.enum([
   'failed',
 ]);
 
-const planChangeSchema = z.object({
+export const planChangeSchema = z.object({
   id: z.string(),
   action: z.enum(['create', 'update', 'delete', 'execute']),
   summary: z.string(),
@@ -46,7 +29,7 @@ const planChangeSchema = z.object({
   destructive: z.boolean().optional(),
 });
 
-const planSchema = z.object({
+export const planSchema = z.object({
   schemaVersion: z.literal(1),
   id: z.string(),
   operation: z.string(),
@@ -71,7 +54,7 @@ const planSchema = z.object({
   appliedAt: z.string().optional(),
 });
 
-const jobSchema = z.object({
+export const jobSchema = z.object({
   id: z.string(),
   hostId: z.string(),
   vmid: z.number().optional(),
@@ -99,14 +82,14 @@ const jobSchema = z.object({
   createdAt: z.string(),
 });
 
-const errorSchema = z.object({
+export const errorSchema = z.object({
   statusCode: z.number(),
   error: z.string(),
   message: z.string(),
   confirmationText: z.string().optional(),
 });
 
-function publicJob(job: JobRow) {
+export function publicJob(job: JobRow) {
   return {
     id: job.id,
     hostId: job.hostId,
@@ -127,55 +110,6 @@ function knownRole(
   return role === 'admin' || role === 'operator' || role === 'viewer'
     ? role
     : undefined;
-}
-
-function planError(error: unknown): {
-  code: 400 | 403 | 404 | 409;
-  error: string;
-  message: string;
-  confirmationText?: string;
-} | null {
-  if (error instanceof PlanNotFoundError) {
-    return { code: 404, error: 'Not Found', message: error.message };
-  }
-  if (error instanceof PlanConfirmationError) {
-    return {
-      code: 400,
-      error: 'Bad Request',
-      message: error.message,
-      confirmationText: error.expectedText,
-    };
-  }
-  if (error instanceof PlanOverwriteRequiredError) {
-    return { code: 409, error: 'Conflict', message: error.message };
-  }
-  if (error instanceof PlanAdminRequiredError) {
-    return { code: 403, error: 'Forbidden', message: error.message };
-  }
-  if (error instanceof StalePlanError || error instanceof PlanStateError) {
-    return { code: 409, error: 'Conflict', message: error.message };
-  }
-  if (error instanceof GuestNotFoundError) {
-    return { code: 404, error: 'Not Found', message: error.message };
-  }
-  if (error instanceof ProtectedGuestError) {
-    return { code: 403, error: 'Forbidden', message: error.message };
-  }
-  if (
-    error instanceof GuestProtectionEnabledError ||
-    error instanceof GuestIdentityError ||
-    error instanceof GuestStoppedIdentityError ||
-    error instanceof GuestIdentityCheckError
-  ) {
-    return { code: 409, error: 'Conflict', message: error.message };
-  }
-  if (error instanceof GuestConfigurationError) {
-    return { code: 400, error: 'Bad Request', message: error.message };
-  }
-  if (error instanceof GuestStateUnavailableError) {
-    return { code: 409, error: 'Conflict', message: error.message };
-  }
-  return null;
 }
 
 export const plansModule: FastifyPluginAsyncZod<PlansModuleOptions> = async (

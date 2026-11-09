@@ -3,11 +3,22 @@ import { z } from 'zod';
 import type { HostRegistry } from '../../hosts/registry.js';
 import {
   DriftGuestNotFoundError,
+  DriftResolutionForbiddenError,
   type DriftService,
+  type DriftResolutionRole,
 } from '../../drift/index.js';
+import { planError } from '../../plans/errors.js';
+import type { PlanService } from '../../plans/service.js';
+import {
+  errorSchema as planErrorSchema,
+  jobSchema,
+  planSchema,
+  publicJob,
+} from '../plans/index.js';
 
 export interface DriftModuleOptions {
   readonly driftService: DriftService;
+  readonly planService: PlanService;
   readonly hostRegistry: HostRegistry;
 }
 
@@ -67,11 +78,51 @@ const forbiddenSchema = z.object({
 const notFoundSchema = forbiddenSchema;
 const conflictSchema = forbiddenSchema;
 
+const driftPullFailureSchema = z.object({
+  path: z.string(),
+  reason: z.enum([
+    'not_pullable',
+    'missing_in_live',
+    'path_not_found',
+    'apply_failed',
+    'tag_protected',
+    'target_not_found',
+    'write_conflict',
+    'invalid_path',
+  ]),
+  message: z.string(),
+});
+
+const driftPullAppliedSchema = z.object({
+  path: z.string(),
+  targetFile: z.string(),
+  layer: z.enum(['override', 'default']),
+  previousValue: z.unknown(),
+  newValue: z.unknown(),
+});
+
+const driftPullResultSchema = z.object({
+  hostId: z.string(),
+  vmid: z.number(),
+  dryRun: z.boolean(),
+  applied: z.array(driftPullAppliedSchema).readonly(),
+  failures: z.array(driftPullFailureSchema).readonly(),
+  snapshot: driftSnapshotSchema,
+});
+
+function resolutionRole(
+  role: string | undefined,
+): DriftResolutionRole | undefined {
+  return role === 'admin' || role === 'operator' || role === 'viewer'
+    ? role
+    : undefined;
+}
+
 export const driftModule: FastifyPluginAsyncZod<DriftModuleOptions> = async (
   app,
   options,
 ) => {
-  const { driftService, hostRegistry } = options;
+  const { driftService, planService, hostRegistry } = options;
 
   const canAccessHost = async (
     user: Parameters<HostRegistry['listHosts']>[0],
@@ -208,6 +259,162 @@ export const driftModule: FastifyPluginAsyncZod<DriftModuleOptions> = async (
           message:
             error instanceof Error ? error.message : 'Drift check failed',
         });
+      }
+    },
+  );
+
+  app.post(
+    '/api/drift/:hostId/:vmid/pull',
+    {
+      schema: {
+        tags: ['Drift'],
+        summary:
+          'Pull live values into the guest YAML, preserving comments and tags',
+        params: z.object({
+          hostId: z.string(),
+          vmid: z.coerce.number().int().positive(),
+        }),
+        body: z.object({
+          paths: z.array(z.string().min(1)).min(1).max(200).optional(),
+          dryRun: z.boolean().optional(),
+        }),
+        response: {
+          200: driftPullResultSchema,
+          403: forbiddenSchema,
+          404: notFoundSchema,
+          409: conflictSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { hostId, vmid } = request.params;
+      const role = resolutionRole(request.user?.role);
+      if (!role || role === 'viewer') {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: 'Viewer role cannot resolve drift',
+        });
+      }
+      if (!(await canAccessHost(request.user, hostId))) {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: `Access denied to host '${hostId}'`,
+        });
+      }
+
+      try {
+        return await driftService.pull(hostId, vmid, {
+          user: { id: request.user!.id, role },
+          ...(request.body.paths ? { paths: request.body.paths } : {}),
+          ...(request.body.dryRun !== undefined
+            ? { dryRun: request.body.dryRun }
+            : {}),
+        });
+      } catch (error) {
+        if (error instanceof DriftGuestNotFoundError) {
+          return reply.code(404).send({
+            statusCode: 404,
+            error: 'Not Found',
+            message: error.message,
+          });
+        }
+        if (error instanceof DriftResolutionForbiddenError) {
+          return reply.code(403).send({
+            statusCode: 403,
+            error: 'Forbidden',
+            message: error.message,
+          });
+        }
+        return reply.code(409).send({
+          statusCode: 409,
+          error: 'Conflict',
+          message: error instanceof Error ? error.message : 'Drift pull failed',
+        });
+      }
+    },
+  );
+
+  app.post(
+    '/api/drift/:hostId/:vmid/enforce',
+    {
+      schema: {
+        tags: ['Drift'],
+        summary: 'Build and queue a plan that enforces YAML on the live guest',
+        params: z.object({
+          hostId: z.string(),
+          vmid: z.coerce.number().int().positive(),
+        }),
+        body: z.object({
+          dryRun: z.boolean().optional(),
+          confirmation: z.string().optional(),
+        }),
+        response: {
+          202: z.object({ plan: planSchema, job: jobSchema }),
+          400: planErrorSchema,
+          403: planErrorSchema,
+          404: planErrorSchema,
+          409: planErrorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { hostId, vmid } = request.params;
+      const role = resolutionRole(request.user?.role);
+      if (!role || role === 'viewer') {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: 'Viewer role cannot resolve drift',
+        });
+      }
+      if (!(await canAccessHost(request.user, hostId))) {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: `Access denied to host '${hostId}'`,
+        });
+      }
+
+      try {
+        const plan = await planService.createGuestUpdatePlan({
+          hostId,
+          vmid,
+          createdBy: request.user?.id,
+          createdByRole: role,
+        });
+        const queued = await planService.queueApply(plan.id, {
+          ...(request.body.dryRun !== undefined
+            ? { dryRun: request.body.dryRun }
+            : {}),
+          ...(request.body.confirmation
+            ? { confirmation: request.body.confirmation }
+            : {}),
+          reason: 'drift_push',
+          user: {
+            id: request.user!.id,
+            username: request.user!.username,
+            role,
+          },
+        });
+        return reply.code(202).send({
+          plan: queued.plan,
+          job: publicJob(queued.job),
+        });
+      } catch (error) {
+        const mapped = planError(error);
+        if (mapped) {
+          return reply.code(mapped.code).send({
+            statusCode: mapped.code,
+            error: mapped.error,
+            message: mapped.message,
+            ...(mapped.confirmationText
+              ? { confirmationText: mapped.confirmationText }
+              : {}),
+          });
+        }
+        throw error;
       }
     },
   );
