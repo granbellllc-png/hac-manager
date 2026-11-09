@@ -1,0 +1,34 @@
+schema_version: 1
+id: 212
+name: example-vm
+type: vm
+cpu: 4
+ram: 4096
+bios: ovmf
+machine: q35
+efi_disk: true
+tpm: true
+guest_agent: true
+tags:
+  - example
+disks:
+  - name: scsi0
+    storage: local-lvm
+    size_gb: 32
+network:
+  - index: 0
+    bridge: vmbr0
+    ip: 192.0.2.212/24
+    gateway: 192.0.2.1
+    mac: A2:B1:C1:01:E0:AA
+  - index: 1
+    bridge: vmbr1
+cloud_init:
+  user: example
+  password: example-password
+  ssh_keys:
+    - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleOnly example@example
+installation:
+  type: cloud_image
+  url: https://cloud.example.invalid/debian-12.qcow2
+  checksum: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

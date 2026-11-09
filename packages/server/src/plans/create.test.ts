@@ -67,6 +67,59 @@ installation:
   template_id: 9000
 `;
 
+const fullVmDeploymentYaml = `schema_version: 1
+id: 112
+name: example-vm
+type: vm
+cpu: 2
+ram: 2048
+bios: ovmf
+guest_agent: true
+disks:
+  - name: scsi0
+    storage: local-lvm
+    size_gb: 20
+network:
+  - index: 0
+    bridge: vmbr0
+    ip: 192.0.2.112/24
+    gateway: 192.0.2.1
+installation:
+  type: clone
+  template_id: 9000
+`;
+
+function vmScriptTransport(): FakeTransport {
+  const stamp = managedGuestUuid('pve-01', 112);
+  const nameOnly = 'name: example-vm';
+  const configured = [
+    nameOnly,
+    'tags: hacm-managed',
+    `description: hacm-managed: ${stamp}`,
+  ].join('\n');
+  const sized = 'scsi0: local-lvm:vm-112-disk-0,size=20G';
+  const transport = new FakeTransport()
+    .onExec('test -f /etc/pve/local/qemu-server/112.conf', { exitCode: 1 })
+    .onExec('test -f /etc/pve/local/lxc/112.conf', { exitCode: 1 })
+    .onExec(/^qm clone /, { stdout: 'cloned' })
+    .onExec(/^qm set 112 /, { stdout: 'configured' })
+    .onExec(/^qm start /, { stdout: 'started' })
+    .onExec('qm status 112', { stdout: 'status: running' })
+    .onExec('qm status 112', { stdout: 'status: stopped' }, { once: true })
+    .onExec('qm status 112', { stdout: 'status: stopped' }, { once: true })
+    .onExec('qm agent 112 ping', { stdout: '' });
+  for (const config of [
+    nameOnly,
+    nameOnly,
+    configured,
+    sized,
+    sized,
+  ].reverse()) {
+    transport.onExec('qm config 112', { stdout: config }, { once: true });
+  }
+  return transport;
+}
+
 function lxcDeployment(): GuestDeployment {
   return {
     id: 112,
@@ -113,7 +166,10 @@ function scriptTransport(): FakeTransport {
 }
 
 async function createFixture(
-  options: { readonly deployment?: string | null } = {},
+  options: {
+    readonly deployment?: string | null;
+    readonly transport?: FakeTransport;
+  } = {},
 ) {
   const dataDir = await mkdtemp(join(tmpdir(), 'hacm-plan-create-'));
   tempDirs.push(dataDir);
@@ -131,7 +187,7 @@ async function createFixture(
   const handle = createDatabase({ path: ':memory:' });
   const repos = createSqliteRepositories(handle.db);
   const queue: DurableJobQueue = new Queue(repos);
-  const transport = scriptTransport();
+  const transport = options.transport ?? scriptTransport();
   const service = new PlanService(
     repos,
     queue,
@@ -316,6 +372,79 @@ describe('PlanService LXC creation', () => {
     }
   });
 
+  it('plans and creates a VM from a clone deployment', async () => {
+    const fixture = await createFixture({
+      deployment: fullVmDeploymentYaml,
+      transport: vmScriptTransport(),
+    });
+    try {
+      const plan = await fixture.service.createGuestCreatePlan({
+        hostId: 'pve-01',
+        vmid: 112,
+        guestType: 'vm',
+        createdBy: 'admin-1',
+        createdByRole: 'admin',
+      });
+      expect(plan).toMatchObject({
+        operation: 'guest.create',
+        status: 'ready',
+        destructive: false,
+        summary: 'Create VM 112 (example-vm) from template 9000',
+      });
+      expect(plan.changes).toEqual([
+        expect.objectContaining({
+          id: 'create-guest',
+          action: 'create',
+          after: expect.objectContaining({
+            vmid: 112,
+            type: 'vm',
+            template: 'template 9000',
+          }),
+        }),
+      ]);
+
+      await fixture.start();
+      const queued = await fixture.service.queueApply(plan.id, {
+        user: { id: 'admin-1', username: 'admin', role: 'admin' },
+      });
+      await expect(
+        fixture.queue.waitForJob(queued.job.id),
+      ).resolves.toMatchObject({ status: 'completed' });
+      expect(await fixture.service.get(plan.id)).toMatchObject({
+        status: 'applied',
+      });
+
+      const clone = fixture.transport.execArgv.find(
+        (argv) => argv[0] === 'qm' && argv[1] === 'clone',
+      );
+      expect(clone).toEqual([
+        'qm',
+        'clone',
+        '9000',
+        '112',
+        '--name',
+        'example-vm',
+        '--full',
+        '1',
+        '--storage',
+        'local-lvm',
+      ]);
+      const configure = fixture.transport.execArgv.find(
+        (argv) => argv[0] === 'qm' && argv[1] === 'set',
+      );
+      expect(configure?.join(' ')).toContain('--tags hacm-managed');
+      expect(configure?.join(' ')).toContain(
+        `--description hacm-managed: ${managedGuestUuid('pve-01', 112)}`,
+      );
+      expect(fixture.transport.execArgv).not.toContainEqual(
+        expect.arrayContaining(['qm', 'resize']),
+      );
+      expect(fixture.transport.execArgv).toContainEqual(['qm', 'start', '112']);
+    } finally {
+      await fixture.stop();
+    }
+  });
+
   it('requires a data-dir deployment and an LXC deployment', async () => {
     const missing = await createFixture({ deployment: null });
     try {
@@ -338,6 +467,7 @@ describe('PlanService LXC creation', () => {
         vm.service.createGuestCreatePlan({
           hostId: 'pve-01',
           vmid: 112,
+          guestType: 'lxc',
           createdByRole: 'admin',
         }),
       ).rejects.toThrow('LXC creation only supports');

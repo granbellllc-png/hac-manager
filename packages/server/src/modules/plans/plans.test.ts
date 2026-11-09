@@ -132,9 +132,31 @@ network: []
 `,
     'utf8',
   );
+  const vmDir = join(dataDir, 'hosts', 'pve-01', '214-new-vm');
+  await mkdir(vmDir, { recursive: true });
+  await writeFile(
+    join(vmDir, 'deployment.yaml'),
+    `schema_version: 1
+id: 214
+name: new-vm
+type: vm
+cpu: 2
+ram: 1024
+disks: []
+network: []
+installation:
+  type: clone
+  template_id: 9000
+`,
+    'utf8',
+  );
   const createTransport = new FakeTransport()
     .onExec('test -f /etc/pve/local/qemu-server/114.conf', { exitCode: 1 })
-    .onExec('test -f /etc/pve/local/lxc/114.conf', { exitCode: 1 });
+    .onExec('test -f /etc/pve/local/lxc/114.conf', { exitCode: 1 })
+    .onExec('test -f /etc/pve/local/qemu-server/214.conf', { exitCode: 1 })
+    .onExec('test -f /etc/pve/local/lxc/214.conf', { exitCode: 1 })
+    .onExec('test -f /etc/pve/local/qemu-server/116.conf', { exitCode: 1 })
+    .onExec('test -f /etc/pve/local/lxc/116.conf', { exitCode: 1 });
   const handle = createDatabase({ path: ':memory:' });
   const repos = createSqliteRepositories(handle.db);
   const queue = new DurableJobQueue(repos);
@@ -402,6 +424,64 @@ describe('plans API', () => {
       });
       expect(noDeployment.statusCode).toBe(409);
       expect(noDeployment.json().message).toContain('No deployment YAML');
+    } finally {
+      await fixture.app.close();
+      fixture.handle.close();
+    }
+  });
+
+  it('creates VM creation plans for administrators', async () => {
+    const fixture = await createFixture();
+    try {
+      const denied = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/plans/vm-create',
+        headers: {
+          cookie: fixture.operator.cookie,
+          [CSRF_HEADER_NAME]: fixture.operator.csrf,
+        },
+        payload: { hostId: 'pve-01', vmid: 214 },
+      });
+      expect(denied.statusCode).toBe(403);
+      expect(denied.json().message).toContain('administrators');
+
+      const created = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/plans/vm-create',
+        headers: {
+          cookie: fixture.admin.cookie,
+          [CSRF_HEADER_NAME]: fixture.admin.csrf,
+        },
+        payload: { hostId: 'pve-01', vmid: 214 },
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json()).toMatchObject({
+        operation: 'guest.create',
+        target: { hostId: 'pve-01', vmid: 214, resourceType: 'guest' },
+        status: 'ready',
+        summary: 'Create VM 214 (new-vm) from template 9000',
+        changes: [
+          expect.objectContaining({
+            id: 'create-guest',
+            after: expect.objectContaining({
+              type: 'vm',
+              template: 'template 9000',
+            }),
+          }),
+        ],
+      });
+
+      const wrongType = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/plans/vm-create',
+        headers: {
+          cookie: fixture.admin.cookie,
+          [CSRF_HEADER_NAME]: fixture.admin.csrf,
+        },
+        payload: { hostId: 'pve-01', vmid: 116 },
+      });
+      expect(wrongType.statusCode).toBe(409);
+      expect(wrongType.json().message).toContain('VM creation only supports');
     } finally {
       await fixture.app.close();
       fixture.handle.close();

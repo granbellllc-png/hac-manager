@@ -5582,6 +5582,278 @@
         }
       }
     },
+    "/api/plans/vm-create": {
+      "post": {
+        "summary": "Create a durable VM creation plan from data-dir YAML",
+        "tags": ["Plans"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "hostId": {
+                    "type": "string"
+                  },
+                  "vmid": {
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["hostId", "vmid"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schemaVersion": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "operation": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "hostId": {
+                          "type": "string"
+                        },
+                        "vmid": {
+                          "type": "number"
+                        },
+                        "resourceType": {
+                          "type": "string",
+                          "enum": ["host", "guest", "file"]
+                        }
+                      },
+                      "required": ["hostId"],
+                      "additionalProperties": false
+                    },
+                    "summary": {
+                      "type": "string"
+                    },
+                    "changes": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "action": {
+                            "type": "string",
+                            "enum": ["create", "update", "delete", "execute"]
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "before": {},
+                          "after": {},
+                          "warnings": {
+                            "readOnly": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "destructive": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "action", "summary"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "warnings": {
+                      "readOnly": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "destructive": {
+                      "type": "boolean"
+                    },
+                    "stateFingerprint": {
+                      "type": "string"
+                    },
+                    "confirmationText": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ready",
+                        "applying",
+                        "applied",
+                        "stale",
+                        "failed"
+                      ]
+                    },
+                    "createdBy": {
+                      "type": "string"
+                    },
+                    "approvedBy": {
+                      "type": "string"
+                    },
+                    "lastJobId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "approvedAt": {
+                      "type": "string"
+                    },
+                    "appliedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "schemaVersion",
+                    "id",
+                    "operation",
+                    "target",
+                    "summary",
+                    "changes",
+                    "warnings",
+                    "destructive",
+                    "stateFingerprint",
+                    "createdAt",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "confirmationText": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "confirmationText": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "confirmationText": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statusCode": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "confirmationText": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["statusCode", "error", "message"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/plans/guest-update": {
       "post": {
         "summary": "Create a durable LXC configuration update plan",

@@ -47,6 +47,8 @@ export interface CreateGuestStampPlanInput {
 export interface CreateGuestCreatePlanInput {
   readonly hostId: string;
   readonly vmid: number;
+  /** Require a deployment of this type; omitted accepts either LXC or VM. */
+  readonly guestType?: 'lxc' | 'vm' | undefined;
   readonly createdBy?: string | undefined;
   readonly createdByRole?: 'admin' | 'operator' | 'viewer' | undefined;
 }

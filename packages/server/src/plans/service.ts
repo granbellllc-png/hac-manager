@@ -7,8 +7,10 @@ import {
   createLxcProvisionSteps,
   createLxcUpdateSteps,
   createMutationPlan,
+  createVmProvisionSteps,
   deploymentDefaultsFileSchema,
   describeLxcCreation,
+  describeVmCreation,
   executeMutationPlan,
   hashContent,
   isManagedGuestTag,
@@ -97,7 +99,7 @@ function createCurrentState(
   return {
     vmid,
     exists: snapshot.occupiedBy !== null,
-    type: snapshot.occupiedBy ?? 'lxc',
+    type: snapshot.occupiedBy ?? snapshot.deployment?.type ?? 'lxc',
     deployment: snapshot.deployment,
   };
 }
@@ -465,17 +467,35 @@ export class PlanService {
         `No deployment YAML is configured for guest ${input.vmid} on host '${input.hostId}'`,
       );
     }
-    if (snapshot.deployment.type !== 'lxc') {
+    const deployment = snapshot.deployment;
+    if (input.guestType && deployment.type !== input.guestType) {
       throw new PlanStateError(
-        `Guest ${input.vmid} is a VM; LXC creation only supports deployments with type 'lxc'`,
+        input.guestType === 'lxc'
+          ? `Guest ${input.vmid} is a VM; LXC creation only supports deployments with type 'lxc'`
+          : `Guest ${input.vmid} is an LXC container; VM creation only supports deployments with type 'vm'`,
       );
     }
     if (snapshot.occupiedBy) {
       throw new PlanStateError(collisionMessage(input.hostId, input.vmid));
     }
-    const preview = describeLxcCreation(snapshot.deployment, {
-      hostId: input.hostId,
-    });
+    let summary: string;
+    let origin: string;
+    let warnings: readonly string[];
+    if (deployment.type === 'lxc') {
+      const preview = describeLxcCreation(deployment, {
+        hostId: input.hostId,
+      });
+      summary = preview.summary;
+      origin = preview.template.volid;
+      warnings = preview.warnings;
+    } else {
+      const preview = describeVmCreation(deployment, {
+        hostId: input.hostId,
+      });
+      summary = preview.summary;
+      origin = preview.origin;
+      warnings = preview.warnings;
+    }
     const generatedAt = new Date();
     const currentState = createCurrentState(input.vmid, snapshot);
     const plan = createMutationPlan({
@@ -486,26 +506,26 @@ export class PlanService {
         vmid: input.vmid,
         resourceType: 'guest',
       },
-      summary: preview.summary,
+      summary,
       currentState,
       changes: [
         {
           id: 'create-guest',
           action: 'create',
-          summary: preview.summary,
+          summary,
           before: null,
           after: {
-            vmid: snapshot.deployment.id,
-            name: snapshot.deployment.name,
-            type: snapshot.deployment.type,
-            template: preview.template.volid,
-            deployment: snapshot.deployment,
+            vmid: deployment.id,
+            name: deployment.name,
+            type: deployment.type,
+            template: origin,
+            deployment,
           },
-          warnings: [...preview.warnings],
+          warnings: [...warnings],
           destructive: false,
         },
       ],
-      warnings: [...preview.warnings],
+      warnings: [...warnings],
       createdAt: generatedAt,
     });
     const payload: GuestCreatePlanPayload = {
@@ -944,17 +964,17 @@ export class PlanService {
           `No deployment YAML is configured for guest ${row.vmid} on host '${row.hostId}'`,
         );
       }
-      if (snapshot.deployment.type !== 'lxc') {
-        throw new PlanStateError(
-          `Guest ${row.vmid} is a VM; LXC creation only supports deployments with type 'lxc'`,
-        );
-      }
       if (snapshot.occupiedBy) {
         throw new PlanStateError(collisionMessage(row.hostId, row.vmid));
       }
-      steps = createLxcProvisionSteps(snapshot.deployment, {
-        hostId: row.hostId,
-      });
+      steps =
+        snapshot.deployment.type === 'lxc'
+          ? createLxcProvisionSteps(snapshot.deployment, {
+              hostId: row.hostId,
+            })
+          : createVmProvisionSteps(snapshot.deployment, {
+              hostId: row.hostId,
+            });
       transport = await this.requireConnections().getRouter(row.hostId);
     } else if (row.operation === 'guest.update') {
       const lifecycle = this.requireLifecycle();
