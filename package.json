@@ -10,7 +10,7 @@
     "pnpm": "10.34.9"
   },
   "scripts": {
-    "hacm": "tsx packages/cli/src/bin.ts",
+    "hacm": "tsx --env-file-if-exists=.env packages/cli/src/bin.ts",
     "dev": "concurrently -k -n server,web \"pnpm --filter server dev\" \"pnpm --filter web dev\"",
     "build": "tsc -b && pnpm --filter web bundle",
     "api:generate": "pnpm --filter server openapi:generate && pnpm --filter web api:generate",
