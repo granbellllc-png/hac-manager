@@ -8,16 +8,16 @@ import type { YamlSecretProviderOptions } from './types.js';
 export class YamlSecretProvider implements SecretProvider {
   private readonly secretsPath: string;
   private readonly fs: FileSystem;
-  private readonly cache: SecretTtlCache<Record<string, unknown>>;
+  private readonly cache: SecretTtlCache<Record<string, string>>;
 
   public constructor(options: YamlSecretProviderOptions) {
     this.secretsPath = options.secretsPath;
     this.fs = options.fs ?? defaultNodeFileSystem;
-    this.cache = new SecretTtlCache<Record<string, unknown>>(60_000); // 1 min in-memory cache
+    this.cache = new SecretTtlCache<Record<string, string>>(60_000); // 1 min in-memory cache
   }
 
   private async loadSecrets(): Promise<
-    | { readonly success: true; readonly secrets: Record<string, unknown> }
+    | { readonly success: true; readonly secrets: Record<string, string> }
     | { readonly success: false; readonly result: SecretProviderResult }
   > {
     const cached = this.cache.get(this.secretsPath);
@@ -62,7 +62,7 @@ export class YamlSecretProvider implements SecretProvider {
         };
       }
 
-      const secrets = parsed.data.values ?? {};
+      const secrets = parsed.data.values;
 
       this.cache.set(this.secretsPath, secrets);
       return { success: true, secrets };
@@ -85,10 +85,10 @@ export class YamlSecretProvider implements SecretProvider {
 
     const { secrets } = loadRes;
     if (Object.prototype.hasOwnProperty.call(secrets, key)) {
-      const val = secrets[key];
       return {
         status: 'found',
-        value: typeof val === 'string' ? val : String(val),
+        // The schema guarantees string values, including an empty string.
+        value: secrets[key]!,
       };
     }
 

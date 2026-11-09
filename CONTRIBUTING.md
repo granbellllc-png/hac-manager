@@ -16,9 +16,10 @@ pnpm typecheck
 pnpm test:coverage
 pnpm audit
 pnpm build
+pnpm --filter web e2e
 ```
 
-Coverage requires at least 90% of statements, branches, functions and lines **per source file**. Do not lower thresholds to obtain a pass. Unit and integration tests run together; verify UI changes at mobile and desktop widths in a browser. The pre-commit hook runs ESLint and Prettier on staged files; it supplements the full checks above.
+Coverage requires at least 90% of statements, branches, functions and lines **per source file**. Do not lower thresholds to obtain a pass. Unit and integration tests run together. Browser tests run at mobile and desktop widths against an isolated Vite server on port 4173; every API request uses fake fixtures, so they cannot contact managed hosts. Install Chromium once with `pnpm --filter web exec playwright install chromium`. Inspect the screenshots under `packages/web/test-results/` after UI changes. The pre-commit hook runs ESLint and Prettier on staged files; it supplements the full checks above.
 
 ## CI and branch protection
 
