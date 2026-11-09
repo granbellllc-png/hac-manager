@@ -24,6 +24,9 @@ describe('Database foundation', () => {
       expect(names).toContain('settings');
       expect(names).toContain('hosts');
       expect(names).toContain('sessions');
+      expect(names).toContain('jobs');
+      expect(names).toContain('job_log_lines');
+      expect(names).toContain('job_steps');
     } finally {
       handle.close();
     }

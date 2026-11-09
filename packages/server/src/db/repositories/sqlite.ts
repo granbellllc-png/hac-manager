@@ -1,7 +1,18 @@
-import { eq, lte, gte, and, isNull, inArray, desc, asc } from 'drizzle-orm';
+import {
+  eq,
+  lte,
+  gte,
+  gt,
+  and,
+  isNull,
+  inArray,
+  desc,
+  asc,
+  sql,
+} from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import { sanitizeAuditPayload } from '@hacm/core';
+import { globalSecretRedactor, sanitizeAuditPayload } from '@hacm/core';
 import * as schema from '../schema.js';
 import { verifyRecoveryCodeMatch } from '../../auth/totp.js';
 import type {
@@ -13,6 +24,9 @@ import type {
   CreateAuditInput,
   AuditFilter,
   SessionsRepository,
+  JobsRepository,
+  JobLogLinesRepository,
+  JobStepsRepository,
 } from './types.js';
 
 export function createSqliteRepositories(
@@ -470,6 +484,171 @@ export function createSqliteRepositories(
     },
   };
 
+  const jobs: JobsRepository = {
+    async create(row) {
+      db.insert(schema.jobsTable).values(row).run();
+      const created = db
+        .select()
+        .from(schema.jobsTable)
+        .where(eq(schema.jobsTable.id, row.id))
+        .get();
+      if (!created) throw new Error(`Failed to create job '${row.id}'`);
+      return created;
+    },
+    async get(id) {
+      return (
+        db
+          .select()
+          .from(schema.jobsTable)
+          .where(eq(schema.jobsTable.id, id))
+          .get() ?? null
+      );
+    },
+    async list(filter = {}) {
+      const conditions = [];
+      if (filter.hostId) {
+        conditions.push(eq(schema.jobsTable.hostId, filter.hostId));
+      }
+      if (filter.vmid !== undefined) {
+        conditions.push(eq(schema.jobsTable.vmid, filter.vmid));
+      }
+      if (filter.statuses && filter.statuses.length > 0) {
+        conditions.push(inArray(schema.jobsTable.status, [...filter.statuses]));
+      }
+      const query = db
+        .select()
+        .from(schema.jobsTable)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(
+          desc(schema.jobsTable.priority),
+          asc(schema.jobsTable.createdAt),
+        );
+      return filter.limit === undefined
+        ? query.all()
+        : query.limit(filter.limit).all();
+    },
+    async claim(id, startedAt = new Date()) {
+      const result = db
+        .update(schema.jobsTable)
+        .set({ status: 'running', startedAt, error: null })
+        .where(
+          and(
+            eq(schema.jobsTable.id, id),
+            eq(schema.jobsTable.status, 'queued'),
+            isNull(schema.jobsTable.cancelRequestedAt),
+          ),
+        )
+        .run();
+      if (result.changes === 0) return null;
+      return (
+        db
+          .select()
+          .from(schema.jobsTable)
+          .where(eq(schema.jobsTable.id, id))
+          .get() ?? null
+      );
+    },
+    async updateStatus(id, status, patch = {}) {
+      const values: Partial<schema.InsertJobRow> = { status };
+      if (patch.startedAt !== undefined) values.startedAt = patch.startedAt;
+      if (patch.finishedAt !== undefined) values.finishedAt = patch.finishedAt;
+      if (patch.cancelRequestedAt !== undefined) {
+        values.cancelRequestedAt = patch.cancelRequestedAt;
+      }
+      if (patch.error !== undefined) values.error = patch.error;
+      const result = db
+        .update(schema.jobsTable)
+        .set(values)
+        .where(eq(schema.jobsTable.id, id))
+        .run();
+      return result.changes > 0;
+    },
+    async requestCancel(id, requestedAt = new Date()) {
+      const result = db
+        .update(schema.jobsTable)
+        .set({ cancelRequestedAt: requestedAt })
+        .where(eq(schema.jobsTable.id, id))
+        .run();
+      return result.changes > 0;
+    },
+    async interruptRunning(interruptedAt = new Date()) {
+      const result = db
+        .update(schema.jobsTable)
+        .set({
+          status: 'interrupted',
+          finishedAt: interruptedAt,
+          error: 'Backend restarted while the job was running',
+        })
+        .where(eq(schema.jobsTable.status, 'running'))
+        .run();
+      return result.changes;
+    },
+  };
+
+  const jobLogLines: JobLogLinesRepository = {
+    async append(input) {
+      return db.transaction((tx) => {
+        const maxRow = tx
+          .select({
+            maxSeq: sql<number>`coalesce(max(${schema.jobLogLinesTable.seq}), 0)`,
+          })
+          .from(schema.jobLogLinesTable)
+          .where(eq(schema.jobLogLinesTable.jobId, input.jobId))
+          .get();
+        const row: schema.InsertJobLogLineRow = {
+          jobId: input.jobId,
+          seq: (maxRow?.maxSeq ?? 0) + 1,
+          ts: input.ts ?? new Date(),
+          stream: input.stream,
+          text: globalSecretRedactor.redactLine(input.text),
+        };
+        tx.insert(schema.jobLogLinesTable).values(row).run();
+        return row as schema.JobLogLineRow;
+      });
+    },
+    async list(jobId, options = {}) {
+      const conditions = [eq(schema.jobLogLinesTable.jobId, jobId)];
+      if (options.afterSeq !== undefined) {
+        conditions.push(gt(schema.jobLogLinesTable.seq, options.afterSeq));
+      }
+      return db
+        .select()
+        .from(schema.jobLogLinesTable)
+        .where(and(...conditions))
+        .orderBy(asc(schema.jobLogLinesTable.seq))
+        .limit(options.limit ?? 1000)
+        .all();
+    },
+  };
+
+  const jobSteps: JobStepsRepository = {
+    async upsert(row) {
+      db.insert(schema.jobStepsTable)
+        .values(row)
+        .onConflictDoUpdate({
+          target: [schema.jobStepsTable.jobId, schema.jobStepsTable.stepIndex],
+          set: {
+            name: row.name,
+            status: row.status,
+            resultJson: row.resultJson,
+            rollbackHint: row.rollbackHint,
+            startedAt: row.startedAt,
+            finishedAt: row.finishedAt,
+          },
+        })
+        .run();
+      return row as schema.JobStepRow;
+    },
+    async list(jobId) {
+      return db
+        .select()
+        .from(schema.jobStepsTable)
+        .where(eq(schema.jobStepsTable.jobId, jobId))
+        .orderBy(asc(schema.jobStepsTable.stepIndex))
+        .all();
+    },
+  };
+
   return {
     settings,
     hostsCache,
@@ -478,5 +657,8 @@ export function createSqliteRepositories(
     recoveryCodes,
     auditLogs,
     sessions,
+    jobs,
+    jobLogLines,
+    jobSteps,
   };
 }

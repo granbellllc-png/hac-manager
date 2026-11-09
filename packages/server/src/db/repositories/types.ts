@@ -8,6 +8,11 @@ import type {
   InsertSessionRow,
   RecoveryCodeRow,
   AuditLogRow,
+  JobRow,
+  InsertJobRow,
+  JobLogLineRow,
+  JobStepRow,
+  InsertJobStepRow,
 } from '../schema.js';
 
 export interface SettingsRepository {
@@ -115,6 +120,60 @@ export interface AuditLogsRepository {
   getById(id: string): Promise<AuditLogRow | null>;
 }
 
+export type JobStatus = JobRow['status'];
+export type JobLogStream = JobLogLineRow['stream'];
+
+export interface JobStatusPatch {
+  readonly startedAt?: Date | null | undefined;
+  readonly finishedAt?: Date | null | undefined;
+  readonly cancelRequestedAt?: Date | null | undefined;
+  readonly error?: string | null | undefined;
+}
+
+export interface JobListFilter {
+  readonly hostId?: string | undefined;
+  readonly vmid?: number | undefined;
+  readonly statuses?: readonly JobStatus[] | undefined;
+  readonly limit?: number | undefined;
+}
+
+export interface JobsRepository {
+  create(row: InsertJobRow): Promise<JobRow>;
+  get(id: string): Promise<JobRow | null>;
+  list(filter?: JobListFilter): Promise<readonly JobRow[]>;
+  claim(id: string, startedAt?: Date): Promise<JobRow | null>;
+  updateStatus(
+    id: string,
+    status: JobStatus,
+    patch?: JobStatusPatch,
+  ): Promise<boolean>;
+  requestCancel(id: string, requestedAt?: Date): Promise<boolean>;
+  interruptRunning(interruptedAt?: Date): Promise<number>;
+}
+
+export interface AppendJobLogLineInput {
+  readonly jobId: string;
+  readonly stream: JobLogStream;
+  readonly text: string;
+  readonly ts?: Date | undefined;
+}
+
+export interface JobLogLinesRepository {
+  append(input: AppendJobLogLineInput): Promise<JobLogLineRow>;
+  list(
+    jobId: string,
+    options?: {
+      readonly afterSeq?: number | undefined;
+      readonly limit?: number | undefined;
+    },
+  ): Promise<readonly JobLogLineRow[]>;
+}
+
+export interface JobStepsRepository {
+  upsert(row: InsertJobStepRow): Promise<JobStepRow>;
+  list(jobId: string): Promise<readonly JobStepRow[]>;
+}
+
 export interface DatabaseRepositories {
   readonly settings: SettingsRepository;
   readonly hostsCache: HostsCacheRepository;
@@ -123,4 +182,7 @@ export interface DatabaseRepositories {
   readonly recoveryCodes: RecoveryCodesRepository;
   readonly auditLogs: AuditLogsRepository;
   readonly sessions: SessionsRepository;
+  readonly jobs: JobsRepository;
+  readonly jobLogLines: JobLogLinesRepository;
+  readonly jobSteps: JobStepsRepository;
 }

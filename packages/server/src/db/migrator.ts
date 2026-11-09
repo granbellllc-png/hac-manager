@@ -147,10 +147,69 @@ export const auditLogsMigration: Migration = {
   },
 };
 
+export const jobsQueueMigration: Migration = {
+  id: '0004_jobs_queue',
+  up: (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS jobs (
+        id TEXT PRIMARY KEY,
+        host_id TEXT NOT NULL,
+        vmid INTEGER,
+        lane TEXT NOT NULL,
+        type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        priority INTEGER NOT NULL DEFAULT 0,
+        payload_json TEXT,
+        triggered_by TEXT,
+        depends_on_job_id TEXT,
+        timeout_ms INTEGER,
+        cancel_requested_at INTEGER,
+        error TEXT,
+        created_at INTEGER NOT NULL,
+        started_at INTEGER,
+        finished_at INTEGER
+      );
+
+      CREATE TABLE IF NOT EXISTS job_log_lines (
+        job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+        seq INTEGER NOT NULL,
+        ts INTEGER NOT NULL,
+        stream TEXT NOT NULL,
+        text TEXT NOT NULL,
+        PRIMARY KEY (job_id, seq)
+      );
+
+      CREATE TABLE IF NOT EXISTS job_steps (
+        job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+        step_index INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        result_json TEXT,
+        rollback_hint TEXT,
+        started_at INTEGER,
+        finished_at INTEGER,
+        PRIMARY KEY (job_id, step_index)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_jobs_status_priority
+        ON jobs(status, priority DESC, created_at ASC);
+      CREATE INDEX IF NOT EXISTS idx_jobs_host_status
+        ON jobs(host_id, status);
+      CREATE INDEX IF NOT EXISTS idx_jobs_guest_status
+        ON jobs(host_id, vmid, status);
+      CREATE INDEX IF NOT EXISTS idx_jobs_dependency
+        ON jobs(depends_on_job_id);
+      CREATE INDEX IF NOT EXISTS idx_job_log_lines_job_ts
+        ON job_log_lines(job_id, ts);
+    `);
+  },
+};
+
 export const allMigrations: readonly Migration[] = [
   initialMigration,
   totpMigration,
   auditLogsMigration,
+  jobsQueueMigration,
 ];
 
 export function runMigrations(
