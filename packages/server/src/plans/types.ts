@@ -18,6 +18,11 @@ export interface GuestStampPlanPayload {
   readonly generatedAt: string;
 }
 
+export interface GuestCreatePlanPayload {
+  readonly relativePath: string;
+  readonly generatedAt: string;
+}
+
 export interface CreateGuestPowerPlanInput {
   readonly hostId: string;
   readonly vmid: number;
@@ -27,6 +32,13 @@ export interface CreateGuestPowerPlanInput {
 }
 
 export interface CreateGuestStampPlanInput {
+  readonly hostId: string;
+  readonly vmid: number;
+  readonly createdBy?: string | undefined;
+  readonly createdByRole?: 'admin' | 'operator' | 'viewer' | undefined;
+}
+
+export interface CreateGuestCreatePlanInput {
   readonly hostId: string;
   readonly vmid: number;
   readonly createdBy?: string | undefined;
@@ -97,10 +109,10 @@ export class PlanOverwriteRequiredError extends Error {
 }
 
 export class PlanAdminRequiredError extends Error {
-  public constructor() {
-    super(
-      'This plan replaces configuration containing execution surfaces and requires an administrator',
-    );
+  public constructor(
+    message = 'This plan replaces configuration containing execution surfaces and requires an administrator',
+  ) {
+    super(message);
     this.name = 'PlanAdminRequiredError';
   }
 }

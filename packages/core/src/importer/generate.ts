@@ -82,6 +82,18 @@ export function generateDeploymentYaml(
       root['ostype'] = guest.ostype;
     }
     if (
+      guest.onboot !== undefined &&
+      !checkOmit('onboot', guest.onboot, defaults?.onboot)
+    ) {
+      root['onboot'] = guest.onboot;
+    }
+    if (
+      guest.startup !== undefined &&
+      !checkOmit('startup', guest.startup, defaults?.startup)
+    ) {
+      root['startup'] = guest.startup;
+    }
+    if (
       guest.features &&
       !checkOmit('features', guest.features, defaults?.features)
     ) {

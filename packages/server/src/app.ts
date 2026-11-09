@@ -272,6 +272,7 @@ export async function buildApp(
           inventoryService,
           hostRegistry,
           guestLifecycleService,
+          connectionManager,
         );
   planService.registerQueueHandler();
   app.decorate('planService', planService);

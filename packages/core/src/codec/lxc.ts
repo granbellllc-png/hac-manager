@@ -46,6 +46,18 @@ export function parseLxcProxmoxConfig(
     delete main['ostype'];
   }
 
+  let onboot: boolean | undefined = undefined;
+  if (main['onboot'] !== undefined) {
+    onboot = main['onboot'] === '1' || main['onboot'] === 'true';
+    delete main['onboot'];
+  }
+
+  let startup: string | undefined = undefined;
+  if (main['startup']) {
+    startup = main['startup'];
+    delete main['startup'];
+  }
+
   let tags: string[] | undefined = undefined;
   if (main['tags']) {
     tags = main['tags']
@@ -165,6 +177,17 @@ export function parseLxcProxmoxConfig(
     const firewall = parsedNet.options['firewall']
       ? parsedNet.options['firewall'] === '1'
       : undefined;
+    const ip6 = parsedNet.options['ip6'];
+    const ipv6: GuestDeployment['network'][number]['ipv6'] | undefined =
+      ip6 === 'auto'
+        ? 'auto'
+        : ip6 === 'dhcp'
+          ? 'dhcp'
+          : ip6 === 'manual'
+            ? 'disabled'
+            : ip6
+              ? 'static'
+              : undefined;
 
     network.push({
       index: idx,
@@ -173,8 +196,9 @@ export function parseLxcProxmoxConfig(
       mac: parsedNet.options['hwaddr'],
       ip: parsedNet.options['ip'],
       gateway: parsedNet.options['gw'],
-      ip6: parsedNet.options['ip6'],
+      ip6,
       gateway6: parsedNet.options['gw6'],
+      ipv6,
       vlan,
       mtu,
       firewall,
@@ -201,6 +225,8 @@ export function parseLxcProxmoxConfig(
     swap,
     unprivileged,
     ostype,
+    onboot,
+    startup,
     tags,
     features,
     disks,
@@ -244,6 +270,12 @@ export function serialiseLxcProxmoxConfig(guest: GuestDeployment): string {
   }
   if (guest.ostype) {
     main['ostype'] = guest.ostype;
+  }
+  if (guest.onboot !== undefined) {
+    main['onboot'] = guest.onboot ? '1' : '0';
+  }
+  if (guest.startup !== undefined) {
+    main['startup'] = valToStr(guest.startup);
   }
   if (guest.tags && guest.tags.length > 0) {
     main['tags'] = guest.tags.join(';');
@@ -304,7 +336,13 @@ export function serialiseLxcProxmoxConfig(guest: GuestDeployment): string {
     if (n.gateway6) opts['gw6'] = valToStr(n.gateway6);
     if (n.mac) opts['hwaddr'] = valToStr(n.mac);
     if (n.ip) opts['ip'] = valToStr(n.ip);
-    if (n.ip6) opts['ip6'] = valToStr(n.ip6);
+    if (n.ip6) {
+      opts['ip6'] = valToStr(n.ip6);
+    } else if (n.ipv6 === 'auto' || n.ipv6 === 'dhcp') {
+      opts['ip6'] = n.ipv6;
+    } else if (n.ipv6 === 'disabled' || n.ipv6 === 'static') {
+      opts['ip6'] = 'manual';
+    }
     if (n.vlan !== undefined) opts['tag'] = valToStr(n.vlan);
     if (n.mtu !== undefined) opts['mtu'] = valToStr(n.mtu);
     if (n.extra) {

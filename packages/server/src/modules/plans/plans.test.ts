@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { GuestDeployment } from '@hacm/core';
+import { FakeTransport, type GuestDeployment } from '@hacm/core';
 import { buildApp } from '../../app.js';
 import {
   CSRF_COOKIE_NAME,
@@ -94,6 +94,32 @@ connection:
     HACM_COOKIE_SECURE: 'false',
     HACM_SESSION_SECRET: 'l'.repeat(32),
   });
+  const guestDir = join(dataDir, 'hosts', 'pve-01', '114-new-lxc');
+  await mkdir(guestDir, { recursive: true });
+  await writeFile(
+    join(guestDir, 'deployment.yaml'),
+    `schema_version: 1
+id: 114
+name: new-lxc
+type: lxc
+cpu: 1
+ram: 512
+disks:
+  - name: rootfs
+    storage: local-lvm
+    size_gb: 8
+network:
+  - index: 0
+    bridge: vmbr0
+installation:
+  type: template
+  template: local:vztmpl/debian-12-standard.tar.zst
+`,
+    'utf8',
+  );
+  const createTransport = new FakeTransport()
+    .onExec('test -f /etc/pve/local/qemu-server/114.conf', { exitCode: 1 })
+    .onExec('test -f /etc/pve/local/lxc/114.conf', { exitCode: 1 });
   const handle = createDatabase({ path: ':memory:' });
   const repos = createSqliteRepositories(handle.db);
   const queue = new DurableJobQueue(repos);
@@ -113,6 +139,13 @@ connection:
       },
     },
     { dataDir },
+    undefined,
+    {
+      async getRouter() {
+        return createTransport as never;
+      },
+      secretManager: undefined as never,
+    },
   );
   const app = await buildApp({
     config,
@@ -274,6 +307,54 @@ describe('plans API', () => {
       });
       expect(staleApply.statusCode).toBe(409);
       expect(staleApply.json().message).toContain('stale');
+    } finally {
+      await fixture.app.close();
+      fixture.handle.close();
+    }
+  });
+
+  it('restricts LXC creation plans to administrators and granted hosts', async () => {
+    const fixture = await createFixture();
+    try {
+      const denied = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/plans/lxc-create',
+        headers: {
+          cookie: fixture.operator.cookie,
+          [CSRF_HEADER_NAME]: fixture.operator.csrf,
+        },
+        payload: { hostId: 'pve-01', vmid: 114 },
+      });
+      expect(denied.statusCode).toBe(403);
+      expect(denied.json().message).toContain('administrators');
+
+      const created = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/plans/lxc-create',
+        headers: {
+          cookie: fixture.admin.cookie,
+          [CSRF_HEADER_NAME]: fixture.admin.csrf,
+        },
+        payload: { hostId: 'pve-01', vmid: 114 },
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json()).toMatchObject({
+        operation: 'guest.create',
+        target: { hostId: 'pve-01', vmid: 114, resourceType: 'guest' },
+        status: 'ready',
+      });
+
+      const noDeployment = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/plans/lxc-create',
+        headers: {
+          cookie: fixture.admin.cookie,
+          [CSRF_HEADER_NAME]: fixture.admin.csrf,
+        },
+        payload: { hostId: 'pve-01', vmid: 115 },
+      });
+      expect(noDeployment.statusCode).toBe(409);
+      expect(noDeployment.json().message).toContain('No deployment YAML');
     } finally {
       await fixture.app.close();
       fixture.handle.close();

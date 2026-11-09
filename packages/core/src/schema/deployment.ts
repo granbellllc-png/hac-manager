@@ -138,6 +138,10 @@ const lxcShape = {
   swap: taggedInt.optional(),
   features: lxcFeatures.optional(),
   ostype: z.string().min(1).optional(),
+  onboot: taggedBool.optional().describe('Start the guest with the host.'),
+  startup: taggedString
+    .optional()
+    .describe('Proxmox startup order and delay, e.g. "order=2,up=30".'),
 };
 
 const vmShape = {

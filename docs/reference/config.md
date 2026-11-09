@@ -124,6 +124,8 @@ Files: `hosts/*/*/deployment.yaml`
 | `features.mount` | array of string | no | type = lxc |  |
 | `features.mount[]` | string | yes | type = lxc |  |
 | `ostype` | string | no | type = lxc |  |
+| `onboot` | boolean \| string | no | type = lxc | Start the guest with the host. |
+| `startup` | string | no | type = lxc | Proxmox startup order and delay, e.g. "order=2,up=30". |
 | `schema_version` | number | yes | type = vm | Schema version of this file. |
 | `id` | integer | yes | type = vm | VMID. |
 | `name` | string | yes | type = vm | Guest name (not "node"). |
@@ -281,6 +283,8 @@ Files: `hosts/*/default-deployment.yaml`
 | `features.mount` | array of string | no |  |  |
 | `features.mount[]` | string | yes |  |  |
 | `ostype` | string | no |  |  |
+| `onboot` | boolean \| string | no |  | Start the guest with the host. |
+| `startup` | string | no |  | Proxmox startup order and delay, e.g. "order=2,up=30". |
 | `bios` | `seabios` \| `ovmf` | no |  |  |
 | `machine` | string | no |  |  |
 | `efi_disk` | any | no |  |  |

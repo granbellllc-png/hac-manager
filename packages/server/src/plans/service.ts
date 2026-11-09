@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   applyGuestImport,
   assertPlanFresh,
+  createLxcProvisionSteps,
   createMutationPlan,
   deploymentDefaultsFileSchema,
+  describeLxcCreation,
   executeMutationPlan,
   hashContent,
   isManagedGuestTag,
@@ -13,10 +15,13 @@ import {
   managedGuestUuid,
   parseManagedGuestUuid,
   planGuestImport,
+  resolveConfigTags,
   runJournaledSteps,
   sanitizeAuditPayload,
   StalePlanError,
+  toErrorMessage,
   type DeploymentDefaultsFile,
+  type GuestDeployment,
   type GuestImportPlan,
   type MutationPlan,
   type JournaledStep,
@@ -29,6 +34,7 @@ import {
   GuestLifecycleService,
   type GuestPowerAction,
 } from '../guests/service.js';
+import { loadGuestDeployment } from '../guests/configuration.js';
 import type { GuestSnapshot } from '../guests/types.js';
 import type { HostRegistry } from '../hosts/registry.js';
 import type { LiveInventoryService } from '../inventory/service.js';
@@ -39,15 +45,18 @@ import {
 } from '../jobs/step-journal.js';
 import type { DurableJobQueue } from '../jobs/queue.js';
 import type { JobExecutionContext } from '../jobs/types.js';
+import type { ConnectionManager } from '../router/manager.js';
 import {
   PlanConfirmationError,
   PlanAdminRequiredError,
   PlanNotFoundError,
   PlanOverwriteRequiredError,
   PlanStateError,
+  type CreateGuestCreatePlanInput,
   type CreateGuestImportPlanInput,
   type CreateGuestPowerPlanInput,
   type CreateGuestStampPlanInput,
+  type GuestCreatePlanPayload,
   type GuestImportPlanPayload,
   type GuestPowerPlanPayload,
   type GuestStampPlanPayload,
@@ -68,6 +77,28 @@ interface GuestImportSnapshot {
   readonly currentState: unknown;
   readonly target: TargetState;
   readonly after: unknown;
+}
+
+interface GuestCreateSnapshot {
+  readonly deployment: GuestDeployment | null;
+  readonly relativePath: string | null;
+  readonly occupiedBy: 'lxc' | 'vm' | null;
+}
+
+function createCurrentState(
+  vmid: number,
+  snapshot: GuestCreateSnapshot,
+): unknown {
+  return {
+    vmid,
+    exists: snapshot.occupiedBy !== null,
+    type: snapshot.occupiedBy ?? 'lxc',
+    deployment: snapshot.deployment,
+  };
+}
+
+function collisionMessage(hostId: string, vmid: number): string {
+  return `VMID ${vmid} is already occupied by a different workload on host '${hostId}'. Refusing to create over it.`;
 }
 
 const unavailableTransport: Transport = {
@@ -167,8 +198,11 @@ export class PlanService {
       LiveInventoryService,
       'getGuestLiveConfig'
     >,
-    private readonly hostRegistry: Pick<HostRegistry, 'dataDir'>,
+    private readonly hostRegistry: Pick<HostRegistry, 'dataDir'> &
+      Partial<Pick<HostRegistry, 'getRawHost'>>,
     private readonly lifecycle?: GuestLifecycleService | undefined,
+    private readonly connections?:
+      Pick<ConnectionManager, 'getRouter' | 'secretManager'> | undefined,
   ) {}
 
   public registerQueueHandler(): void {
@@ -409,6 +443,89 @@ export class PlanService {
     return rowToPublicPlan(row);
   }
 
+  public async createGuestCreatePlan(
+    input: CreateGuestCreatePlanInput,
+  ): Promise<PublicPlan> {
+    if (input.createdByRole !== 'admin') {
+      throw new PlanAdminRequiredError(
+        'Creating guests is restricted to administrators',
+      );
+    }
+    const snapshot = await this.buildGuestCreateSnapshot(
+      input.hostId,
+      input.vmid,
+    );
+    if (!snapshot.deployment) {
+      throw new PlanStateError(
+        `No deployment YAML is configured for guest ${input.vmid} on host '${input.hostId}'`,
+      );
+    }
+    if (snapshot.deployment.type !== 'lxc') {
+      throw new PlanStateError(
+        `Guest ${input.vmid} is a VM; LXC creation only supports deployments with type 'lxc'`,
+      );
+    }
+    if (snapshot.occupiedBy) {
+      throw new PlanStateError(collisionMessage(input.hostId, input.vmid));
+    }
+    const preview = describeLxcCreation(snapshot.deployment, {
+      hostId: input.hostId,
+    });
+    const generatedAt = new Date();
+    const currentState = createCurrentState(input.vmid, snapshot);
+    const plan = createMutationPlan({
+      id: randomUUID(),
+      operation: 'guest.create',
+      target: {
+        hostId: input.hostId,
+        vmid: input.vmid,
+        resourceType: 'guest',
+      },
+      summary: preview.summary,
+      currentState,
+      changes: [
+        {
+          id: 'create-guest',
+          action: 'create',
+          summary: preview.summary,
+          before: null,
+          after: {
+            vmid: snapshot.deployment.id,
+            name: snapshot.deployment.name,
+            type: snapshot.deployment.type,
+            template: preview.template.volid,
+            deployment: snapshot.deployment,
+          },
+          warnings: [...preview.warnings],
+          destructive: false,
+        },
+      ],
+      warnings: [...preview.warnings],
+      createdAt: generatedAt,
+    });
+    const payload: GuestCreatePlanPayload = {
+      relativePath: snapshot.relativePath ?? '',
+      generatedAt: generatedAt.toISOString(),
+    };
+    const row = await this.repos.plans.create({
+      id: plan.id,
+      operation: plan.operation,
+      hostId: input.hostId,
+      vmid: input.vmid,
+      status: 'ready',
+      summary: plan.summary,
+      changesJson: JSON.stringify(plan.changes),
+      warningsJson: JSON.stringify(plan.warnings),
+      destructive: plan.destructive,
+      stateFingerprint: plan.stateFingerprint,
+      confirmationText: plan.confirmationText ?? null,
+      payloadJson: JSON.stringify(payload),
+      createdBy: input.createdBy ?? null,
+      createdAt: new Date(plan.createdAt),
+    });
+    return rowToPublicPlan(row);
+  }
+
   public async get(planId: string): Promise<PublicPlan | null> {
     const row = await this.reconcileApplying(
       await this.repos.plans.get(planId),
@@ -460,8 +577,14 @@ export class PlanService {
         requiresAdmin: false,
       },
     );
-    if (operationPayload.requiresAdmin && input.user.role !== 'admin') {
-      throw new PlanAdminRequiredError();
+    const requiresAdmin =
+      row.operation === 'guest.create' || operationPayload.requiresAdmin;
+    if (requiresAdmin && input.user.role !== 'admin') {
+      throw new PlanAdminRequiredError(
+        row.operation === 'guest.create'
+          ? 'Creating guests is restricted to administrators'
+          : undefined,
+      );
     }
 
     try {
@@ -700,6 +823,18 @@ export class PlanService {
     return this.lifecycle;
   }
 
+  private requireConnections(): Pick<
+    ConnectionManager,
+    'getRouter' | 'secretManager'
+  > {
+    if (!this.connections) {
+      throw new PlanStateError(
+        'Guest provisioning is not configured for this server',
+      );
+    }
+    return this.connections;
+  }
+
   private async executeGuestOperationJob(
     row: PlanRow,
     plan: MutationPlan,
@@ -711,9 +846,33 @@ export class PlanService {
         `Plan operation '${row.operation}' requires a guest VMID`,
       );
     }
-    const lifecycle = this.requireLifecycle();
     let steps: readonly JournaledStep<undefined>[];
-    if (row.operation === 'guest.power') {
+    let transport: Transport = unavailableTransport;
+    if (row.operation === 'guest.create') {
+      const snapshot = await this.buildGuestCreateSnapshot(
+        row.hostId,
+        row.vmid,
+      );
+      assertPlanFresh(plan, createCurrentState(row.vmid, snapshot));
+      if (!snapshot.deployment) {
+        throw new PlanStateError(
+          `No deployment YAML is configured for guest ${row.vmid} on host '${row.hostId}'`,
+        );
+      }
+      if (snapshot.deployment.type !== 'lxc') {
+        throw new PlanStateError(
+          `Guest ${row.vmid} is a VM; LXC creation only supports deployments with type 'lxc'`,
+        );
+      }
+      if (snapshot.occupiedBy) {
+        throw new PlanStateError(collisionMessage(row.hostId, row.vmid));
+      }
+      steps = createLxcProvisionSteps(snapshot.deployment, {
+        hostId: row.hostId,
+      });
+      transport = await this.requireConnections().getRouter(row.hostId);
+    } else if (row.operation === 'guest.power') {
+      const lifecycle = this.requireLifecycle();
       const payload = parseJson<GuestPowerPlanPayload>(row.payloadJson, {
         action: 'start',
         targetStatus: 'running',
@@ -734,7 +893,7 @@ export class PlanService {
         context.log('system', message),
       );
     } else if (row.operation === 'guest.stamp') {
-      steps = this.buildStampSteps(row, plan, lifecycle);
+      steps = this.buildStampSteps(row, plan, this.requireLifecycle());
     } else {
       throw new PlanStateError(
         `Plan operation '${row.operation}' is not supported`,
@@ -745,7 +904,7 @@ export class PlanService {
       await runJournaledSteps({
         operationId: context.job.id,
         input: undefined,
-        transport: unavailableTransport,
+        transport,
         logger: createJobStepLogger(context.log),
         dryRun,
         signal: context.signal,
@@ -900,6 +1059,18 @@ export class PlanService {
       return (await this.buildGuestImportSnapshot(row.hostId, row.vmid))
         .currentState;
     }
+    if (row.operation === 'guest.create') {
+      if (row.vmid === null) {
+        throw new PlanStateError(
+          `Plan operation '${row.operation}' requires a guest VMID`,
+        );
+      }
+      const snapshot = await this.buildGuestCreateSnapshot(
+        row.hostId,
+        row.vmid,
+      );
+      return createCurrentState(row.vmid, snapshot);
+    }
     if (row.operation === 'guest.power' || row.operation === 'guest.stamp') {
       if (row.vmid === null) {
         throw new PlanStateError(
@@ -937,6 +1108,103 @@ export class PlanService {
       return this.repos.plans.get(row.id);
     }
     return row;
+  }
+
+  private async buildGuestCreateSnapshot(
+    hostId: string,
+    vmid: number,
+  ): Promise<GuestCreateSnapshot> {
+    const loaded = await this.loadResolvedGuestDeployment(hostId, vmid);
+    if (!loaded) {
+      return { deployment: null, relativePath: null, occupiedBy: null };
+    }
+    const occupiedBy = await this.vmidOccupied(hostId, vmid);
+    return { ...loaded, occupiedBy };
+  }
+
+  private async loadResolvedGuestDeployment(
+    hostId: string,
+    vmid: number,
+  ): Promise<{
+    readonly deployment: GuestDeployment;
+    readonly relativePath: string;
+  } | null> {
+    const loaded = await loadGuestDeployment(
+      this.hostRegistry.dataDir,
+      hostId,
+      vmid,
+    );
+    if (!loaded) return null;
+    const host = this.hostRegistry.getRawHost?.(hostId);
+    const result = await resolveConfigTags<GuestDeployment>(loaded.deployment, {
+      dataDir: this.hostRegistry.dataDir,
+      currentFileDir: dirname(
+        join(this.hostRegistry.dataDir, loaded.relativePath),
+      ),
+      env: process.env,
+      evaluationContext: {
+        host: {
+          id: hostId,
+          name: host?.name ?? hostId,
+          ...(typeof host?.index === 'number' ? { index: host.index } : {}),
+        },
+        guest: {
+          id: loaded.deployment.id,
+          name: loaded.deployment.name,
+          type: loaded.deployment.type,
+        },
+        vmid: loaded.deployment.id,
+      },
+      ...(this.connections
+        ? {
+            secretProvider: this.connections.secretManager,
+            cmdProvider: this.connections.secretManager,
+          }
+        : {}),
+    });
+    if (!result.report.isFullyResolved) {
+      const reasons = [
+        ...result.report.errors.map(
+          (entry) => `'!${entry.tag} ${entry.raw}': ${entry.error}`,
+        ),
+        ...result.report.unresolved.map(
+          (entry) => `'!${entry.tag} ${entry.raw}': ${entry.reason}`,
+        ),
+        ...result.report.locked.map(
+          (entry) => `'!${entry.tag} ${entry.raw}': ${entry.reason}`,
+        ),
+      ];
+      throw new PlanStateError(
+        `Deployment '${loaded.relativePath}' could not be resolved: ${reasons.join('; ')}`,
+      );
+    }
+    return {
+      deployment: result.data,
+      relativePath: loaded.relativePath,
+    };
+  }
+
+  private async vmidOccupied(
+    hostId: string,
+    vmid: number,
+  ): Promise<'lxc' | 'vm' | null> {
+    const router = await this.requireConnections().getRouter(hostId);
+    for (const [type, path] of [
+      ['lxc', `/etc/pve/local/lxc/${vmid}.conf`],
+      ['vm', `/etc/pve/local/qemu-server/${vmid}.conf`],
+    ] as const) {
+      try {
+        const result = await router.exec(['test', '-f', path], {
+          timeoutMs: 5_000,
+        });
+        if (result.exitCode === 0) return type;
+      } catch (error) {
+        throw new PlanStateError(
+          `Unable to check whether VMID ${vmid} is free on host '${hostId}': ${toErrorMessage(error)}`,
+        );
+      }
+    }
+    return null;
   }
 
   private async buildGuestImportSnapshot(
