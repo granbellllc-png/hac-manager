@@ -29,6 +29,7 @@ export interface GuestUpdatePlanPayload {
   readonly relativePath: string;
   readonly generatedAt: string;
   readonly restartRequired: boolean;
+  readonly mountChangeRequired?: boolean;
 }
 
 export interface GuestDeletePlanPayload {

@@ -624,6 +624,447 @@ describe('createLxcUpdateSteps', () => {
   });
 });
 
+describe('mp0 attachment safety (D-44)', () => {
+  const mp0Path = '/opt/server-data/pve-01/example-lxc/opt';
+  const liveBase = liveBefore
+    .split('\n')
+    .filter((line) => !line.startsWith('net1:'))
+    .join('\n');
+  const liveWithMp0 = [liveBase, `mp0: ${mp0Path},backup=1,mp=/opt`].join('\n');
+
+  function desiredWithMp0(overrides: Partial<Lxc> = {}): Lxc {
+    return lxc({
+      mounts: [
+        {
+          index: 0,
+          host_path: mp0Path,
+          guest_path: '/opt',
+          backup: true,
+          permissions: 'minimal',
+        },
+      ],
+      ...overrides,
+    });
+  }
+
+  it('plans an attach without a hot pct set command', () => {
+    const plan = planLxcUpdate(desiredWithMp0(), lxc());
+    expect(plan.blocked).toBe(false);
+    expect(plan.mountChangeRequired).toBe(true);
+    expect(plan.restartRequired).toBe(true);
+    expect(plan.commands).toEqual([]);
+    expect(plan.mountCommands).toEqual([
+      ['pct', 'set', '112', '--mp0', `${mp0Path},backup=1,mp=/opt`],
+    ]);
+    expect(plan.changes).toEqual([
+      expect.objectContaining({
+        id: 'mp0',
+        action: 'create',
+        before: null,
+        after: `${mp0Path},backup=1,mp=/opt`,
+      }),
+    ]);
+    expect(plan.warnings.join('\n')).toContain('never hot-applied');
+  });
+
+  it('plans an update and a destructive detach', () => {
+    const changed = planLxcUpdate(
+      desiredWithMp0({
+        mounts: [
+          {
+            index: 0,
+            host_path: '/opt/server-data/pve-01/example-lxc/data',
+            guest_path: '/data',
+            permissions: 'minimal',
+          },
+        ],
+      }),
+      lxc({
+        mounts: [
+          {
+            index: 0,
+            host_path: mp0Path,
+            guest_path: '/opt',
+            permissions: 'minimal',
+          },
+        ],
+      }),
+    );
+    expect(changed.mountCommands).toEqual([
+      [
+        'pct',
+        'set',
+        '112',
+        '--mp0',
+        '/opt/server-data/pve-01/example-lxc/data,mp=/data',
+      ],
+    ]);
+    expect(changed.changes[0]).toMatchObject({ id: 'mp0', action: 'update' });
+
+    const removed = planLxcUpdate(lxc(), {
+      ...lxc(),
+      mounts: [
+        {
+          index: 0,
+          host_path: mp0Path,
+          guest_path: '/opt',
+          permissions: 'minimal',
+        },
+      ],
+    });
+    expect(removed.mountChangeRequired).toBe(true);
+    expect(removed.destructive).toBe(true);
+    expect(removed.mountCommands).toEqual([
+      ['pct', 'set', '112', '--delete', 'mp0'],
+    ]);
+    expect(removed.changes[0]).toMatchObject({
+      id: 'mp0',
+      action: 'delete',
+      destructive: true,
+    });
+  });
+
+  it('does not plan mp0 when it already matches and warns about other mounts', () => {
+    const plan = planLxcUpdate(
+      desiredWithMp0({
+        mounts: [
+          {
+            index: 0,
+            host_path: mp0Path,
+            guest_path: '/opt',
+            backup: true,
+            permissions: 'minimal',
+          },
+          {
+            index: 1,
+            host_path: '/srv/shared',
+            guest_path: '/shared',
+            permissions: 'minimal',
+          },
+        ],
+      }),
+      lxc({
+        mounts: [
+          {
+            index: 0,
+            host_path: mp0Path,
+            guest_path: '/opt',
+            backup: true,
+            permissions: 'minimal',
+          },
+        ],
+      }),
+    );
+    expect(plan.mountChangeRequired).toBe(false);
+    expect(plan.mountCommands).toEqual([]);
+    expect(plan.warnings.join('\n')).toContain('mp1 is not managed');
+  });
+
+  it('handles satisfied and blocked plans inside the mp0 step', async () => {
+    const step = createLxcUpdateSteps(desiredWithMp0(), {
+      hostId: 'pve-01',
+      restartRequired: false,
+      mountChangeRequired: true,
+    })[0]!;
+    const context = (transport: FakeTransport) => ({
+      operationId: 'mp0-step',
+      input: undefined,
+      transport,
+      logger: logger(),
+      dryRun: false,
+      signal: new AbortController().signal,
+    });
+    const unchanged = transportWithConfigs(liveWithMp0, liveWithMp0);
+    await expect(step.check(context(unchanged))).resolves.toMatchObject({
+      status: 'satisfied',
+    });
+    await expect(step.apply(context(unchanged))).resolves.toEqual({
+      changed: false,
+    });
+
+    const pendingLive = [liveBase, '[PENDING]', 'cores: 4'].join('\n');
+    await expect(
+      step.check(
+        context(
+          new FakeTransport().onExec('pct config 112', {
+            stdout: pendingLive,
+          }),
+        ),
+      ),
+    ).rejects.toThrow('pending configuration changes');
+    await expect(
+      step.apply(
+        context(
+          new FakeTransport().onExec('pct config 112', {
+            stdout: pendingLive,
+          }),
+        ),
+      ),
+    ).rejects.toThrow('pending configuration changes');
+
+    const shrink = planLxcUpdate(
+      desiredWithMp0({
+        disks: [{ name: 'rootfs', storage: 'local-lvm', size_gb: 5 }],
+      }),
+      lxc(),
+    );
+    expect(shrink.blocked).toBe(true);
+    const shrinkingStep = createLxcUpdateSteps(
+      desiredWithMp0({
+        disks: [{ name: 'rootfs', storage: 'local-lvm', size_gb: 5 }],
+      }),
+      { hostId: 'pve-01', restartRequired: false, mountChangeRequired: true },
+    )[0]!;
+    await expect(
+      shrinkingStep.verify(context(transportWithConfigs(liveWithMp0))),
+    ).rejects.toThrow('Refusing to shrink rootfs');
+  });
+
+  it('stops a running guest, attaches mp0 and starts it again', async () => {
+    const transport = transportWithConfigs(
+      liveBase,
+      liveBase,
+      liveWithMp0,
+      liveWithMp0,
+    )
+      .onExec('pct status 112', { stdout: 'status: stopped' }, { once: true })
+      .onExec('pct status 112', { stdout: 'status: running' }, { once: true })
+      .onExec('pct start 112', { stdout: 'started' })
+      .onExec('pct shutdown 112', { stdout: 'stopped' });
+
+    const result = await run(
+      transport,
+      createLxcUpdateSteps(desiredWithMp0(), {
+        hostId: 'pve-01',
+        restartRequired: false,
+        mountChangeRequired: true,
+      }),
+    );
+    expect(result.entries.map((entry) => entry.status)).toEqual([
+      'completed',
+      'completed',
+    ]);
+    expect(transport.execArgv).toEqual(
+      expect.arrayContaining([
+        ['pct', 'shutdown', '112'],
+        ['pct', 'set', '112', '--mp0', `${mp0Path},backup=1,mp=/opt`],
+        ['pct', 'start', '112'],
+      ]),
+    );
+    const setIndex = transport.execArgv.findIndex(
+      (argv) => argv[0] === 'pct' && argv[1] === 'set',
+    );
+    const shutdownIndex = transport.execArgv.findIndex(
+      (argv) => argv[0] === 'pct' && argv[1] === 'shutdown',
+    );
+    const startIndex = transport.execArgv.findIndex(
+      (argv) => argv[0] === 'pct' && argv[1] === 'start',
+    );
+    expect(shutdownIndex).toBeLessThan(setIndex);
+    expect(setIndex).toBeLessThan(startIndex);
+  });
+
+  it('leaves a stopped guest stopped and refuses hot-apply attempts', async () => {
+    const stopped = transportWithConfigs(
+      liveBase,
+      liveBase,
+      liveWithMp0,
+      liveWithMp0,
+    ).onExec('pct status 112', { stdout: 'status: stopped' });
+    const result = await run(
+      stopped,
+      createLxcUpdateSteps(desiredWithMp0(), {
+        hostId: 'pve-01',
+        restartRequired: false,
+        mountChangeRequired: true,
+      }),
+    );
+    expect(result.entries[0]?.status).toBe('completed');
+    expect(
+      stopped.execArgv.some(
+        (argv) => argv[0] === 'pct' && argv[1] === 'shutdown',
+      ),
+    ).toBe(false);
+    expect(
+      stopped.execArgv.some((argv) => argv[0] === 'pct' && argv[1] === 'start'),
+    ).toBe(false);
+
+    const shutdownFailed = transportWithConfigs(liveBase, liveBase)
+      .onExec('pct status 112', { stdout: 'status: running' })
+      .onExec('pct shutdown 112', {
+        exitCode: 1,
+        stderr: 'shutdown refused',
+      });
+    await expect(
+      run(
+        shutdownFailed,
+        createLxcUpdateSteps(desiredWithMp0(), {
+          hostId: 'pve-01',
+          restartRequired: false,
+          mountChangeRequired: true,
+        }),
+      ),
+    ).rejects.toThrow('Refusing to hot-apply mp0');
+
+    const stillRunning = transportWithConfigs(liveBase, liveBase)
+      .onExec('pct status 112', { stdout: 'status: running' })
+      .onExec('pct shutdown 112', { stdout: 'ok' });
+    await expect(
+      run(
+        stillRunning,
+        createLxcUpdateSteps(desiredWithMp0(), {
+          hostId: 'pve-01',
+          restartRequired: false,
+          mountChangeRequired: true,
+        }),
+      ),
+    ).rejects.toThrow('still running after shutdown');
+
+    const unknown = transportWithConfigs(liveBase, liveBase).onExec(
+      'pct status 112',
+      { exitCode: 1, stderr: 'status unavailable' },
+    );
+    await expect(
+      run(
+        unknown,
+        createLxcUpdateSteps(desiredWithMp0(), {
+          hostId: 'pve-01',
+          restartRequired: false,
+          mountChangeRequired: true,
+        }),
+      ),
+    ).rejects.toThrow('power state could not be determined');
+
+    const unparsable = transportWithConfigs(liveBase, liveBase).onExec(
+      'pct status 112',
+      { stdout: 'status: migrating' },
+    );
+    await expect(
+      run(
+        unparsable,
+        createLxcUpdateSteps(desiredWithMp0(), {
+          hostId: 'pve-01',
+          restartRequired: false,
+          mountChangeRequired: true,
+        }),
+      ),
+    ).rejects.toThrow('power state could not be determined');
+  });
+
+  it('explains mount and start failures', async () => {
+    const mountFailed = transportWithConfigs(liveBase, liveBase)
+      .onExec('pct status 112', { stdout: 'status: stopped' })
+      .onExec(/^pct set 112 --mp0/, {
+        exitCode: 1,
+        stderr: 'mount rejected',
+      });
+    await expect(
+      run(
+        mountFailed,
+        createLxcUpdateSteps(desiredWithMp0(), {
+          hostId: 'pve-01',
+          restartRequired: false,
+          mountChangeRequired: true,
+        }),
+      ),
+    ).rejects.toThrow('mount rejected');
+
+    const mountSilent = transportWithConfigs(liveBase, liveBase)
+      .onExec('pct status 112', { stdout: 'status: stopped' })
+      .onExec(/^pct set 112 --mp0/, { exitCode: 1 });
+    await expect(
+      run(
+        mountSilent,
+        createLxcUpdateSteps(desiredWithMp0(), {
+          hostId: 'pve-01',
+          restartRequired: false,
+          mountChangeRequired: true,
+        }),
+      ),
+    ).rejects.toThrow('exit code 1');
+
+    const shutdownSilent = transportWithConfigs(liveBase, liveBase)
+      .onExec('pct status 112', { stdout: 'status: running' })
+      .onExec('pct shutdown 112', { exitCode: 1 });
+    await expect(
+      run(
+        shutdownSilent,
+        createLxcUpdateSteps(desiredWithMp0(), {
+          hostId: 'pve-01',
+          restartRequired: false,
+          mountChangeRequired: true,
+        }),
+      ),
+    ).rejects.toThrow('exit code 1');
+
+    const startFailed = transportWithConfigs(liveBase, liveBase)
+      .onExec('pct status 112', { stdout: 'status: stopped' }, { once: true })
+      .onExec('pct status 112', { stdout: 'status: running' }, { once: true })
+      .onExec('pct shutdown 112', { stdout: 'ok' })
+      .onExec('pct start 112', { exitCode: 1, stderr: 'start rejected' });
+    await expect(
+      run(
+        startFailed,
+        createLxcUpdateSteps(desiredWithMp0(), {
+          hostId: 'pve-01',
+          restartRequired: false,
+          mountChangeRequired: true,
+        }),
+      ),
+    ).rejects.toThrow('failed to start again');
+
+    const startSilent = transportWithConfigs(liveBase, liveBase)
+      .onExec('pct status 112', { stdout: 'status: stopped' }, { once: true })
+      .onExec('pct status 112', { stdout: 'status: running' }, { once: true })
+      .onExec('pct shutdown 112', { stdout: 'ok' })
+      .onExec('pct start 112', { exitCode: 1 });
+    await expect(
+      run(
+        startSilent,
+        createLxcUpdateSteps(desiredWithMp0(), {
+          hostId: 'pve-01',
+          restartRequired: false,
+          mountChangeRequired: true,
+        }),
+      ),
+    ).rejects.toThrow('exit code 1');
+  });
+
+  it('verifies that [PENDING] is empty after the controlled restart', async () => {
+    const pendingAfter = [liveWithMp0, '[PENDING]', 'cores: 4'].join('\n');
+    const transport = transportWithConfigs(
+      liveBase,
+      liveBase,
+      pendingAfter,
+    ).onExec('pct status 112', { stdout: 'status: stopped' });
+    await expect(
+      run(
+        transport,
+        createLxcUpdateSteps(desiredWithMp0(), {
+          hostId: 'pve-01',
+          restartRequired: false,
+          mountChangeRequired: true,
+        }),
+      ),
+    ).rejects.toThrow('[PENDING] must be empty');
+
+    const unchanged = transportWithConfigs(liveBase, liveBase, liveBase).onExec(
+      'pct status 112',
+      { stdout: 'status: stopped' },
+    );
+    await expect(
+      run(
+        unchanged,
+        createLxcUpdateSteps(desiredWithMp0(), {
+          hostId: 'pve-01',
+          restartRequired: false,
+          mountChangeRequired: true,
+        }),
+      ),
+    ).rejects.toThrow('still has a differing mp0');
+  });
+});
+
 describe('LXC update safety metadata', () => {
   it('keeps the managed stamp out of the diff', () => {
     const plan = planLxcUpdate(lxc(), lxc({ tags: ['app', stamp] }));

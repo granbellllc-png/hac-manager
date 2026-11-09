@@ -583,6 +583,7 @@ export class PlanService {
       readonly changes: readonly PlanChange[];
       readonly warnings: readonly string[];
       readonly restartRequired: boolean;
+      readonly mountChangeRequired?: boolean;
       readonly destructive: boolean;
       readonly blocked: boolean;
       readonly blockReason?: string | undefined;
@@ -639,6 +640,7 @@ export class PlanService {
       relativePath: loaded.relativePath,
       generatedAt: generatedAt.toISOString(),
       restartRequired: diff.restartRequired,
+      mountChangeRequired: diff.mountChangeRequired ?? false,
     };
     const row = await this.repos.plans.create({
       id: plan.id,
@@ -1141,6 +1143,7 @@ export class PlanService {
         steps = createLxcUpdateSteps(deployment, {
           hostId: row.hostId,
           restartRequired: payload.restartRequired,
+          mountChangeRequired: payload.mountChangeRequired ?? false,
           restart,
         });
       } else {

@@ -1,4 +1,4 @@
-import { formatSizeGb } from '../codec/options.js';
+import { formatOptionString, formatSizeGb } from '../codec/options.js';
 import { parseLxcProxmoxConfig } from '../codec/lxc.js';
 import { MANAGED_GUEST_TAG } from '../guest/identity.js';
 import type { PlanChange } from '../plans/types.js';
@@ -24,6 +24,10 @@ export interface LxcUpdatePlan {
   readonly warnings: readonly string[];
   /** `pct` commands to run for this diff, in a safe order. */
   readonly commands: readonly (readonly string[])[];
+  /** `pct set` commands for mp0; they must only run while the guest is stopped. */
+  readonly mountCommands: readonly (readonly string[])[];
+  /** True when mp0 is added, changed or removed and needs a controlled restart. */
+  readonly mountChangeRequired: boolean;
   readonly restartRequired: boolean;
   readonly destructive: boolean;
   readonly blocked: boolean;
@@ -33,6 +37,8 @@ export interface LxcUpdatePlan {
 export interface LxcUpdateStepOptions {
   readonly hostId: string;
   readonly restartRequired: boolean;
+  /** Include the stop/attach/start step for mp0 when the plan requires it. */
+  readonly mountChangeRequired?: boolean | undefined;
   /** Stop/start the guest after applying restart-required changes. */
   readonly restart?: (() => Promise<void>) | undefined;
 }
@@ -91,6 +97,17 @@ function networkMap(guest: Lxc): Map<number, string> {
   return map;
 }
 
+type LxcMount = NonNullable<Lxc['mounts']>[number];
+
+/** Proxmox `mpN` value; declarative-only fields (owner/permissions) are ignored. */
+function formatLxcMount(mount: LxcMount): string {
+  return formatOptionString(mount.host_path, {
+    mp: mount.guest_path,
+    ...(mount.backup ? { backup: '1' } : {}),
+    ...(mount.readonly ? { ro: '1' } : {}),
+  });
+}
+
 /** Keys currently waiting in the `[PENDING]` section of `pct config`. */
 export function lxcPendingKeys(guest: GuestDeployment): readonly string[] {
   const pending = guest.extra?.['_pending'];
@@ -110,6 +127,8 @@ function blockedPlan(
     changes: [],
     warnings,
     commands: [],
+    mountCommands: [],
+    mountChangeRequired: false,
     restartRequired: false,
     destructive: false,
     blocked: true,
@@ -141,6 +160,8 @@ export function planLxcUpdate(desired: Lxc, live: Lxc): LxcUpdatePlan {
   const changes: PlanChange[] = [];
   const warnings: string[] = [];
   const commands: string[][] = [];
+  const mountCommands: string[][] = [];
+  let mountChangeRequired = false;
   let restartRequired = false;
   let destructive = false;
   let blockReason: string | undefined = undefined;
@@ -325,6 +346,62 @@ export function planLxcUpdate(desired: Lxc, live: Lxc): LxcUpdatePlan {
     }
   }
 
+  const desiredMp0 = desired.mounts?.find((mount) => mount.index === 0);
+  const liveMp0 = live.mounts?.find((mount) => mount.index === 0);
+  if (desiredMp0 && liveMp0) {
+    const before = formatLxcMount(liveMp0);
+    const after = formatLxcMount(desiredMp0);
+    if (before !== after) {
+      changes.push({
+        id: 'mp0',
+        action: 'update',
+        summary: 'Update bind mount mp0 (requires stopping the guest)',
+        before,
+        after,
+      });
+      mountCommands.push(['pct', 'set', vmid, '--mp0', after]);
+      mountChangeRequired = true;
+      restartRequired = true;
+    }
+  } else if (desiredMp0) {
+    const after = formatLxcMount(desiredMp0);
+    changes.push({
+      id: 'mp0',
+      action: 'create',
+      summary: 'Attach bind mount mp0 (requires stopping the guest)',
+      before: null,
+      after,
+    });
+    mountCommands.push(['pct', 'set', vmid, '--mp0', after]);
+    mountChangeRequired = true;
+    restartRequired = true;
+  } else if (liveMp0) {
+    destructive = true;
+    changes.push({
+      id: 'mp0',
+      action: 'delete',
+      summary: 'Detach bind mount mp0 (requires stopping the guest)',
+      before: formatLxcMount(liveMp0),
+      after: null,
+      destructive: true,
+    });
+    mountCommands.push(['pct', 'set', vmid, '--delete', 'mp0']);
+    mountChangeRequired = true;
+    restartRequired = true;
+  }
+  for (const mount of desired.mounts ?? []) {
+    if (mount.index !== 0) {
+      warnings.push(
+        `Bind mount mp${mount.index} is not managed by an LXC config update; it was left unchanged.`,
+      );
+    }
+  }
+  if (mountChangeRequired) {
+    warnings.push(
+      'mp0 is never hot-applied: the guest is stopped, the mount is attached and the guest is started again.',
+    );
+  }
+
   const desiredRootfs = desired.disks.find((disk) => disk.name === 'rootfs');
   const liveRootfs = live.disks.find((disk) => disk.name === 'rootfs');
   if (desiredRootfs) {
@@ -391,6 +468,8 @@ export function planLxcUpdate(desired: Lxc, live: Lxc): LxcUpdatePlan {
       changes,
       warnings,
       commands,
+      mountCommands,
+      mountChangeRequired,
       restartRequired,
       destructive,
       blocked: true,
@@ -409,6 +488,8 @@ export function planLxcUpdate(desired: Lxc, live: Lxc): LxcUpdatePlan {
     changes,
     warnings,
     commands,
+    mountCommands,
+    mountChangeRequired,
     restartRequired,
     destructive,
     blocked: false,
@@ -442,6 +523,146 @@ function describeRemaining(plan: LxcUpdatePlan): string {
   return plan.changes.map((change) => change.id).join(', ');
 }
 
+function powerState(stdout: string): 'running' | 'stopped' | undefined {
+  if (/^status:\s*running$/m.test(stdout)) return 'running';
+  if (/^status:\s*stopped$/m.test(stdout)) return 'stopped';
+  return undefined;
+}
+
+async function readPowerState(
+  transport: Transport,
+  vmid: number,
+): Promise<'running' | 'stopped'> {
+  const result = await transport.exec(['pct', 'status', String(vmid)], {
+    timeoutMs: 10_000,
+  });
+  const state = result.exitCode === 0 ? powerState(result.stdout) : undefined;
+  if (!state) {
+    throw new LxcUpdateError(
+      `Refusing to change mp0 on LXC ${vmid}: its power state could not be determined${
+        result.exitCode === 0
+          ? ''
+          : ` (${result.stderr.trim() || `exit code ${result.exitCode}`})`
+      }. Stop the guest explicitly and retry; mp0 is never hot-applied.`,
+    );
+  }
+  return state;
+}
+
+/**
+ * Stop/attach/start for mp0 (D-44). The mount command is never sent to a
+ * running guest: the step stops it, re-checks the power state, applies the
+ * mount and starts the guest again only if it was running.
+ */
+function createMp0Step(desired: Lxc, hostId: string): JournaledStep<undefined> {
+  const vmid = desired.id;
+  return {
+    name: `attach mp0 to LXC ${vmid} with controlled restart`,
+    check: async ({ transport }) => {
+      const live = await readLiveConfig(transport, vmid);
+      const plan = planLxcUpdate(desired, live);
+      if (plan.blocked) throw blockedError(plan);
+      if (!plan.mountChangeRequired) {
+        return { status: 'satisfied', detail: { changes: [] } };
+      }
+      return {
+        status: 'required',
+        detail: {
+          changes: plan.changes
+            .filter((change) => change.id === 'mp0')
+            .map((change) => change.action),
+        },
+      };
+    },
+    apply: async ({ transport, logger }) => {
+      const live = await readLiveConfig(transport, vmid);
+      const plan = planLxcUpdate(desired, live);
+      if (plan.blocked) throw blockedError(plan);
+      if (!plan.mountChangeRequired) return { changed: false };
+
+      const wasRunning = (await readPowerState(transport, vmid)) === 'running';
+      if (wasRunning) {
+        const stopped = await transport.exec(
+          ['pct', 'shutdown', String(vmid)],
+          {
+            timeoutMs: 180_000,
+            onOutput: (stream, line) => {
+              void logger.info(`pct shutdown ${stream}: ${line}`);
+            },
+          },
+        );
+        if (stopped.exitCode !== 0) {
+          throw new LxcUpdateError(
+            `Refusing to hot-apply mp0 to running LXC ${vmid}: graceful shutdown failed (${
+              stopped.stderr.trim() || `exit code ${stopped.exitCode}`
+            }). Stop the guest explicitly and retry.`,
+          );
+        }
+        if ((await readPowerState(transport, vmid)) !== 'stopped') {
+          throw new LxcUpdateError(
+            `Refusing to hot-apply mp0 to running LXC ${vmid}: the guest is still running after shutdown. Stop it explicitly and retry.`,
+          );
+        }
+      }
+
+      for (const argv of plan.mountCommands) {
+        const result = await transport.exec(argv, {
+          timeoutMs: 120_000,
+          onOutput: (stream, line) => {
+            void logger.info(`${argv.join(' ')} ${stream}: ${line}`);
+          },
+        });
+        if (result.exitCode !== 0) {
+          throw new LxcUpdateError(
+            `Command '${argv.join(' ')}' failed for LXC ${vmid}: ${
+              result.stderr.trim() || `exit code ${result.exitCode}`
+            }. The guest may still be stopped; start it explicitly after inspecting the mount.`,
+          );
+        }
+      }
+
+      if (wasRunning) {
+        const started = await transport.exec(['pct', 'start', String(vmid)], {
+          timeoutMs: 180_000,
+          onOutput: (stream, line) => {
+            void logger.info(`pct start ${stream}: ${line}`);
+          },
+        });
+        if (started.exitCode !== 0) {
+          throw new LxcUpdateError(
+            `LXC ${vmid} was stopped to change mp0 but failed to start again: ${
+              started.stderr.trim() || `exit code ${started.exitCode}`
+            }. Start it explicitly after inspecting the mount.`,
+          );
+        }
+      }
+      return {
+        changed: true,
+        restarted: wasRunning,
+        commands: plan.mountCommands,
+      };
+    },
+    verify: async ({ transport }) => {
+      const live = await readLiveConfig(transport, vmid);
+      const pending = lxcPendingKeys(live);
+      if (pending.length > 0) {
+        throw new LxcUpdateError(
+          `LXC ${vmid} still has pending configuration after changing mp0 (${pending.join(', ')}). [PENDING] must be empty.`,
+        );
+      }
+      const plan = planLxcUpdate(desired, live);
+      if (plan.blocked) throw blockedError(plan);
+      if (plan.mountChangeRequired) {
+        throw new LxcUpdateError(
+          `LXC ${vmid} still has a differing mp0 after the controlled restart; inspect 'pct config ${vmid}' on ${hostId}.`,
+        );
+      }
+      return { pending: 0 };
+    },
+    rollbackHint: `Inspect 'pct config ${vmid}' and the host directory, then re-attach mp0 only while the guest is stopped.`,
+  };
+}
+
 /**
  * Journaled steps that re-read the live config, apply only the reviewed diff
  * and verify the result. A running guest is restarted when any change needs it.
@@ -453,6 +674,7 @@ export function createLxcUpdateSteps(
   const vmid = desired.id;
   const hostId = options.hostId;
   const steps: JournaledStep<undefined>[] = [
+    ...(options.mountChangeRequired ? [createMp0Step(desired, hostId)] : []),
     {
       name: `update configuration of LXC ${vmid}`,
       check: async ({ transport }) => {
