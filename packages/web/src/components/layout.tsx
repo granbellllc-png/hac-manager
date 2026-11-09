@@ -1,4 +1,4 @@
-import { projectName } from '@hacm/core';
+const projectName = 'HAC Manager';
 import { Menu, Moon, Sun, X } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
