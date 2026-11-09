@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isGuestType } from './index.js';
+import {
+  isGuestType,
+  parseProxmoxConfig,
+  serialiseProxmoxConfig,
+} from './index.js';
 
 describe('guest terminology', () => {
   it.each(['lxc', 'vm'])('recognises the supported guest type %s', (type) => {
@@ -11,4 +15,8 @@ describe('guest terminology', () => {
       expect(isGuestType(type)).toBe(false);
     },
   );
+  it('exports codec helpers', () => {
+    expect(typeof parseProxmoxConfig).toBe('function');
+    expect(typeof serialiseProxmoxConfig).toBe('function');
+  });
 });

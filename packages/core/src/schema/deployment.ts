@@ -155,7 +155,7 @@ const vmShape = {
     .optional(),
 };
 
-const identity = (type: 'lxc' | 'vm') => ({
+const identity = <T extends 'lxc' | 'vm'>(type: T) => ({
   id: vmid.describe('VMID.'),
   name: z.string().min(1).describe('Guest name (not "node").'),
   type: z.literal(type),
