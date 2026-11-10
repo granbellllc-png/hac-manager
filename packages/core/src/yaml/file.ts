@@ -19,6 +19,8 @@ export interface FileSystem {
       readonly encoding?: 'utf8';
     },
   ): Promise<void>;
+  /** Optional binary write used by conflict fetches and archive staging. */
+  writeBinary?(path: string, content: Uint8Array): Promise<void>;
   stat(path: string): Promise<FileStat>;
   readdir(path: string): Promise<string[]>;
   rename(oldPath: string, newPath: string): Promise<void>;
@@ -37,6 +39,10 @@ export const defaultNodeFileSystem: FileSystem = {
   async writeFile(path, content, options) {
     const fs = await import('node:fs/promises');
     return fs.writeFile(path, content, options);
+  },
+  async writeBinary(path, content) {
+    const fs = await import('node:fs/promises');
+    return fs.writeFile(path, content);
   },
   async stat(path) {
     const fs = await import('node:fs/promises');

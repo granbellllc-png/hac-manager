@@ -215,7 +215,7 @@ Goal: persistent app data lives on the host at `/opt/server-data/<host>/<guest>/
 
 **D-49. Transfer methods.** LXC: `pct push/pull`, tar streaming through `pct exec`, rsync via `pct mount`. VM: guest agent file-write/exec, or SFTP/tar over SSH when available. Neither available: clear error. Files destined for `mp0`-backed paths are written **directly to the host path** with correct UID shift. _M9._
 
-**D-50. Conflict resolution.** SHA256 compared before overwrite. Per-mapping policy: `overwrite`, `skip`, `fetch` (pull remote file back into the data dir through the write guard) or `prompt` (UI diff, job pauses). Audit reason `conflict_resolution`. _M9._
+**D-50. Conflict resolution.** SHA256 compared before overwrite. A remote file that differs from both the source and the hash recorded at the last sync is a conflict. Per-mapping policy: `overwrite`, `skip`, `fetch` (pull remote file back into the data dir through the write guard) or `prompt` (UI diff, job pauses). Rendered `.env` files may never be fetched back into the data dir. Audit reason `conflict_resolution`. _M9._
 
 ### 4.10 Tasks and guest baseline
 

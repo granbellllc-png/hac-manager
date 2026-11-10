@@ -6,6 +6,11 @@ import {
   EnvRenderError,
   type RenderedEnvFile,
 } from '../env/render.js';
+import {
+  detectFileConflict,
+  type FileConflict,
+  type FileConflictPolicy,
+} from './conflict.js';
 import { createMutationPlan } from '../plans/plan.js';
 import type { MutationPlan, PlanChange } from '../plans/types.js';
 import { isTagValue } from '../schema/common.js';
@@ -61,6 +66,12 @@ export interface FileMappingPlanOptions {
   readonly fs?: FileSystem | undefined;
   /** Required for `template` mappings whose source is `.env.yaml` (D-18). */
   readonly renderEnv?: RenderEnvTemplate | undefined;
+  /**
+   * Hash recorded for each destination at the last successful sync. Together
+   * with the live manifest this distinguishes a normal update from a remote
+   * edit that needs conflict resolution (D-50).
+   */
+  readonly baseline?: Readonly<Record<string, string>> | undefined;
   readonly planId?: string | undefined;
   readonly createdAt?: Date | undefined;
   /** Required by the plan model when a directory mapping deletes files. */
@@ -349,6 +360,7 @@ interface PlannerContext {
   readonly dataDir: string;
   readonly fs: FileSystem;
   readonly renderEnv: RenderEnvTemplate | undefined;
+  readonly baseline: Readonly<Record<string, string>>;
   readonly guest: GuestDeployment;
   readonly remote: Readonly<Record<string, FileMappingRemoteEntry>>;
   readonly changes: PlanChange[];
@@ -372,6 +384,87 @@ function normalizedMode(mode: string | undefined): string | undefined {
 }
 
 /**
+ * Decide what the plan does with a remote edit (D-50). `proceed` keeps the
+ * normal overwrite change, `stop` emits a fetch/prompt change or skips the
+ * file. Overwriting is never silent.
+ */
+function planConflict(
+  context: PlannerContext,
+  options: {
+    readonly mappingIndex: number;
+    readonly suffix: string;
+    readonly conflict: FileConflict;
+    readonly source: SourceFile;
+    readonly mappingType: string;
+    readonly target: FileMappingPlanTarget;
+    readonly allowFetch: boolean;
+  },
+): 'proceed' | 'stop' {
+  const { conflict, mappingIndex, source, suffix } = options;
+  const direction = `${source.relativePath} -> ${conflict.destination}`;
+  if (conflict.policy === 'fetch' && !options.allowFetch) {
+    throw new EnvRenderError(
+      `Mapping '${conflict.destination}' requests the fetch policy, but rendered .env files may never be fetched back into the data dir (D-18).`,
+    );
+  }
+
+  if (conflict.policy === 'skip') {
+    context.warnings.push(
+      `Skipped ${direction}: the remote file changed since the last sync (policy skip, D-50).`,
+    );
+    return 'stop';
+  }
+  if (conflict.policy === 'overwrite') {
+    context.warnings.push(
+      `Overwriting ${conflict.destination}: the remote file changed since the last sync (policy overwrite, D-50).`,
+    );
+    return 'proceed';
+  }
+
+  const base = {
+    id: `mapping-${mappingIndex}${suffix}`,
+    action: 'execute' as const,
+    path: conflict.destination,
+    before: remoteBefore(context.remote[conflict.destination]),
+  };
+  if (conflict.policy === 'fetch') {
+    context.warnings.push(
+      `Fetching ${conflict.destination} into ${source.relativePath}: the remote file changed since the last sync (policy fetch, D-50).`,
+    );
+    context.changes.push({
+      ...base,
+      summary: `Fetch ${conflict.destination} into ${source.relativePath} (conflict policy fetch)`,
+      after: {
+        direction: 'fetch',
+        destination: conflict.destination,
+        source: source.relativePath,
+        remoteHash: conflict.remoteHash,
+        expectedDataDirHash: source.hash,
+        mappingType: options.mappingType,
+        target: options.target,
+      },
+    });
+    return 'stop';
+  }
+
+  context.warnings.push(
+    `Conflict on ${conflict.destination}: the job will pause for a decision (policy prompt, D-30/D-50).`,
+  );
+  context.changes.push({
+    ...base,
+    summary: `Resolve conflict for ${conflict.destination} (source ${source.relativePath})`,
+    after: {
+      conflict,
+      requiresPrompt: true,
+      allowFetch: options.allowFetch,
+      mappingType: options.mappingType,
+      target: options.target,
+    },
+  });
+  return 'stop';
+}
+
+/**
  * Plan a rendered `.env` from a `template` mapping whose source is `.env.yaml`
  * (D-18). The change carries only the rendered hash, size, mode and variable
  * names; plaintext exists inside the renderer and the transfer executor.
@@ -387,6 +480,7 @@ async function planEnvTemplate(
       readonly mode?: string | undefined;
       readonly owner?: unknown;
       readonly group?: unknown;
+      readonly conflict: FileConflictPolicy;
     };
     readonly source: SourceFile;
   },
@@ -437,6 +531,31 @@ async function planEnvTemplate(
     return;
   }
 
+  if (previous !== undefined) {
+    const conflict = detectFileConflict({
+      destination: mapping.destination,
+      source: source.relativePath,
+      policy: mapping.conflict,
+      sourceHash: rendered.hash,
+      remote: previous,
+      baselineHash: context.baseline[mapping.destination],
+    });
+    if (
+      conflict &&
+      planConflict(context, {
+        mappingIndex,
+        suffix: ':conflict',
+        conflict,
+        source,
+        mappingType: 'template',
+        target,
+        allowFetch: false,
+      }) === 'stop'
+    ) {
+      return;
+    }
+  }
+
   const hostOwner = hostOwnership(
     context.guest,
     target,
@@ -477,6 +596,7 @@ async function planSingleFile(
       readonly mode?: string | undefined;
       readonly owner?: unknown;
       readonly group?: unknown;
+      readonly conflict: FileConflictPolicy;
     };
     readonly source: SourceFile;
   },
@@ -507,6 +627,30 @@ async function planSingleFile(
   });
 
   if (previous !== undefined && previous.hash === source.hash) return;
+  if (previous !== undefined) {
+    const conflict = detectFileConflict({
+      destination: mapping.destination,
+      source: source.relativePath,
+      policy: mapping.conflict,
+      sourceHash: source.hash,
+      remote: previous,
+      baselineHash: context.baseline[mapping.destination],
+    });
+    if (
+      conflict &&
+      planConflict(context, {
+        mappingIndex,
+        suffix: ':conflict',
+        conflict,
+        source,
+        mappingType: mapping.type,
+        target,
+        allowFetch: true,
+      }) === 'stop'
+    ) {
+      return;
+    }
+  }
 
   const action = previous === undefined ? 'create' : 'update';
   const format =
@@ -550,6 +694,7 @@ async function planDirectory(
     readonly owner?: unknown;
     readonly group?: unknown;
     readonly delete: boolean;
+    readonly conflict: FileConflictPolicy;
   },
   entries: readonly WalkedFile[],
 ): Promise<void> {
@@ -578,6 +723,30 @@ async function planDirectory(
     );
     const previous = context.remote[destination];
     if (previous !== undefined && previous.hash === source.hash) continue;
+    if (previous !== undefined) {
+      const conflict = detectFileConflict({
+        destination,
+        source: source.relativePath,
+        policy: mapping.conflict,
+        sourceHash: source.hash,
+        remote: previous,
+        baselineHash: context.baseline[destination],
+      });
+      if (
+        conflict &&
+        planConflict(context, {
+          mappingIndex,
+          suffix: `:file:${entry.relativePath}:conflict`,
+          conflict,
+          source,
+          mappingType: 'directory',
+          target,
+          allowFetch: true,
+        }) === 'stop'
+      ) {
+        continue;
+      }
+    }
     const action = previous === undefined ? 'create' : 'update';
     context.changes.push({
       id: `mapping-${mappingIndex}:file:${entry.relativePath}`,
@@ -643,6 +812,7 @@ export async function planFilemappings(
     dataDir: options.dataDir,
     fs,
     renderEnv: options.renderEnv,
+    baseline: options.baseline ?? {},
     guest,
     remote: options.remote ?? {},
     changes: [],

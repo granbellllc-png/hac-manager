@@ -488,6 +488,11 @@ describe('planFilemappings', () => {
       conflict: 'prompt' as const,
     };
     const options = planOptions(fs, mappings([directoryMapping]), {
+      baseline: {
+        '/srv/config/a.conf': await hashContent('old-a'),
+        '/srv/config/nested/b.conf': await hashContent('same-b'),
+        '/srv/config/stale.conf': await hashContent('stale'),
+      },
       remote: {
         '/srv/config/a.conf': { hash: await hashContent('old-a'), size: 5 },
         '/srv/config/nested/b.conf': {
@@ -630,6 +635,7 @@ describe('planFilemappings', () => {
         ]),
         {
           guest: guest({ type: 'vm' }),
+          baseline: { '/etc/app.conf': await hashContent('old') },
           remote: {
             '/etc/app.conf': { hash: await hashContent('old'), size: 3 },
           },
