@@ -42,4 +42,5 @@ export const tasksFileSchema = z.strictObject({
   tasks: z.array(includable(taskSchema)),
 });
 
+export type Task = z.infer<typeof taskSchema>;
 export type TasksFile = z.infer<typeof tasksFileSchema>;
