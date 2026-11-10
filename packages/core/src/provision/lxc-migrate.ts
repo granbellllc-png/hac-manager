@@ -997,7 +997,7 @@ export function createLxcAttachMp0Step(
   const attachArgv = lxcMigrationAttachArgv(vmid, plan.mp0Value);
   return {
     name: `attach mp0 to LXC ${vmid} while stopped`,
-    check: async ({ transport }) => {
+    check: async ({ transport, dryRun }) => {
       const config = await readLxcConfig(transport, vmid);
       if (
         lxcMp0Matches(config, plan.mp0Value) &&
@@ -1005,7 +1005,9 @@ export function createLxcAttachMp0Step(
       ) {
         return { status: 'satisfied', detail: { mp0: plan.mp0Value } };
       }
-      await requireStopped(transport, vmid, 'attach mp0');
+      // A dry run never stops the guest, so it cannot prove the attach is safe;
+      // report it as required and let the runner skip it.
+      if (!dryRun) await requireStopped(transport, vmid, 'attach mp0');
       return { status: 'required', detail: { mp0: plan.mp0Value } };
     },
     apply: async ({ transport }) => {
