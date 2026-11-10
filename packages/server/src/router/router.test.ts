@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { EventEmitter } from 'node:events';
+import { describe, expect, it, vi } from 'vitest';
 import { HostConnectionRouter } from './router.js';
 import { ChannelUnavailableError } from './types.js';
 import { FakeTransport } from '@hacm/core';
@@ -6,6 +7,58 @@ import type { SshTransport } from '../ssh/types.js';
 import { ProxmoxClient } from '../proxmox/client.js';
 
 describe('HostConnectionRouter', () => {
+  it('opens host and LXC consoles through SSH PTY channels', async () => {
+    const shell = Object.assign(new EventEmitter(), {
+      write: vi.fn(),
+      resize: vi.fn(),
+      close: vi.fn(),
+    });
+    const fake = new FakeTransport().onExec('pct config 112', {
+      exitCode: 0,
+      stdout: 'hostname: fixture\n',
+    });
+    const openShell = vi.fn(async () => shell);
+    const ssh = Object.assign(fake, { openShell }) as unknown as SshTransport;
+    const router = new HostConnectionRouter('fixture', { sshTransport: ssh });
+
+    await expect(
+      router.openConsole({ target: 'host', cols: 100, rows: 30 }),
+    ).resolves.toBe(shell);
+    expect(openShell).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cols: 100, rows: 30 }),
+    );
+    await expect(
+      router.openConsole({ target: 'lxc', vmid: 112, cols: 80, rows: 24 }),
+    ).resolves.toBe(shell);
+    expect(openShell).toHaveBeenLastCalledWith(
+      expect.objectContaining({ argv: ['pct', 'enter', '112'] }),
+    );
+  });
+
+  it('rejects unavailable and invalid LXC console targets', async () => {
+    const fake = new FakeTransport().onExec('pct config 112', {
+      exitCode: 1,
+      stderr: 'missing',
+    });
+    const ssh = Object.assign(fake, {
+      openShell: vi.fn(),
+    }) as unknown as SshTransport;
+    const router = new HostConnectionRouter('fixture', { sshTransport: ssh });
+    await expect(
+      router.openConsole({ target: 'lxc', cols: 80, rows: 24 }),
+    ).rejects.toThrow('requires a VMID');
+    await expect(
+      router.openConsole({ target: 'lxc', vmid: 112, cols: 80, rows: 24 }),
+    ).rejects.toThrow('unavailable');
+    await expect(
+      new HostConnectionRouter('api-only').openConsole({
+        target: 'host',
+        cols: 80,
+        rows: 24,
+      }),
+    ).rejects.toBeInstanceOf(ChannelUnavailableError);
+  });
+
   it('falls back to SSH for reads when API is not configured or fails', async () => {
     // Fake SSH transport simulating pct config
     const fakeSsh = new FakeTransport().onExec('pct config 112', {

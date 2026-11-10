@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { createHash } from 'node:crypto';
-import { Client, type SFTPWrapper } from 'ssh2';
+import { Client, type ClientChannel, type SFTPWrapper } from 'ssh2';
 import {
   TransportAbortedError,
   TransportFileNotFoundError,
@@ -13,6 +13,8 @@ import {
   SshConnectionLostError,
   type SshConnectionState,
   type SshHostConfig,
+  type InteractiveShell,
+  type InteractiveShellOptions,
   type SshTransport,
 } from './types.js';
 
@@ -32,6 +34,49 @@ function normalizeFingerprint(fp: string): string {
 interface PendingCommand {
   readonly reject: (error: Error) => void;
   readonly cleanup: () => void;
+}
+
+class SshInteractiveShell extends EventEmitter implements InteractiveShell {
+  private closed = false;
+
+  public constructor(
+    private readonly stream: ClientChannel,
+    private readonly release: () => void,
+  ) {
+    super();
+    stream.on('data', (chunk: Buffer) => this.emit('data', chunk));
+    stream.stderr.on('data', (chunk: Buffer) => this.emit('data', chunk));
+    stream.on('error', (error: Error) => this.emit('error', error));
+    stream.on(
+      'close',
+      (code: number | undefined, signal: string | undefined) => {
+        this.finish(code, signal);
+      },
+    );
+  }
+
+  public write(data: string | Buffer): void {
+    if (!this.closed) this.stream.write(data);
+  }
+
+  public resize(cols: number, rows: number): void {
+    if (!this.closed) this.stream.setWindow(rows, cols, 0, 0);
+  }
+
+  public close(): void {
+    if (this.closed) return;
+    this.stream.end();
+    this.stream.close();
+    this.finish(undefined, undefined);
+  }
+
+  private finish(code: number | undefined, signal: string | undefined): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.release();
+    this.emit('exit', { code, signal });
+    this.removeAllListeners('data');
+  }
 }
 
 export class SshConnection extends EventEmitter implements SshTransport {
@@ -306,6 +351,44 @@ export class SshConnection extends EventEmitter implements SshTransport {
           });
         });
       });
+    });
+  }
+
+  public async openShell(
+    options: InteractiveShellOptions = {},
+  ): Promise<InteractiveShell> {
+    if (options.signal?.aborted) throw new TransportAbortedError();
+    if (this.state !== 'connected' || !this.client) await this.connect();
+    const release = await this.semaphore.acquire();
+    const pty = {
+      term: options.term ?? 'xterm-256color',
+      cols: options.cols ?? 80,
+      rows: options.rows ?? 24,
+      width: 0,
+      height: 0,
+    };
+
+    return new Promise<InteractiveShell>((resolve, reject) => {
+      let settled = false;
+      const finish = (error: Error | undefined, stream?: ClientChannel) => {
+        if (settled) return;
+        settled = true;
+        options.signal?.removeEventListener('abort', onAbort);
+        if (error || !stream) {
+          release();
+          reject(error ?? new Error('SSH shell channel was not created'));
+          return;
+        }
+        resolve(new SshInteractiveShell(stream, release));
+      };
+      const onAbort = () => finish(new TransportAbortedError());
+      options.signal?.addEventListener('abort', onAbort, { once: true });
+      if (options.argv) {
+        const command = options.argv.map(escapePosixArg).join(' ');
+        this.client!.exec(command, { pty }, finish);
+      } else {
+        this.client!.shell(pty, finish);
+      }
     });
   }
 

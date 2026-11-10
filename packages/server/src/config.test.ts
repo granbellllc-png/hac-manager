@@ -14,6 +14,7 @@ describe('server configuration', () => {
     expect(config.HACM_PORT).toBe(3000);
     expect(config.HACM_DATA_DIR).toBe(resolve('/example-data'));
     expect(config.HACM_COOKIE_SECURE).toBe(true);
+    expect(config.HACM_CONSOLE_IDLE_SECONDS).toBe(900);
     expect(config.HACM_WEB_DIR).toBeUndefined();
   });
   it('parses configured optional values', () => {
@@ -24,11 +25,13 @@ describe('server configuration', () => {
       HACM_COOKIE_SECURE: 'false',
       HACM_PROTECTED_GUEST_ID: '112',
       HACM_PROTECTED_HOST_ID: 'example-host',
+      HACM_CONSOLE_IDLE_SECONDS: '120',
     });
     expect(config.HACM_PORT).toBe(3456);
     expect(config.HACM_WEB_DIR).toBe(resolve('/example-web'));
     expect(config.HACM_COOKIE_SECURE).toBe(false);
     expect(config.HACM_PROTECTED_GUEST_ID).toBe(112);
+    expect(config.HACM_CONSOLE_IDLE_SECONDS).toBe(120);
   });
   it('accepts empty optional dotenv values', () => {
     expect(
@@ -47,6 +50,14 @@ describe('server configuration', () => {
   it('requires the data and state paths', () => {
     expect(() => loadConfig({})).toThrow('HACM_DATA_DIR');
   });
+  it.each(['0', '29', '86401', 'oops'])(
+    'rejects invalid console idle timeout %s',
+    (value) => {
+      expect(() =>
+        loadConfig({ ...env, HACM_CONSOLE_IDLE_SECONDS: value }),
+      ).toThrow('HACM_CONSOLE_IDLE_SECONDS');
+    },
+  );
   it.each(['/example-data', '/example-data/state'])(
     'keeps runtime state out of the data dir (%s)',
     (state) => {

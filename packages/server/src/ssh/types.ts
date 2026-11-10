@@ -1,4 +1,5 @@
 import type { Transport } from '@hacm/core';
+import type { EventEmitter } from 'node:events';
 
 export type SshConnectionState =
   'disconnected' | 'connecting' | 'connected' | 'error';
@@ -22,6 +23,21 @@ export interface SshTransport extends Transport {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   retrustHostKey(newFingerprint?: string): void;
+  openShell(options?: InteractiveShellOptions): Promise<InteractiveShell>;
+}
+
+export interface InteractiveShellOptions {
+  readonly argv?: readonly string[] | undefined;
+  readonly term?: string | undefined;
+  readonly cols?: number | undefined;
+  readonly rows?: number | undefined;
+  readonly signal?: AbortSignal | undefined;
+}
+
+export interface InteractiveShell extends EventEmitter {
+  write(data: string | Buffer): void;
+  resize(cols: number, rows: number): void;
+  close(): void;
 }
 
 export class HostKeyMismatchError extends Error {

@@ -6,11 +6,15 @@ export class FixtureSshClient extends EventEmitter {
   static connectMode: 'ready' | 'error' | 'close' | 'throw' | 'throw-string' =
     'ready';
   static execMode: 'success' | 'reject' | 'hang' | 'no-exit-code' = 'success';
+  static shellMode: 'success' | 'reject' = 'success';
   static sftpMode: 'success' | 'reject' = 'success';
   static readMode: 'success' | 'error' | 'hang' = 'success';
   static writeMode: 'success' | 'error' | 'hang' = 'success';
   static fingerprint: string | Buffer = 'SHA256:fixture-key';
   static files = new Map<string, string>();
+  static lastExec:
+    | { readonly command: string; readonly options: Record<string, unknown> }
+    | undefined;
   readonly channels: FixtureChannel[] = [];
   readonly streams: FixtureFileStream[] = [];
   config: Record<string, unknown> = {};
@@ -26,9 +30,11 @@ export class FixtureSshClient extends EventEmitter {
     this.connectMode = 'ready';
     this.execMode = 'success';
     this.sftpMode = 'success';
+    this.shellMode = 'success';
     this.readMode = 'success';
     this.writeMode = 'success';
     this.fingerprint = 'SHA256:fixture-key';
+    this.lastExec = undefined;
     this.files.clear();
   }
 
@@ -55,11 +61,34 @@ export class FixtureSshClient extends EventEmitter {
   }
 
   exec(
-    _command: string,
-    callback: (error: Error | null, stream?: FixtureChannel) => void,
+    command: string,
+    optionsOrCallback:
+      | Record<string, unknown>
+      | ((error: Error | null, stream?: FixtureChannel) => void),
+    maybeCallback?: (error: Error | null, stream?: FixtureChannel) => void,
   ) {
+    const callback =
+      typeof optionsOrCallback === 'function'
+        ? optionsOrCallback
+        : maybeCallback!;
+    const options =
+      typeof optionsOrCallback === 'function' ? {} : optionsOrCallback;
+    FixtureSshClient.lastExec = { command, options };
     if (FixtureSshClient.execMode === 'reject') {
       callback(new Error('fixture channel rejected'));
+      return;
+    }
+    const stream = new FixtureChannel();
+    this.channels.push(stream);
+    callback(null, stream);
+  }
+
+  shell(
+    _options: Record<string, unknown>,
+    callback: (error: Error | null, stream?: FixtureChannel) => void,
+  ) {
+    if (FixtureSshClient.shellMode === 'reject') {
+      callback(new Error('fixture shell rejected'));
       return;
     }
     const stream = new FixtureChannel();
@@ -103,6 +132,13 @@ export class FixtureSshClient extends EventEmitter {
 class FixtureChannel extends EventEmitter {
   readonly stderr = new EventEmitter();
   input = '';
+  readonly resizes: Array<{
+    rows: number;
+    cols: number;
+    height: number;
+    width: number;
+  }> = [];
+  closed = false;
   write(input: string | Buffer) {
     this.input += String(input);
   }
@@ -117,6 +153,13 @@ class FixtureChannel extends EventEmitter {
       );
       this.emit('close', 0);
     });
+  }
+  setWindow(rows: number, cols: number, height: number, width: number) {
+    this.resizes.push({ rows, cols, height, width });
+  }
+  close() {
+    this.closed = true;
+    queueMicrotask(() => this.emit('close', 0));
   }
 }
 

@@ -116,7 +116,7 @@ Proxmox uses **node** for a hypervisor; HAC Manager never uses that word for a g
 
 ## Supported direction
 
-v1 targets standalone Proxmox hosts, LXC and VM workflows, local authentication, SQLite and SSE. Git management, clusters, historical metrics, PostgreSQL and OIDC are outside v1. External secret CLIs such as `op` and `bw` are not bundled; users install them themselves. Locked providers pause dependent jobs and accept an administrator-supplied session or service-account token that is held in memory only. Server deployments should use service accounts instead of desktop integration. The web console remains later work.
+v1 targets standalone Proxmox hosts, LXC and VM workflows, local authentication, SQLite, SSE and audited interactive host/LXC consoles. Git management, clusters, historical metrics, PostgreSQL and OIDC are outside v1. External secret CLIs such as `op` and `bw` are not bundled; users install them themselves. Locked providers pause dependent jobs and accept an administrator-supplied session or service-account token that is held in memory only. Server deployments should use service accounts instead of desktop integration.
 
 ## License
 

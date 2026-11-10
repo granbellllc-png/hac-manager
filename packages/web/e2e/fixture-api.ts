@@ -13,6 +13,33 @@ export async function installFixtureApi(
   mode: 'authenticated' | 'login' | 'setup' = 'authenticated',
   options: { readonly vaultPrompt?: boolean | undefined } = {},
 ) {
+  await page.routeWebSocket('**/api/console**', (socket) => {
+    setTimeout(() => {
+      socket.send(
+        JSON.stringify({
+          type: 'ready',
+          sessionId: 'fixture-console',
+          target: 'host',
+          idleTimeoutMs: 900_000,
+        }),
+      );
+      socket.send(
+        JSON.stringify({
+          type: 'output',
+          data: 'root@fixture-host:~# ',
+        }),
+      );
+    }, 25);
+    socket.onMessage((message) => {
+      const parsed = JSON.parse(String(message)) as {
+        type?: string;
+        data?: string;
+      };
+      if (parsed.type === 'input' && parsed.data) {
+        socket.send(JSON.stringify({ type: 'output', data: parsed.data }));
+      }
+    });
+  });
   let authenticated = mode === 'authenticated';
   let setupNeeded = mode === 'setup';
   let guestDetail = structuredClone(fixtureGuestDetail);

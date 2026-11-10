@@ -85,6 +85,24 @@ test('renders and resolves the memory-only vault unlock prompt', async ({
   ).toBeHidden();
 });
 
+test('opens the responsive audited web console', async ({ page }, testInfo) => {
+  await page.goto('/console');
+  await expect(page.getByRole('heading', { name: 'Console' })).toBeVisible();
+  await expect(page.getByLabel('Host', { exact: true })).toHaveValue(
+    'fixture-host',
+  );
+  await page.getByLabel(/Record output locally/).check();
+  await page.getByRole('button', { name: 'Connect' }).click();
+  await expect(page.getByText('connected', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Interactive console terminal')).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath('console.png'),
+    fullPage: true,
+  });
+  await page.getByRole('button', { name: 'Disconnect' }).click();
+  await expect(page.getByText('disconnected', { exact: true })).toBeVisible();
+});
+
 test('renders SSH-only host detail and connection test feedback', async ({
   page,
 }, testInfo) => {

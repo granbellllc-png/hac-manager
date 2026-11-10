@@ -43,6 +43,12 @@ export const envSchema = z
       .max(86400)
       .default(300),
     HACM_HOST_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(2),
+    HACM_CONSOLE_IDLE_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(30)
+      .max(86400)
+      .default(900),
     HACM_SESSION_SECRET: z.string().min(32).optional(),
     HACM_SECRET_KEY: z.string().min(32).optional(),
     HACM_COOKIE_SECURE: booleanSchema.default(true),

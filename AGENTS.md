@@ -132,4 +132,4 @@ Engineering 16. All YAML edits go through the CST layer so comments, ordering an
 
 ## Out of scope for v1
 
-Git management (the user handles Git), clusters, historical metrics, OIDC, PostgreSQL, the Docker Compose module (design spike only), web console and interactive vault-unlock UI (milestone M13).
+Git management (the user handles Git), clusters, historical metrics, OIDC, PostgreSQL, the Docker Compose module (design spike only), and VM consoles.

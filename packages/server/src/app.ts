@@ -5,6 +5,7 @@ import swagger from '@fastify/swagger';
 import fastifyStatic from '@fastify/static';
 import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
+import websocket from '@fastify/websocket';
 import { SecretManager } from '@hacm/core';
 import {
   validatorCompiler,
@@ -27,6 +28,7 @@ import { jobsModule } from './modules/jobs/index.js';
 import { driftModule } from './modules/drift/index.js';
 import { storageModule } from './modules/storage/index.js';
 import { vaultModule } from './modules/vault/index.js';
+import { consoleModule } from './modules/console/index.js';
 import { HostRegistry } from './hosts/registry.js';
 import { ConnectionManager } from './router/manager.js';
 import { LiveInventoryService } from './inventory/service.js';
@@ -40,6 +42,7 @@ import { DriftService } from './drift/service.js';
 import { StorageInvariantService } from './storage/service.js';
 import { DriftScheduler } from './scheduler/service.js';
 import { VaultService } from './vault/service.js';
+import { ConsoleService } from './console/service.js';
 import {
   SessionService,
   SESSION_COOKIE_NAME,
@@ -70,6 +73,7 @@ export interface BuildAppOptions {
   readonly storageInvariantService?: StorageInvariantService;
   readonly scheduler?: DriftScheduler;
   readonly vaultService?: VaultService;
+  readonly consoleService?: ConsoleService;
 }
 
 export async function buildApp(
@@ -121,6 +125,9 @@ export async function buildApp(
   } else {
     await app.register(cookie);
   }
+  await app.register(websocket, {
+    options: { maxPayload: 64 * 1024 },
+  });
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -250,6 +257,13 @@ export async function buildApp(
           }),
         });
   app.decorate('connectionManager', connectionManager);
+  const consoleService =
+    'consoleService' in configOrOptions && configOrOptions.consoleService
+      ? configOrOptions.consoleService
+      : new ConsoleService(connectionManager, repositories, {
+          idleTimeoutMs: config.HACM_CONSOLE_IDLE_SECONDS * 1000,
+        });
+  app.decorate('consoleService', consoleService);
   const vaultService =
     'vaultService' in configOrOptions && configOrOptions.vaultService
       ? configOrOptions.vaultService
@@ -396,6 +410,10 @@ export async function buildApp(
   await app.register(vaultModule, {
     hostRegistry,
     vaultService,
+  });
+  await app.register(consoleModule, {
+    hostRegistry,
+    consoleService,
   });
   await app.register(plansModule, {
     hostRegistry,

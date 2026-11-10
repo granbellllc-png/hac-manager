@@ -76,6 +76,52 @@ describe('SSH handshake, channel and SFTP failures', () => {
     expect((await value.exec(['fixture'])).exitCode).toBe(0);
   });
 
+  it('opens host and command PTYs, streams data, resizes, and closes them', async () => {
+    const value = connection();
+    const hostShell = await value.openShell({ cols: 100, rows: 30 });
+    const output = vi.fn();
+    const exit = vi.fn();
+    hostShell.on('data', output);
+    hostShell.on('exit', exit);
+    hostShell.write('fixture-shell-input');
+    FixtureSshClient.instances[0]?.channels[0]?.emit(
+      'data',
+      Buffer.from('fixture-shell-output'),
+    );
+    hostShell.resize(120, 40);
+    hostShell.close();
+    await vi.waitFor(() => expect(exit).toHaveBeenCalled());
+    expect(output).toHaveBeenCalledWith(Buffer.from('fixture-shell-output'));
+    expect(FixtureSshClient.instances[0]?.channels[0]?.resizes).toContainEqual({
+      rows: 40,
+      cols: 120,
+      height: 0,
+      width: 0,
+    });
+
+    const guestShell = await value.openShell({
+      argv: ['pct', 'enter', '112'],
+      cols: 80,
+      rows: 24,
+    });
+    expect(FixtureSshClient.lastExec).toMatchObject({
+      command: 'pct enter 112',
+      options: { pty: expect.objectContaining({ cols: 80, rows: 24 }) },
+    });
+    guestShell.close();
+  });
+
+  it('rejects aborted and failed interactive channels', async () => {
+    const value = connection();
+    await expect(
+      value.openShell({ signal: AbortSignal.abort() }),
+    ).rejects.toThrow('abort');
+    FixtureSshClient.shellMode = 'reject';
+    await expect(value.openShell()).rejects.toThrow('shell rejected');
+    FixtureSshClient.shellMode = 'success';
+    expect(await value.openShell()).toBeDefined();
+  });
+
   it('cancels an active command and does not resolve it from a late close', async () => {
     FixtureSshClient.execMode = 'hang';
     const value = connection();

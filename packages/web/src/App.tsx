@@ -29,6 +29,11 @@ const DriftPage = lazy(() =>
     default: module.DriftPage,
   })),
 );
+const ConsolePage = lazy(() =>
+  import('./pages/console').then((module) => ({
+    default: module.ConsolePage,
+  })),
+);
 
 export function RouteLoading() {
   return <p className="text-sm text-muted-foreground">Loading page…</p>;
@@ -74,13 +79,22 @@ export function App() {
                 </Suspense>
               }
             />
+            <Route
+              path="/console"
+              element={
+                <Suspense fallback={<RouteLoading />}>
+                  <ConsolePage />
+                </Suspense>
+              }
+            />
             {navItems
               .filter(
                 (item) =>
                   item.path !== '/' &&
                   item.path !== '/resources' &&
                   item.path !== '/jobs' &&
-                  item.path !== '/drift',
+                  item.path !== '/drift' &&
+                  item.path !== '/console',
               )
               .map((item) => (
                 <Route

@@ -1,5 +1,9 @@
 import type { ExecOptions, ExecResult, Transport } from '@hacm/core';
-import type { SshTransport } from '../ssh/types.js';
+import type {
+  InteractiveShell,
+  InteractiveShellOptions,
+  SshTransport,
+} from '../ssh/types.js';
 import type { ProxmoxClient } from '../proxmox/client.js';
 import {
   ChannelUnavailableError,
@@ -88,6 +92,47 @@ export class HostConnectionRouter implements Transport {
       };
       throw err;
     }
+  }
+
+  public async openConsole(
+    options: InteractiveShellOptions & {
+      readonly target: 'host' | 'lxc';
+      readonly vmid?: number | undefined;
+    },
+  ): Promise<InteractiveShell> {
+    if (!this.sshTransport) {
+      throw new ChannelUnavailableError(
+        this.hostId,
+        'ssh',
+        `Interactive console requires SSH, which is not configured for host '${this.hostId}'.`,
+      );
+    }
+    const shellOptions: InteractiveShellOptions = {
+      ...(options.cols !== undefined ? { cols: options.cols } : {}),
+      ...(options.rows !== undefined ? { rows: options.rows } : {}),
+      ...(options.term !== undefined ? { term: options.term } : {}),
+      ...(options.signal !== undefined ? { signal: options.signal } : {}),
+    };
+    if (options.target === 'lxc') {
+      if (options.vmid === undefined) {
+        throw new Error('An LXC console requires a VMID');
+      }
+      const exists = await this.sshTransport.exec([
+        'pct',
+        'config',
+        String(options.vmid),
+      ]);
+      if (exists.exitCode !== 0) {
+        throw new Error(
+          `LXC guest ${options.vmid} is unavailable on host '${this.hostId}'`,
+        );
+      }
+      return this.sshTransport.openShell({
+        ...shellOptions,
+        argv: ['pct', 'enter', String(options.vmid)],
+      });
+    }
+    return this.sshTransport.openShell(shellOptions);
   }
 
   public async readFile(

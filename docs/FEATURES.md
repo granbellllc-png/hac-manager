@@ -23,7 +23,8 @@ HAC Manager (Homelab as Code) is a self-hosted web app and backend that manages 
 | In v1                                                | Later (M13 or beyond)                            | Non-goals                             |
 | ---------------------------------------------------- | ------------------------------------------------ | ------------------------------------- |
 | Standalone Proxmox hosts                             | Proxmox clusters                                 | Managing Git (commit, push, branches) |
-| LXC and VM lifecycle                                 | Web console (xterm.js)                           | Historical metrics and charts         |
+| LXC and VM lifecycle                                 |                                                  | Historical metrics and charts         |
+| Audited host and LXC web console                     | VM console                                       |                                       |
 | YAML config with inheritance, tags, safe expressions | Personal API tokens                              | PostgreSQL support                    |
 | Secrets from env, `secrets.yaml`, external CLIs      |                                                  | OIDC / SSO                            |
 | Headless vault unlock with memory-only tokens        |                                                  |                                       |
@@ -150,7 +151,7 @@ Resolved plaintext is never written to Git-tracked files. _M2._
 
 **D-32. Journaled, resumable steps.** Multi-step flows are built from steps with `check`, `apply`, `verify` and a rollback hint, persisted so they can resume. _M6._
 
-**D-33. Real-time transport is SSE.** WebSocket only for the future console. _M6._
+**D-33. Real-time transport is SSE for durable events and WebSocket for the console.** Job logs, queue events and prompts use SSE. The interactive console uses a dedicated authenticated WebSocket because terminal input is bidirectional and ephemeral. _M6, M13._
 
 **D-34. Scheduler runs drift checks only in v1.** Scheduled jobs are recorded with reason `schedule` and back off when a host or vault is unavailable. _M6._
 
@@ -294,6 +295,8 @@ _M5, M6, M8._
 **D-69. YAML editor.** CodeMirror 6 with JSON Schema validation and autocomplete, server-side validate and save via the CST layer, diff preview, conflict message on external edits. Admin-only for files containing execution surfaces. _M5._
 
 **D-70. Metrics are live only.** No historical charts in v1. _Scope._
+
+**D-73. Interactive consoles are ephemeral and audited.** Admins and operators may open a host shell or enter an LXC guest on a granted host; viewers are denied. The server opens a distinct SSH PTY channel, validates same-origin WebSocket upgrades, records start/stop audit metadata and closes idle sessions after a configurable timeout. Terminal input and output are never persisted by the server. An optional recording toggle keeps a bounded output transcript in browser memory for an explicit local download. VM consoles remain later work. _M13._
 
 ### 4.16 Packaging and deployment
 

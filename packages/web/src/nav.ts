@@ -6,6 +6,7 @@ import {
   ListChecks,
   Server,
   Settings,
+  SquareTerminal,
   Users,
 } from 'lucide-react';
 
@@ -40,6 +41,12 @@ export const navItems: readonly NavItem[] = [
     label: 'Jobs',
     description: 'Plans, applies and task runs.',
     icon: ListChecks,
+  },
+  {
+    path: '/console',
+    label: 'Console',
+    description: 'Interactive host and LXC guest terminals.',
+    icon: SquareTerminal,
   },
   {
     path: '/audit',

@@ -11,6 +11,11 @@ Two directories are mounted or configured, and they must stay separate (the stat
 
 See [`.env.example`](../.env.example) for every setting.
 
+The reverse proxy must pass WebSocket upgrades for `/api/console` without
+buffering. Keep the route on the same origin as the SPA; cross-origin console
+upgrades are rejected. `HACM_CONSOLE_IDLE_SECONDS` controls the idle timeout
+(15 minutes by default). Console transcripts are never stored by the server.
+
 ## Docker
 
 ```bash
