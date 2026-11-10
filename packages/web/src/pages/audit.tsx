@@ -13,6 +13,33 @@ type AuditReason =
   | 'conflict_resolution'
   | 'orphan_action';
 
+export type SafeAuditPayloadResult =
+  | { readonly ok: true; readonly content: string }
+  | { readonly ok: false; readonly error: string };
+
+export function safeFormatAuditPayload(
+  diffJson: string | null | undefined,
+  metadataJson: string | null | undefined,
+): SafeAuditPayloadResult {
+  const raw =
+    diffJson && diffJson.trim() !== ''
+      ? diffJson
+      : metadataJson && metadataJson.trim() !== ''
+        ? metadataJson
+        : null;
+
+  if (!raw) {
+    return { ok: false, error: 'Payload could not be decoded.' };
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return { ok: true, content: JSON.stringify(parsed, null, 2) };
+  } catch {
+    return { ok: false, error: 'Payload could not be decoded.' };
+  }
+}
+
 export function AuditPage() {
   const [items, setItems] = useState<readonly AuditItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -306,16 +333,29 @@ export function AuditPage() {
                   Close
                 </Button>
               </div>
-              <pre className="max-h-64 overflow-auto rounded bg-background p-3 text-xs">
-                {(() => {
-                  const target = items.find((it) => it.id === expandedId);
-                  if (!target) return null;
-                  const content = target.diffJson
-                    ? JSON.parse(target.diffJson)
-                    : JSON.parse(target.metadataJson ?? '{}');
-                  return JSON.stringify(content, null, 2);
-                })()}
-              </pre>
+              {(() => {
+                const target = items.find((it) => it.id === expandedId);
+                if (!target) return null;
+                const result = safeFormatAuditPayload(
+                  target.diffJson,
+                  target.metadataJson,
+                );
+                if (!result.ok) {
+                  return (
+                    <div
+                      className="rounded bg-destructive/10 p-3 text-xs text-destructive"
+                      role="alert"
+                    >
+                      {result.error}
+                    </div>
+                  );
+                }
+                return (
+                  <pre className="max-h-64 overflow-auto rounded bg-background p-3 text-xs">
+                    {result.content}
+                  </pre>
+                );
+              })()}
             </div>
           )}
 

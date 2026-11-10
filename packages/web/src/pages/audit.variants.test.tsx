@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AuditPage } from './audit';
+import { AuditPage, safeFormatAuditPayload } from './audit';
 
 const fixture = {
   id: 'fixture-audit',
@@ -112,5 +112,105 @@ describe('audit filtering and detail variants', () => {
         'An error occurred while fetching audit records.',
       ),
     ).toBeInTheDocument();
+  });
+
+  it('guards audit diff rendering against malformed diffJson', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () =>
+        Response.json({
+          items: [{ ...fixture, diffJson: '{"invalid: json' }],
+          total: 1,
+          limit: 20,
+          offset: 0,
+        }),
+      ),
+    );
+    render(<AuditPage />);
+    await screen.findByText('fixture.action');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'View Diff' }));
+    expect(screen.getByTestId('diff-viewer')).toHaveTextContent(
+      'Payload could not be decoded.',
+    );
+  });
+
+  it('guards audit diff rendering against malformed metadataJson', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () =>
+        Response.json({
+          items: [
+            { ...fixture, diffJson: null, metadataJson: 'not valid json' },
+          ],
+          total: 1,
+          limit: 20,
+          offset: 0,
+        }),
+      ),
+    );
+    render(<AuditPage />);
+    await screen.findByText('fixture.action');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'View Diff' }));
+    expect(screen.getByTestId('diff-viewer')).toHaveTextContent(
+      'Payload could not be decoded.',
+    );
+  });
+
+  it('guards audit diff rendering when payload is missing', async () => {
+    expect(safeFormatAuditPayload('', '')).toEqual({
+      ok: false,
+      error: 'Payload could not be decoded.',
+    });
+    expect(safeFormatAuditPayload(null, null)).toEqual({
+      ok: false,
+      error: 'Payload could not be decoded.',
+    });
+  });
+
+  it('keeps other records and filters usable when one record has malformed JSON', async () => {
+    const row1 = {
+      ...fixture,
+      id: 'bad-row',
+      action: 'bad.action',
+      diffJson: '{bad',
+    };
+    const row2 = {
+      ...fixture,
+      id: 'good-row',
+      action: 'good.action',
+      diffJson: '{"valid": true}',
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () =>
+        Response.json({
+          items: [row1, row2],
+          total: 2,
+          limit: 20,
+          offset: 0,
+        }),
+      ),
+    );
+    render(<AuditPage />);
+    await screen.findByText('bad.action');
+    expect(screen.getByText('good.action')).toBeInTheDocument();
+    const user = userEvent.setup();
+    const viewButtons = screen.getAllByRole('button', { name: 'View Diff' });
+    // Expand bad row
+    await user.click(viewButtons[0]);
+    expect(screen.getByTestId('diff-viewer')).toHaveTextContent(
+      'Payload could not be decoded.',
+    );
+    // Expand good row
+    await user.click(viewButtons[1]);
+    expect(screen.getByTestId('diff-viewer')).toHaveTextContent(
+      '"valid": true',
+    );
+    // Filters remain usable
+    const hostInput = screen.getByLabelText('Host');
+    await user.type(hostInput, 'pve-99');
+    expect(hostInput).toHaveValue('pve-99');
   });
 });
