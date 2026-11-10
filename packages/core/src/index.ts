@@ -53,4 +53,5 @@ export * from './provision/index.js';
 export * from './storage/index.js';
 export * from './filemappings/index.js';
 export * from './env/index.js';
+export * from './community-scripts/index.js';
 export * from './drift/index.js';
