@@ -235,7 +235,7 @@ Tier 3 is skipped unless file sync, identity checks and invariant checks have al
 
 **D-54. Pre-update `vzdump`.** Snapshot mode, zstd, label `VMID_YYYY-MM-DD_HH-MM-SS_AppName`, configurable `backup_skip` and `backup_storage`. **A failed backup aborts the update.** _M12._
 
-**D-55. Bind-mount data needs its own protection.** `vzdump` does **not** back up bind mounts, so `mp0` host data gets a separate pre-update step (storage snapshot where supported, otherwise a restic or rsync copy). The plan states exactly what is and is not covered. Open: which mechanism is the default (see section 7). _M12._
+**D-55. Bind-mount data needs its own protection.** `vzdump` does **not** back up bind mounts, so `mp0` host data gets a separate pre-update step. The plan selects a storage snapshot when the mount declares a ZFS dataset or a BTRFS file system, otherwise restic when a repository is configured, otherwise an rsync copy into a timestamped backup root; callers may force a method. The plan states exactly what is and is not covered, and a failing host-data step aborts the update. _M12._
 
 **D-56. One-click restore.** `pct restore` / `qmrestore` with typed confirmation, a warning about rootfs and `mp0` data mismatch, an offer to restore matching host data, and post-restore identity and invariant checks. _M12._
 
@@ -342,7 +342,6 @@ _M5, M6, M8._
 ## 7. Open decisions
 
 - **Expression evaluator:** CEL-style, JSONata-style or custom (ADR in M1).
-- **Default mechanism for `mp0` host-data protection** before updates: storage snapshot where available, otherwise restic or rsync. Depends on the owner's storage (LVM-thin, ZFS, directory).
 - **Cluster support:** design after v1.
 - **Optional auto-commit** of UI-made changes to the data dir's Git repo.
 - **Scheduled updates** beyond scheduled drift checks.
