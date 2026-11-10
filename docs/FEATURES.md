@@ -237,7 +237,7 @@ Tier 3 is skipped unless file sync, identity checks and invariant checks have al
 
 **D-55. Bind-mount data needs its own protection.** `vzdump` does **not** back up bind mounts, so `mp0` host data gets a separate pre-update step. The plan selects a storage snapshot when the mount declares a ZFS dataset or a BTRFS file system, otherwise restic when a repository is configured, otherwise an rsync copy into a timestamped backup root; callers may force a method. The plan states exactly what is and is not covered, and a failing host-data step aborts the update. _M12._
 
-**D-56. One-click restore.** `pct restore` / `qmrestore` with typed confirmation, a warning about rootfs and `mp0` data mismatch, an offer to restore matching host data, and post-restore identity and invariant checks. _M12._
+**D-56. One-click restore.** `pct restore` / `qmrestore` with typed confirmation `RESTORE <vmid>`, a warning that the archive contains the rootfs only and that `mp0` host data must be restored separately, and an offer to restore matching host data. Before any host data is replaced, the current copy is moved to a timestamped path and kept. The restored guest is started, identity-checked against its YAML stamp and name, and LXC guests with host data get a storage invariant check. _M12._
 
 **D-57. Host backup management.** Declarative Tier-2 management of `/etc/vzdump.conf` and restic scripts and cron, with status (last run, last success). Secrets via tags. _M12._
 
