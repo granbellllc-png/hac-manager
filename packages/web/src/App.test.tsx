@@ -12,6 +12,27 @@ import {
   fixtureHost,
 } from '../fixtures/hosts';
 
+vi.mock('@xterm/xterm', () => ({
+  Terminal: class {
+    cols = 80;
+    rows = 24;
+    loadAddon() {}
+    open() {}
+    writeln() {}
+    clear() {}
+    write() {}
+    dispose() {}
+    onData() {
+      return { dispose() {} };
+    }
+  },
+}));
+vi.mock('@xterm/addon-fit', () => ({
+  FitAddon: class {
+    fit() {}
+  },
+}));
+
 async function renderApp(path = '/') {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -189,6 +210,21 @@ describe('application shell', () => {
     expect(
       await screen.findByRole('heading', { name: 'Jobs & Queue' }),
     ).toBeVisible();
+  });
+
+  it('renders the lazy console route', async () => {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    await renderApp('/console');
+    expect(
+      await screen.findByRole('heading', { name: 'Console' }),
+    ).toBeVisible();
+    expect(screen.getByLabelText('Interactive console terminal')).toBeVisible();
   });
 
   it('renders the route loading fallback', () => {
