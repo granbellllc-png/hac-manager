@@ -36,6 +36,8 @@ export interface RunTasksOptions {
   readonly redactor?: SecretRedactor | undefined;
   readonly defaultTimeoutSeconds?: number | undefined;
   readonly maxOutputChars?: number | undefined;
+  /** Stop scheduling tasks after the first real failure (not `ignore_errors`). */
+  readonly stopOnFailure?: boolean | undefined;
   readonly now?: (() => Date) | undefined;
 }
 
@@ -447,17 +449,20 @@ export async function runTasks(
   const executed = new Set<string>();
   let cancelled = false;
 
-  const runOne = async (task: Task): Promise<void> => {
-    if (cancelled || executed.has(task.name)) return;
+  const runOne = async (task: Task): Promise<boolean> => {
+    if (cancelled || executed.has(task.name)) return false;
     executed.add(task.name);
     const { result } = await executor.execute(task);
     results.push(result);
     await options.onResult?.(result);
     if (result.status === 'cancelled') {
       cancelled = true;
-      return;
+      return false;
     }
-    if (result.status !== 'success' || !result.changed) return;
+    if (result.status !== 'success' || !result.changed) {
+      return result.status === 'failed' || result.status === 'timed_out';
+    }
+    let failed = false;
     for (const name of task.onchange ?? []) {
       const next = byName.get(name);
       if (!next) {
@@ -472,15 +477,18 @@ export async function runTasks(
         );
         results.push(unknown);
         await options.onResult?.(unknown);
+        failed = true;
         continue;
       }
-      await runOne(next);
+      if (await runOne(next)) failed = true;
     }
+    return failed;
   };
 
   for (const task of options.tasks) {
     if (cancelled) break;
-    await runOne(task);
+    const failed = await runOne(task);
+    if (failed && options.stopOnFailure === true) break;
   }
 
   return summary(results, cancelled);

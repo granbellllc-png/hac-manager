@@ -221,11 +221,11 @@ Goal: persistent app data lives on the host at `/opt/server-data/<host>/<guest>/
 
 **D-51. Three-tier cascade.**
 
-- **Tier 1 global:** across hosts (selected by groups or tags).
+- **Tier 1 global:** across hosts (selected by groups or tags declared in `host.yaml`).
 - **Tier 2 host:** hypervisor tasks (`acl`, `e2fsprogs`, `rsync`, `/etc/vzdump.conf` templates, host restic cron).
 - **Tier 3 guest:** inside the guest after file sync (`docker compose up -d --remove-orphans`, `systemctl enable --now`).
 
-Task fields: `name`, `run`, `when`, `creates` (idempotency), `timeout`, `retries`, `ignore_errors`, `onchange`, `env`, `shell`. Ordering by filename prefix; `!include` supported. Scripts go on stdin. **Only admins may edit tasks.** _M11._
+Tier 3 is skipped unless file sync, identity checks and invariant checks have all completed. Tiers run in ascending order, can resume from a chosen tier, and report skipped tiers with a reason. A configurable failure policy — `abort` (default), `abort-tier` or `continue` — decides whether a failure stops the remaining tasks and later tiers. Task fields: `name`, `run`, `when`, `creates` (idempotency), `timeout`, `retries`, `ignore_errors`, `onchange`, `env`, `shell`. Ordering by filename prefix; `!include` supported. Scripts go on stdin. **Only admins may edit tasks.** _M11._
 
 **D-52. Guest baseline.** OS detection via `/etc/os-release` (Debian, Ubuntu, Alpine), IPv6 enable/disable through `/etc/sysctl.d/99-disable-ipv6.conf`, OS package upgrades (`apt-get upgrade`, `apk upgrade`) and app `update_commands`, always after backup and identity check. _M11._
 

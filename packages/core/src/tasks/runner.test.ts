@@ -592,3 +592,51 @@ describe('runTasks edge paths', () => {
     expect(summary.results[0]).toMatchObject({ status: 'failed', error: '42' });
   });
 });
+
+describe('stopOnFailure', () => {
+  it('leaves later tasks unscheduled after a failure', async () => {
+    const transport = new FakeTransport().onExec(isShell, { exitCode: 1 });
+    const summary = await runTasks({
+      tasks: [task({ name: 'fail' }), task({ name: 'never' })],
+      transport,
+      tagContext: context,
+      stopOnFailure: true,
+    });
+    expect(summary.results.map((result) => result.name)).toEqual(['fail']);
+    expect(summary.failed).toBe(1);
+  });
+
+  it('runs later tasks when stopOnFailure is off', async () => {
+    const transport = new FakeTransport()
+      .onExec(isShell, { exitCode: 1 }, { once: true })
+      .onExec(isShell, {});
+    const summary = await runTasks({
+      tasks: [task({ name: 'fail' }), task({ name: 'next' })],
+      transport,
+      tagContext: context,
+      stopOnFailure: false,
+    });
+    expect(summary.results.map((result) => result.name)).toEqual([
+      'fail',
+      'next',
+    ]);
+  });
+
+  it('stops when an onchange target is unknown', async () => {
+    const transport = new FakeTransport().onExec(isShell, {});
+    const summary = await runTasks({
+      tasks: [
+        task({ name: 'a', onchange: ['missing'] }),
+        task({ name: 'never' }),
+      ],
+      transport,
+      tagContext: context,
+      stopOnFailure: true,
+    });
+    expect(summary.results.map((result) => result.name)).toEqual([
+      'a',
+      'missing',
+    ]);
+    expect(summary.failed).toBe(1);
+  });
+});

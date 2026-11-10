@@ -85,6 +85,14 @@ export const hostFileSchema = z.strictObject({
       'Override the default-deployment/default-filemappings file names.',
     ),
   ignored_guests: includable(z.array(ignoredGuestSchema)).default([]),
+  groups: z
+    .array(z.string().min(1))
+    .optional()
+    .describe('Groups used by Tier-1 tasks to target this host (D-51).'),
+  tags: z
+    .array(z.string().min(1))
+    .optional()
+    .describe('Tags used by Tier-1 tasks to target this host (D-51).'),
   drift_schedule: driftScheduleSchema.optional(),
   extra: z.record(z.string(), z.unknown()).optional(),
 });
