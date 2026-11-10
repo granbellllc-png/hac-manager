@@ -4,6 +4,7 @@ import { runValidate } from './commands/validate.js';
 import { runImport } from './commands/import.js';
 import { runPlan } from './commands/plan.js';
 import { runApply } from './commands/apply.js';
+import { runWhoami } from './commands/whoami.js';
 
 export function printHelp(): void {
   process.stdout.write(`hacm - Homelab as Code Manager CLI
@@ -18,6 +19,7 @@ Commands:
   import                   Import live guests into YAML deployment files
   plan                     Create a fingerprinted guest-import plan file
   apply                    Verify and apply a saved plan
+  whoami                   Verify API-token authentication against a server
 
 Init Options:
   -d, --data-dir <path>    Path to directory to scaffold (defaults to current directory)
@@ -56,6 +58,11 @@ Apply Options:
   --plan <path>            Saved plan document to verify and apply
   --dry-run                Run freshness checks without writing
   --confirm <text>         Typed confirmation for destructive plans
+  --json                   Output machine-readable JSON
+
+Whoami Options:
+  --server <url>           HAC Manager server (defaults to HACM_SERVER_URL)
+  --token-env <name>       Environment variable containing the token (default: HACM_API_TOKEN)
   --json                   Output machine-readable JSON
 
 Schema Export Options:
@@ -257,6 +264,23 @@ export async function runCli(argv: string[]): Promise<number> {
         confirmation = arg.slice('--confirm='.length);
     }
     return runApply({ dataDir, plan, dryRun, confirmation, json });
+  }
+
+  if (command === 'whoami') {
+    let server: string | undefined;
+    let tokenEnv: string | undefined;
+    let json = false;
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i]!;
+      if (arg === '--json') json = true;
+      else if (arg === '--server') server = args[++i];
+      else if (arg.startsWith('--server='))
+        server = arg.slice('--server='.length);
+      else if (arg === '--token-env') tokenEnv = args[++i];
+      else if (arg.startsWith('--token-env='))
+        tokenEnv = arg.slice('--token-env='.length);
+    }
+    return runWhoami({ server, tokenEnv, json });
   }
 
   if (command === 'schema') {

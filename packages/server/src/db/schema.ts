@@ -70,6 +70,30 @@ export const sessionsTable = sqliteTable('sessions', {
   userAgent: text('user_agent'),
 });
 
+export const apiTokensTable = sqliteTable(
+  'api_tokens',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => usersTable.id, { onDelete: 'cascade' }),
+    lookupId: text('lookup_id').notNull().unique(),
+    name: text('name').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    scope: text('scope', {
+      enum: ['admin', 'operator', 'viewer'],
+    }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+    lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    uniqueIndex('idx_api_tokens_lookup_id').on(table.lookupId),
+    index('idx_api_tokens_user_created').on(table.userId, table.createdAt),
+  ],
+);
+
 export const auditLogsTable = sqliteTable('audit_logs', {
   id: text('id').primaryKey(),
   userId: text('user_id'),
@@ -292,6 +316,9 @@ export type InsertAuditLogRow = typeof auditLogsTable.$inferInsert;
 
 export type SessionRow = typeof sessionsTable.$inferSelect;
 export type InsertSessionRow = typeof sessionsTable.$inferInsert;
+
+export type ApiTokenRow = typeof apiTokensTable.$inferSelect;
+export type InsertApiTokenRow = typeof apiTokensTable.$inferInsert;
 
 export type JobRow = typeof jobsTable.$inferSelect;
 export type InsertJobRow = typeof jobsTable.$inferInsert;

@@ -24,6 +24,7 @@ import type {
   CreateAuditInput,
   AuditFilter,
   SessionsRepository,
+  ApiTokensRepository,
   JobsRepository,
   JobLogLinesRepository,
   JobStepsRepository,
@@ -377,6 +378,58 @@ export function createSqliteRepositories(
         .where(eq(schema.sessionsTable.userId, userId))
         .run();
       return result.changes;
+    },
+  };
+
+  const apiTokens: ApiTokensRepository = {
+    async create(row) {
+      db.insert(schema.apiTokensTable).values(row).run();
+      const created = db
+        .select()
+        .from(schema.apiTokensTable)
+        .where(eq(schema.apiTokensTable.id, row.id))
+        .get();
+      if (!created) throw new Error(`Failed to create API token '${row.id}'`);
+      return created;
+    },
+    async getByLookupId(lookupId) {
+      return (
+        db
+          .select()
+          .from(schema.apiTokensTable)
+          .where(eq(schema.apiTokensTable.lookupId, lookupId))
+          .get() ?? null
+      );
+    },
+    async listByUser(userId) {
+      return db
+        .select()
+        .from(schema.apiTokensTable)
+        .where(eq(schema.apiTokensTable.userId, userId))
+        .orderBy(desc(schema.apiTokensTable.createdAt))
+        .all();
+    },
+    async updateLastUsed(id, lastUsedAt = new Date()) {
+      const result = db
+        .update(schema.apiTokensTable)
+        .set({ lastUsedAt })
+        .where(eq(schema.apiTokensTable.id, id))
+        .run();
+      return result.changes > 0;
+    },
+    async revoke(id, userId, revokedAt = new Date()) {
+      const result = db
+        .update(schema.apiTokensTable)
+        .set({ revokedAt })
+        .where(
+          and(
+            eq(schema.apiTokensTable.id, id),
+            eq(schema.apiTokensTable.userId, userId),
+            isNull(schema.apiTokensTable.revokedAt),
+          ),
+        )
+        .run();
+      return result.changes > 0;
     },
   };
 
@@ -911,6 +964,7 @@ export function createSqliteRepositories(
     recoveryCodes,
     auditLogs,
     sessions,
+    apiTokens,
     jobs,
     jobLogLines,
     jobSteps,

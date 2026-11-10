@@ -25,7 +25,8 @@ HAC Manager (Homelab as Code) is a self-hosted web app and backend that manages 
 | Standalone Proxmox hosts                             | Proxmox clusters                                 | Managing Git (commit, push, branches) |
 | LXC and VM lifecycle                                 |                                                  | Historical metrics and charts         |
 | Audited host and LXC web console                     | VM console                                       |                                       |
-| YAML config with inheritance, tags, safe expressions | Personal API tokens                              | PostgreSQL support                    |
+| YAML config with inheritance, tags, safe expressions |                                                  | PostgreSQL support                    |
+| Scoped, revocable personal API tokens                |                                                  |                                       |
 | Secrets from env, `secrets.yaml`, external CLIs      |                                                  | OIDC / SSO                            |
 | Headless vault unlock with memory-only tokens        |                                                  |                                       |
 | Drift detection and reconciliation                   | Docker Compose stacks module (design spike only) | Replacing Proxmox's own UI            |
@@ -265,7 +266,7 @@ Tier 3 is skipped unless file sync, identity checks and invariant checks have al
 
 ### 4.14 Users, roles, audit, security
 
-**D-64. Local auth.** First-run admin setup, argon2id, secure cookie sessions, CSRF protection, rate limiting and lockout, security headers. Sessions have a two-hour idle expiry that is refreshed in SQLite and a 24-hour absolute lifetime. Optional TOTP with single-use recovery codes; the browser submits the appropriate second factor and derives authenticated state only from a valid server session response. API tokens later. No OIDC in v1. _M3, M13._
+**D-64. Local auth.** First-run admin setup, argon2id, secure cookie sessions, CSRF protection, rate limiting and lockout, security headers. Sessions have a two-hour idle expiry that is refreshed in SQLite and a 24-hour absolute lifetime. Optional TOTP with single-use recovery codes; the browser submits the appropriate second factor and derives authenticated state only from a valid server session response. Personal API tokens follow D-74. No OIDC in v1. _M3, M13._
 
 **D-65. Roles.** `admin`, `operator`, `viewer`, plus per-host access and the `auto_grant_new_hosts` flag. Single-admin UX first; the schema supports several users.
 
@@ -276,6 +277,8 @@ Tier 3 is skipped unless file sync, identity checks and invariant checks have al
 **D-66. Audit log.** Every change records **who**, **what** (redacted diff), **when**, and **why** (`manual`, `drift_push`, `drift_pull`, `schedule`, `conflict_resolution`, `orphan_action`), linked to the job. Append-only, filterable by user, host, VMID, reason and time. _M3._
 
 **D-67. Threat model.** The app owns root on every host. Hardening is required, not optional: auth, redaction, host key pinning, allowlists, admin-only execution surfaces.
+
+**D-74. Personal API tokens are scoped, revocable and hashed at rest.** A token belongs to one local user, inherits that user's host grants and has a `viewer`, `operator` or `admin` scope that cannot exceed the user's current role. Tokens use high-entropy one-time plaintext values; SQLite stores only a SHA-256 hash plus a non-secret lookup identifier, name, scope, timestamps and optional expiry. Creating a token requires a browser session and password confirmation. Revocation is immediate, creation/revocation are audited, bearer requests do not require CSRF, and token-authenticated requests cannot create or revoke tokens. The CLI reads tokens from an environment variable rather than a command-line argument. _M13._
 
 ### 4.15 UI
 

@@ -29,6 +29,7 @@ import { driftModule } from './modules/drift/index.js';
 import { storageModule } from './modules/storage/index.js';
 import { vaultModule } from './modules/vault/index.js';
 import { consoleModule } from './modules/console/index.js';
+import { tokensModule } from './modules/tokens/index.js';
 import { HostRegistry } from './hosts/registry.js';
 import { ConnectionManager } from './router/manager.js';
 import { LiveInventoryService } from './inventory/service.js';
@@ -43,6 +44,7 @@ import { StorageInvariantService } from './storage/service.js';
 import { DriftScheduler } from './scheduler/service.js';
 import { VaultService } from './vault/service.js';
 import { ConsoleService } from './console/service.js';
+import { ApiTokenService } from './auth/api-token.js';
 import {
   SessionService,
   SESSION_COOKIE_NAME,
@@ -74,6 +76,7 @@ export interface BuildAppOptions {
   readonly scheduler?: DriftScheduler;
   readonly vaultService?: VaultService;
   readonly consoleService?: ConsoleService;
+  readonly apiTokenService?: ApiTokenService;
 }
 
 export async function buildApp(
@@ -181,6 +184,33 @@ export async function buildApp(
 
   const sessionService = new SessionService(repositories, config);
   const rateLimiter = new LoginRateLimiter();
+  const apiTokenService =
+    'apiTokenService' in configOrOptions && configOrOptions.apiTokenService
+      ? configOrOptions.apiTokenService
+      : new ApiTokenService(repositories);
+  app.decorate('apiTokenService', apiTokenService);
+
+  const authenticateRequest = async (
+    request: Parameters<SessionService['authenticate']>[0],
+  ) => {
+    const authorization = request.headers.authorization;
+    const token = await apiTokenService.authenticate(
+      typeof authorization === 'string' ? authorization : undefined,
+    );
+    if (token.status === 'authenticated') {
+      request.user = token.user;
+      request.authMethod = 'token';
+      request.apiTokenId = token.tokenId;
+      return true;
+    }
+    if (token.status === 'invalid') return false;
+    const session = await sessionService.authenticate(request);
+    if (!session) return false;
+    request.user = session.user;
+    request.sessionId = session.session.id;
+    request.authMethod = 'session';
+    return true;
+  };
 
   // Authentication & CSRF Hook at app level so routes added anywhere are protected
   app.addHook('onRequest', async (request, reply) => {
@@ -195,30 +225,50 @@ export async function buildApp(
       !path.startsWith('/api/');
 
     if (isPublic) {
-      if (request.cookies?.[SESSION_COOKIE_NAME]) {
-        const sessionCtx = await sessionService.authenticate(request);
-        if (sessionCtx) {
-          request.user = sessionCtx.user;
-          request.sessionId = sessionCtx.session.id;
-        }
+      if (
+        request.headers.authorization ||
+        request.cookies?.[SESSION_COOKIE_NAME]
+      ) {
+        await authenticateRequest(request);
+      }
+      if (
+        request.authMethod === 'token' &&
+        path.startsWith('/api/auth/') &&
+        path !== '/api/auth/status'
+      ) {
+        return reply.status(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: 'API tokens cannot manage browser authentication state',
+        });
       }
       return;
     }
 
-    const sessionCtx = await sessionService.authenticate(request);
-    if (!sessionCtx) {
+    if (!(await authenticateRequest(request))) {
       return reply.status(401).send({
         statusCode: 401,
         error: 'Unauthorized',
         message: 'Authentication required',
       });
     }
-
-    request.user = sessionCtx.user;
-    request.sessionId = sessionCtx.session.id;
+    if (
+      request.authMethod === 'token' &&
+      path.startsWith('/api/auth/') &&
+      path !== '/api/auth/status'
+    ) {
+      return reply.status(403).send({
+        statusCode: 403,
+        error: 'Forbidden',
+        message: 'API tokens cannot manage browser authentication state',
+      });
+    }
 
     const method = request.method.toUpperCase();
-    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    if (
+      request.authMethod === 'session' &&
+      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
+    ) {
       const headerCsrf = request.headers[CSRF_HEADER_NAME] as
         string | undefined;
       const cookieCsrf = request.cookies[CSRF_COOKIE_NAME];
@@ -414,6 +464,10 @@ export async function buildApp(
   await app.register(consoleModule, {
     hostRegistry,
     consoleService,
+  });
+  await app.register(tokensModule, {
+    repos: repositories,
+    tokenService: apiTokenService,
   });
   await app.register(plansModule, {
     hostRegistry,

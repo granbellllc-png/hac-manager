@@ -58,6 +58,22 @@ The 1Password desktop-app integration cannot unlock a headless server. Prefer
 a service account with access limited to the vaults and items HAC Manager
 needs.
 
+## CLI API tokens
+
+Create a personal token through the authenticated `/api/tokens` API. The raw
+value is returned once; store it in your shell or service environment, not in
+Git or a command-line argument:
+
+```bash
+export HACM_SERVER_URL=https://hacm.example.test
+export HACM_API_TOKEN=hacm_pat_...
+hacm whoami
+```
+
+Tokens inherit the owner's host grants, are capped to their selected role
+scope, and can be revoked immediately. Use a short expiry and the least
+privileged scope suitable for automation.
+
 ## systemd (bare metal or LXC)
 
 1. Install Node 22 LTS and pnpm, clone the repository to `/opt/hac-manager`, then `pnpm install --frozen-lockfile && pnpm build`.

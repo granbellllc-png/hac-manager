@@ -19,6 +19,8 @@ import type {
   InsertPlanRow,
   DriftSnapshotRow,
   InsertDriftSnapshotRow,
+  ApiTokenRow,
+  InsertApiTokenRow,
 } from '../schema.js';
 
 export interface SettingsRepository {
@@ -76,6 +78,14 @@ export interface SessionsRepository {
   delete(id: string): Promise<boolean>;
   deleteExpired(now?: Date): Promise<number>;
   deleteByUserId(userId: string): Promise<number>;
+}
+
+export interface ApiTokensRepository {
+  create(row: InsertApiTokenRow): Promise<ApiTokenRow>;
+  getByLookupId(lookupId: string): Promise<ApiTokenRow | null>;
+  listByUser(userId: string): Promise<readonly ApiTokenRow[]>;
+  updateLastUsed(id: string, lastUsedAt?: Date): Promise<boolean>;
+  revoke(id: string, userId: string, revokedAt?: Date): Promise<boolean>;
 }
 
 export type AuditReason =
@@ -254,6 +264,7 @@ export interface DatabaseRepositories {
   readonly recoveryCodes: RecoveryCodesRepository;
   readonly auditLogs: AuditLogsRepository;
   readonly sessions: SessionsRepository;
+  readonly apiTokens: ApiTokensRepository;
   readonly jobs: JobsRepository;
   readonly jobLogLines: JobLogLinesRepository;
   readonly jobSteps: JobStepsRepository;

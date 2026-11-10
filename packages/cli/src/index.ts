@@ -4,6 +4,7 @@ export { runInit, type CliInitOptions } from './commands/init.js';
 export { runValidate, type CliValidateOptions } from './commands/validate.js';
 export { runPlan, type CliPlanOptions } from './commands/plan.js';
 export { runApply, type CliApplyOptions } from './commands/apply.js';
+export { runWhoami, type CliWhoamiOptions } from './commands/whoami.js';
 
 export {
   runSchemaExport,

@@ -20,5 +20,6 @@ ADRs record technical choices and their consequences. [FEATURES.md](../FEATURES.
 | [0014](0014-safe-expression-evaluator.md) | Custom AST-based safe expression engine for `!expr`   |
 | [0015](0015-headless-vault-unlock.md)     | Headless vault unlock with memory-only tokens         |
 | [0016](0016-interactive-console.md)       | Dedicated SSH PTYs and WebSockets for web consoles    |
+| [0017](0017-personal-api-tokens.md)       | Hash-only scoped personal API tokens                  |
 
 Git management, cluster support and historical metrics are outside v1. v1 manages standalone hosts; clusters require a later design. These constraints follow FEATURES.md and must not be bypassed in an implementation.

@@ -350,6 +350,25 @@ describe('CLI command integration', () => {
     expect(stderr).toContain('Failed to read config file');
   });
 
+  it('parses whoami server and token environment options', async () => {
+    vi.stubEnv('FIXTURE_TOKEN', 'fixture-api-token');
+    const fetchFn = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json({
+        user: { id: 'user-1', username: 'fixture', role: 'viewer' },
+      }),
+    );
+    expect(
+      await runCli([
+        'whoami',
+        '--server=https://hacm.example.test',
+        '--token-env=FIXTURE_TOKEN',
+        '--json',
+      ]),
+    ).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({ username: 'fixture' });
+    expect(fetchFn).toHaveBeenCalled();
+  });
+
   it('accepts mixed string and Buffer chunks from stdin without writing in dry-run mode', async () => {
     const stdin = Readable.from([
       'hostname: fixture-stdin\n',

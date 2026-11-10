@@ -27,6 +27,8 @@ declare module 'fastify' {
   interface FastifyRequest {
     user?: AuthenticatedUser;
     sessionId?: string;
+    authMethod?: 'session' | 'token';
+    apiTokenId?: string;
   }
 }
 
@@ -49,6 +51,7 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
 
   // Authentication & CSRF Hook
   fastify.addHook('onRequest', async (request, reply) => {
+    if (request.user) return;
     const path = request.url.split('?')[0] ?? '/';
 
     // Public endpoints that do not require authentication:

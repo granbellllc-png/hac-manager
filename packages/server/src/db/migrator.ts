@@ -315,6 +315,30 @@ export const driftSnapshotsMigration: Migration = {
   },
 };
 
+export const apiTokensMigration: Migration = {
+  id: '0010_api_tokens',
+  up: (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS api_tokens (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        lookup_id TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        token_hash TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER,
+        last_used_at INTEGER,
+        revoked_at INTEGER
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_api_tokens_lookup_id
+        ON api_tokens(lookup_id);
+      CREATE INDEX IF NOT EXISTS idx_api_tokens_user_created
+        ON api_tokens(user_id, created_at);
+    `);
+  },
+};
+
 export const allMigrations: readonly Migration[] = [
   initialMigration,
   totpMigration,
@@ -325,6 +349,7 @@ export const allMigrations: readonly Migration[] = [
   jobReasonMigration,
   hostRuntimeMigration,
   driftSnapshotsMigration,
+  apiTokensMigration,
 ];
 
 export function runMigrations(
