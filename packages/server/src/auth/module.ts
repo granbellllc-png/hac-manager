@@ -37,6 +37,7 @@ export interface AuthPluginOptions {
   readonly config: ServerConfig;
   readonly sessionService?: SessionService;
   readonly rateLimiter?: LoginRateLimiter;
+  readonly skipAuthenticationHook?: boolean | undefined;
 }
 
 export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
@@ -49,62 +50,64 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
   const rateLimiter = options.rateLimiter ?? new LoginRateLimiter();
   const appKey = resolveAppKey(config);
 
-  // Authentication & CSRF Hook
-  fastify.addHook('onRequest', async (request, reply) => {
-    if (request.user) return;
-    const path = request.url.split('?')[0] ?? '/';
+  if (!options.skipAuthenticationHook) {
+    // Standalone authentication hook. buildApp supplies the shared
+    // session/token hook and skips this plugin-local copy.
+    fastify.addHook('onRequest', async (request, reply) => {
+      const path = request.url.split('?')[0] ?? '/';
 
-    // Public endpoints that do not require authentication:
-    // /api/health, /api/auth/setup, /api/auth/status, /api/auth/login, /api/openapi.json
-    const isPublic =
-      path === '/api/health' ||
-      path === '/api/openapi.json' ||
-      path === '/api/auth/status' ||
-      path === '/api/auth/setup' ||
-      path === '/api/auth/login' ||
-      !path.startsWith('/api/');
+      // Public endpoints that do not require authentication:
+      // /api/health, /api/auth/setup, /api/auth/status, /api/auth/login, /api/openapi.json
+      const isPublic =
+        path === '/api/health' ||
+        path === '/api/openapi.json' ||
+        path === '/api/auth/status' ||
+        path === '/api/auth/setup' ||
+        path === '/api/auth/login' ||
+        !path.startsWith('/api/');
 
-    if (isPublic) {
-      // Still try to authenticate if session cookie is provided
-      if (request.cookies?.[SESSION_COOKIE_NAME]) {
-        const sessionCtx = await sessionService.authenticate(request);
-        if (sessionCtx) {
-          request.user = sessionCtx.user;
-          request.sessionId = sessionCtx.session.id;
+      if (isPublic) {
+        // Still try to authenticate if session cookie is provided
+        if (request.cookies?.[SESSION_COOKIE_NAME]) {
+          const sessionCtx = await sessionService.authenticate(request);
+          if (sessionCtx) {
+            request.user = sessionCtx.user;
+            request.sessionId = sessionCtx.session.id;
+          }
         }
+        return;
       }
-      return;
-    }
 
-    // Authenticate request
-    const sessionCtx = await sessionService.authenticate(request);
-    if (!sessionCtx) {
-      return reply.status(401).send({
-        statusCode: 401,
-        error: 'Unauthorized',
-        message: 'Authentication required',
-      });
-    }
-
-    request.user = sessionCtx.user;
-    request.sessionId = sessionCtx.session.id;
-
-    // CSRF verification for mutating requests (POST, PUT, PATCH, DELETE)
-    const method = request.method.toUpperCase();
-    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-      const headerCsrf = request.headers[CSRF_HEADER_NAME] as
-        string | undefined;
-      const cookieCsrf = request.cookies[CSRF_COOKIE_NAME];
-
-      if (!headerCsrf || !cookieCsrf || headerCsrf !== cookieCsrf) {
-        return reply.status(403).send({
-          statusCode: 403,
-          error: 'Forbidden',
-          message: 'Invalid or missing CSRF token',
+      // Authenticate request
+      const sessionCtx = await sessionService.authenticate(request);
+      if (!sessionCtx) {
+        return reply.status(401).send({
+          statusCode: 401,
+          error: 'Unauthorized',
+          message: 'Authentication required',
         });
       }
-    }
-  });
+
+      request.user = sessionCtx.user;
+      request.sessionId = sessionCtx.session.id;
+
+      // CSRF verification for mutating requests (POST, PUT, PATCH, DELETE)
+      const method = request.method.toUpperCase();
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+        const headerCsrf = request.headers[CSRF_HEADER_NAME] as
+          string | undefined;
+        const cookieCsrf = request.cookies[CSRF_COOKIE_NAME];
+
+        if (!headerCsrf || !cookieCsrf || headerCsrf !== cookieCsrf) {
+          return reply.status(403).send({
+            statusCode: 403,
+            error: 'Forbidden',
+            message: 'Invalid or missing CSRF token',
+          });
+        }
+      }
+    });
+  }
 
   const typedFastify = fastify.withTypeProvider<ZodTypeProvider>();
 
@@ -516,17 +519,11 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
         },
       },
     },
-    async (request, reply) => {
-      if (!request.user) {
-        return reply.status(401).send({
-          statusCode: 401,
-          error: 'Unauthorized',
-          message: 'Authentication required',
-        });
-      }
-      const user = await repos.users.getById(request.user.id);
+    async (request) => {
+      const authenticatedUser = request.user!;
+      const user = await repos.users.getById(authenticatedUser.id);
       const remainingRecoveryCodes = await repos.recoveryCodes.countRemaining(
-        request.user.id,
+        authenticatedUser.id,
       );
       return {
         enabled: Boolean(user?.totpEnabled),
@@ -558,25 +555,18 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
         },
       },
     },
-    async (request, reply) => {
-      if (!request.user) {
-        return reply.status(401).send({
-          statusCode: 401,
-          error: 'Unauthorized',
-          message: 'Authentication required',
-        });
-      }
-
+    async (request) => {
+      const authenticatedUser = request.user!;
       const secret = generateTotpSecret();
-      const uri = generateTotpUri(request.user.username, secret);
+      const uri = generateTotpUri(authenticatedUser.username, secret);
       const qrCode = await generateTotpQrCode(uri);
       const recoveryCodes = generateRecoveryCodes(8);
 
       const encryptedSecret = encryptSecret(secret, appKey);
       const hashedCodes = recoveryCodes.map((code) => hashRecoveryCode(code));
 
-      await repos.users.setTotpSecret(request.user.id, encryptedSecret);
-      await repos.recoveryCodes.setCodes(request.user.id, hashedCodes);
+      await repos.users.setTotpSecret(authenticatedUser.id, encryptedSecret);
+      await repos.recoveryCodes.setCodes(authenticatedUser.id, hashedCodes);
 
       return {
         secret,
@@ -616,15 +606,8 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
       },
     },
     async (request, reply) => {
-      if (!request.user) {
-        return reply.status(401).send({
-          statusCode: 401,
-          error: 'Unauthorized',
-          message: 'Authentication required',
-        });
-      }
-
-      const user = await repos.users.getById(request.user.id);
+      const authenticatedUser = request.user!;
+      const user = await repos.users.getById(authenticatedUser.id);
       if (!user || !user.totpSecret) {
         return reply.status(400).send({
           statusCode: 400,
@@ -653,7 +636,7 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
         });
       }
 
-      await repos.users.setTotpEnabled(request.user.id, true);
+      await repos.users.setTotpEnabled(authenticatedUser.id, true);
 
       return {
         message: 'Two-factor authentication enabled successfully',
@@ -690,15 +673,8 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
       },
     },
     async (request, reply) => {
-      if (!request.user) {
-        return reply.status(401).send({
-          statusCode: 401,
-          error: 'Unauthorized',
-          message: 'Authentication required',
-        });
-      }
-
-      const user = await repos.users.getById(request.user.id);
+      const authenticatedUser = request.user!;
+      const user = await repos.users.getById(authenticatedUser.id);
       if (!user) {
         return reply.status(401).send({
           statusCode: 401,
@@ -719,9 +695,9 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
         });
       }
 
-      await repos.users.setTotpEnabled(request.user.id, false);
-      await repos.users.setTotpSecret(request.user.id, null);
-      await repos.recoveryCodes.deleteByUser(request.user.id);
+      await repos.users.setTotpEnabled(authenticatedUser.id, false);
+      await repos.users.setTotpSecret(authenticatedUser.id, null);
+      await repos.recoveryCodes.deleteByUser(authenticatedUser.id);
 
       return {
         message: 'Two-factor authentication disabled successfully',
@@ -757,15 +733,8 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
       },
     },
     async (request, reply) => {
-      if (!request.user) {
-        return reply.status(401).send({
-          statusCode: 401,
-          error: 'Unauthorized',
-          message: 'Authentication required',
-        });
-      }
-
-      const user = await repos.users.getById(request.user.id);
+      const authenticatedUser = request.user!;
+      const user = await repos.users.getById(authenticatedUser.id);
       if (!user) {
         return reply.status(401).send({
           statusCode: 401,
@@ -796,7 +765,7 @@ export const authModule: FastifyPluginAsync<AuthPluginOptions> = async (
 
       const newCodes = generateRecoveryCodes(8);
       const hashedCodes = newCodes.map((code) => hashRecoveryCode(code));
-      await repos.recoveryCodes.setCodes(request.user.id, hashedCodes);
+      await repos.recoveryCodes.setCodes(authenticatedUser.id, hashedCodes);
 
       return {
         recoveryCodes: newCodes,

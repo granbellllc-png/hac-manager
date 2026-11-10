@@ -485,6 +485,7 @@ export async function buildApp(
     config,
     sessionService,
     rateLimiter,
+    skipAuthenticationHook: true,
   });
 
   app.get('/api/openapi.json', { schema: { hide: true } }, async () =>
