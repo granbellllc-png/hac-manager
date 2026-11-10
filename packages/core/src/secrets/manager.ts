@@ -5,11 +5,18 @@ import type {
   SecretProvider,
   SecretProviderResult,
 } from '../tags/types.js';
+import { isTagValue } from '../schema/common.js';
 import { defaultNodeFileSystem, type FileSystem } from '../yaml/file.js';
 import { SecretTtlCache } from './cache.js';
 import { CommandSecretProvider } from './cmd-provider.js';
 import { EnvSecretProvider } from './env-provider.js';
-import type { SecretManagerOptions } from './types.js';
+import type {
+  SecretManagerOptions,
+  VaultProvider,
+  VaultProviderMetadata,
+  VaultProviderStatus,
+} from './types.js';
+import { commandName, createDefaultVaultProviders } from './vault-provider.js';
 import { YamlSecretProvider } from './yaml-provider.js';
 
 export class SecretManager implements SecretProvider, CmdProvider {
@@ -18,6 +25,8 @@ export class SecretManager implements SecretProvider, CmdProvider {
   private readonly yamlProvider: YamlSecretProvider;
   private readonly cmdProvider: CommandSecretProvider;
   private readonly envProvider: EnvSecretProvider;
+  private readonly vaultProviders = new Map<string, VaultProvider>();
+  private readonly vaultStatusCache: SecretTtlCache<VaultProviderStatus>;
 
   public constructor(options: SecretManagerOptions) {
     this.dataDir = options.dataDir;
@@ -25,6 +34,20 @@ export class SecretManager implements SecretProvider, CmdProvider {
     const ttlMs = options.ttlMs ?? 300_000; // 5 min default
 
     this.ttlCache = new SecretTtlCache<string>(ttlMs);
+    this.vaultStatusCache = new SecretTtlCache<VaultProviderStatus>(ttlMs);
+
+    const vaultProviders =
+      options.vaultProviders ??
+      createDefaultVaultProviders({
+        ...(options.cmdExecutor ? { executor: options.cmdExecutor } : {}),
+        ...(options.env ? { env: options.env } : {}),
+      });
+    for (const provider of vaultProviders) {
+      if (this.vaultProviders.has(provider.id)) {
+        throw new Error(`Duplicate vault provider id '${provider.id}'`);
+      }
+      this.vaultProviders.set(provider.id, provider);
+    }
 
     const secretsFilePath = resolve(this.dataDir, 'secrets.yaml');
     this.yamlProvider = new YamlSecretProvider({
@@ -36,6 +59,7 @@ export class SecretManager implements SecretProvider, CmdProvider {
       allowlist: options.allowlist ?? ['op', 'bw', 'pass', 'vault', 'echo'],
       executor: options.cmdExecutor,
       env: options.env,
+      runtimeEnv: () => this.runtimeVaultEnvironment(),
     });
 
     this.envProvider = new EnvSecretProvider({
@@ -77,7 +101,108 @@ export class SecretManager implements SecretProvider, CmdProvider {
     if (result.status === 'success') {
       this.ttlCache.set(cacheKey, result.output);
     }
+    const provider = this.vaultProviderForCommand(command);
+    if (provider && result.status === 'success') {
+      this.vaultStatusCache.set(provider.id, { status: 'unlocked' });
+    } else if (provider && result.status === 'locked') {
+      this.vaultStatusCache.set(provider.id, {
+        status: 'locked',
+        reason: result.reason,
+      });
+    }
     return result;
+  }
+
+  public listVaultProviders(): readonly VaultProviderMetadata[] {
+    return [...this.vaultProviders.values()].map(
+      ({ id, name, commands, tokenLabel, helpText }) => ({
+        id,
+        name,
+        commands,
+        tokenLabel,
+        helpText,
+      }),
+    );
+  }
+
+  public vaultProviderForCommand(
+    command: string,
+  ): VaultProviderMetadata | undefined {
+    const executable = commandName(command);
+    if (!executable) return undefined;
+    return [...this.vaultProviders.values()].find((provider) =>
+      provider.commands.includes(executable),
+    );
+  }
+
+  public requiredVaultProviderIds(input: unknown): readonly string[] {
+    const required = new Set<string>();
+    const walk = (value: unknown): void => {
+      if (isTagValue(value)) {
+        if (value.tag === 'cmd') {
+          const provider = this.vaultProviderForCommand(value.value);
+          if (provider) required.add(provider.id);
+        }
+        return;
+      }
+      if (Array.isArray(value)) {
+        for (const item of value) walk(item);
+        return;
+      }
+      if (value && typeof value === 'object') {
+        for (const item of Object.values(value as Record<string, unknown>)) {
+          walk(item);
+        }
+      }
+    };
+    walk(input);
+    return [...required].sort();
+  }
+
+  public async getVaultStatus(
+    providerId: string,
+    options: { readonly refresh?: boolean | undefined } = {},
+  ): Promise<VaultProviderStatus> {
+    const provider = this.vaultProviders.get(providerId);
+    if (!provider) {
+      return {
+        status: 'unavailable',
+        reason: `Vault provider '${providerId}' is not configured`,
+      };
+    }
+    if (!options.refresh) {
+      const cached = this.vaultStatusCache.get(providerId);
+      if (cached) return cached;
+    }
+    const status = await provider.status();
+    this.vaultStatusCache.set(providerId, status);
+    return status;
+  }
+
+  public async unlockVault(
+    providerId: string,
+    token: string,
+  ): Promise<VaultProviderStatus> {
+    const provider = this.vaultProviders.get(providerId);
+    if (!provider) {
+      return {
+        status: 'unavailable',
+        reason: `Vault provider '${providerId}' is not configured`,
+      };
+    }
+    const status = await provider.unlock(token);
+    this.vaultStatusCache.set(providerId, status);
+    if (status.status === 'unlocked') this.ttlCache.clear();
+    return status;
+  }
+
+  public clearVault(providerId: string): boolean {
+    const provider = this.vaultProviders.get(providerId);
+    if (!provider) return false;
+    provider.clear();
+    this.vaultStatusCache.invalidate(providerId);
+    this.ttlCache.clear();
+    return true;
   }
 
   public async resolveEnvVar(
@@ -98,7 +223,17 @@ export class SecretManager implements SecretProvider, CmdProvider {
 
   public invalidateAll(): void {
     this.ttlCache.clear();
+    this.vaultStatusCache.clear();
     this.yamlProvider.invalidate();
     this.envProvider.clear();
+  }
+
+  private runtimeVaultEnvironment(): Record<string, string> {
+    return Object.assign(
+      {},
+      ...[...this.vaultProviders.values()].map((provider) =>
+        provider.environment(),
+      ),
+    ) as Record<string, string>;
   }
 }

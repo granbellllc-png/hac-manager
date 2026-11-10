@@ -29,7 +29,11 @@ export function parseCommandArgs(cmd: string): string[] {
   return args;
 }
 
-const defaultNodeExecutor: CmdExecutor = async (bin, args, options) => {
+export const defaultNodeCmdExecutor: CmdExecutor = async (
+  bin,
+  args,
+  options,
+) => {
   const { execFile } = await import('node:child_process');
   return new Promise((resolve) => {
     execFile(
@@ -55,6 +59,9 @@ const defaultNodeExecutor: CmdExecutor = async (bin, args, options) => {
           stdout: outStr,
           stderr: errStr,
           exitCode,
+          ...(error && typeof error.code === 'string'
+            ? { errorCode: error.code }
+            : {}),
         });
       },
     );
@@ -80,13 +87,16 @@ export class CommandSecretProvider implements CmdProvider {
   private readonly maxOutputBytes: number;
   private readonly executor: CmdExecutor;
   private readonly env?: Record<string, string | undefined> | undefined;
+  private readonly runtimeEnv?:
+    (() => Record<string, string | undefined>) | undefined;
 
   public constructor(options: CommandSecretProviderOptions) {
     this.allowlist = options.allowlist;
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? 5000;
     this.maxOutputBytes = options.maxOutputBytes ?? 64 * 1024;
-    this.executor = options.executor ?? defaultNodeExecutor;
+    this.executor = options.executor ?? defaultNodeCmdExecutor;
     this.env = options.env;
+    this.runtimeEnv = options.runtimeEnv;
   }
 
   public async resolveCmd(command: string): Promise<CmdProviderResult> {
@@ -127,7 +137,10 @@ export class CommandSecretProvider implements CmdProvider {
         argv,
         timeoutMs: this.defaultTimeoutMs,
         maxOutputBytes: this.maxOutputBytes,
-        env: this.env,
+        env: {
+          ...this.env,
+          ...this.runtimeEnv?.(),
+        },
       });
 
       const combinedOutput = `${execResult.stdout}\n${execResult.stderr}`;

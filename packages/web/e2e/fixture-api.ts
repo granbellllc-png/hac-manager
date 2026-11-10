@@ -11,6 +11,7 @@ import {
 export async function installFixtureApi(
   page: Page,
   mode: 'authenticated' | 'login' | 'setup' = 'authenticated',
+  options: { readonly vaultPrompt?: boolean | undefined } = {},
 ) {
   let authenticated = mode === 'authenticated';
   let setupNeeded = mode === 'setup';
@@ -21,19 +22,41 @@ export async function installFixtureApi(
     role: 'admin',
     totpEnabled: false,
   };
-  const fixtureJob = {
+  let fixtureJob = {
     id: 'fixture-job',
     hostId: fixtureHost.id,
     vmid: 112,
     lane: 'guest',
     type: 'plan.apply',
     reason: 'manual',
-    status: 'running',
+    status: options.vaultPrompt ? 'waiting_input' : 'running',
     priority: 0,
     triggeredBy: user.id,
     createdAt: fixtureHost.updatedAt,
     startedAt: fixtureHost.updatedAt,
   };
+  let fixturePrompt = options.vaultPrompt
+    ? {
+        id: 'fixture-vault-prompt',
+        jobId: fixtureJob.id,
+        hostId: fixtureHost.id,
+        vmid: 112,
+        kind: 'confirm',
+        status: 'pending',
+        message: 'Unlock 1Password CLI to continue',
+        payload: {
+          type: 'vault_unlock',
+          providerId: 'op',
+          providerName: '1Password CLI',
+          tokenLabel: '1Password service-account token',
+          helpText:
+            'Desktop-app unlock is unavailable on headless servers. Use a service-account token.',
+          storage: 'memory_only',
+        },
+        options: [],
+        createdAt: fixtureHost.updatedAt,
+      }
+    : null;
   await page.route('**://*/api/**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -191,7 +214,7 @@ export async function installFixtureApi(
             rollbackHint: 'Inspect the generated YAML.',
           },
         ],
-        prompts: [],
+        prompts: fixturePrompt ? [fixturePrompt] : [],
       };
     else if (path === '/api/jobs/fixture-job/logs')
       body = {
@@ -213,8 +236,28 @@ export async function installFixtureApi(
         ],
         nextCursor: 2,
       };
-    else if (path === '/api/prompts') body = { prompts: [] };
-    else if (path === '/api/jobs/fixture-job/cancel')
+    else if (path === '/api/prompts')
+      body = { prompts: fixturePrompt ? [fixturePrompt] : [] };
+    else if (
+      path === '/api/hosts/fixture-host/vault/providers/op/unlock' &&
+      request.method() === 'POST'
+    )
+      body = {
+        id: 'op',
+        name: '1Password CLI',
+        commands: ['op'],
+        tokenLabel: '1Password service-account token',
+        helpText: 'Use a service-account token.',
+        status: 'unlocked',
+      };
+    else if (
+      path === '/api/prompts/fixture-vault-prompt/resolve' &&
+      request.method() === 'POST'
+    ) {
+      fixturePrompt = null;
+      fixtureJob = { ...fixtureJob, status: 'running' };
+      body = { status: 'resolved' };
+    } else if (path === '/api/jobs/fixture-job/cancel')
       body = { job: { ...fixtureJob, status: 'cancelled' } };
     else {
       status = 404;

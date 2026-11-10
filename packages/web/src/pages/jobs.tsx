@@ -94,6 +94,13 @@ interface StoragePromptDetails {
   readonly recommendedResolution?: string | undefined;
 }
 
+interface VaultUnlockPromptDetails {
+  readonly providerId: string;
+  readonly providerName: string;
+  readonly tokenLabel: string;
+  readonly helpText: string;
+}
+
 const storageResolutionLabels: Readonly<Record<string, string>> = {
   'keep-host-data': 'Keep Host Data',
   'migrate-rootfs-to-host': 'Migrate Rootfs to Host',
@@ -119,6 +126,26 @@ function parseStorageSide(value: unknown): StorageSidePromptSummary | null {
     ...(typeof value['newestTimestamp'] === 'string'
       ? { newestTimestamp: value['newestTimestamp'] }
       : {}),
+  };
+}
+
+function parseVaultUnlockPrompt(
+  value: unknown,
+): VaultUnlockPromptDetails | null {
+  if (!isRecord(value) || value['type'] !== 'vault_unlock') return null;
+  if (
+    typeof value['providerId'] !== 'string' ||
+    typeof value['providerName'] !== 'string' ||
+    typeof value['tokenLabel'] !== 'string' ||
+    typeof value['helpText'] !== 'string'
+  ) {
+    return null;
+  }
+  return {
+    providerId: value['providerId'],
+    providerName: value['providerName'],
+    tokenLabel: value['tokenLabel'],
+    helpText: value['helpText'],
   };
 }
 
@@ -236,16 +263,28 @@ function PromptModal({
   prompt,
   busy,
   error,
+  canUnlockVault,
   onResolve,
+  onUnlockVault,
 }: {
   readonly prompt: JobPrompt;
   readonly busy: boolean;
   readonly error: string | null;
+  readonly canUnlockVault: boolean;
   readonly onResolve: (resolution: PromptResolution) => Promise<void>;
+  readonly onUnlockVault: (
+    details: VaultUnlockPromptDetails,
+    token: string,
+  ) => Promise<void>;
 }) {
   const [typedText, setTypedText] = useState('');
+  const [vaultToken, setVaultToken] = useState('');
   const storage = parseStoragePrompt(prompt.payload);
-  useEffect(() => setTypedText(''), [prompt.id]);
+  const vaultUnlock = parseVaultUnlockPrompt(prompt.payload);
+  useEffect(() => {
+    setTypedText('');
+    setVaultToken('');
+  }, [prompt.id]);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 sm:items-center">
       <section
@@ -318,6 +357,18 @@ function PromptModal({
             </p>
           </div>
         )}
+        {vaultUnlock && (
+          <div className="mt-4 rounded-md border bg-muted/40 p-3 text-sm">
+            <p className="font-medium">{vaultUnlock.providerName}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {vaultUnlock.helpText}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              The token is validated immediately, held in server memory only,
+              and never stored in the job, prompt, audit log, or database.
+            </p>
+          </div>
+        )}
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           {prompt.kind === 'choice' &&
             prompt.options.map((option) => (
@@ -347,7 +398,7 @@ function PromptModal({
                   )}
               </Button>
             ))}
-          {prompt.kind === 'confirm' && (
+          {prompt.kind === 'confirm' && !vaultUnlock && (
             <>
               <Button
                 type="button"
@@ -370,6 +421,40 @@ function PromptModal({
               </Button>
             </>
           )}
+          {vaultUnlock &&
+            (canUnlockVault ? (
+              <form
+                className="flex w-full flex-col gap-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void onUnlockVault(vaultUnlock, vaultToken);
+                }}
+              >
+                <label className="text-sm font-medium" htmlFor="vault-token">
+                  {vaultUnlock.tokenLabel}
+                </label>
+                <input
+                  id="vault-token"
+                  type="password"
+                  autoComplete="off"
+                  autoFocus
+                  value={vaultToken}
+                  onChange={(event) => setVaultToken(event.target.value)}
+                  className="h-10 rounded-md border border-border bg-background px-3 font-mono text-sm"
+                />
+                <Button
+                  type="submit"
+                  disabled={busy || vaultToken.trim().length === 0}
+                >
+                  Unlock and resume
+                </Button>
+              </form>
+            ) : (
+              <p className="w-full rounded-md bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+                An administrator must unlock this provider before the job can
+                continue.
+              </p>
+            ))}
           {prompt.kind === 'typed_confirmation' && (
             <form
               className="flex w-full flex-col gap-3"
@@ -610,6 +695,57 @@ export function JobsPage() {
         resolveError instanceof Error
           ? resolveError.message
           : String(resolveError),
+      );
+    } finally {
+      setPromptBusy(false);
+    }
+  };
+
+  const unlockVault = async (
+    details: VaultUnlockPromptDetails,
+    token: string,
+  ) => {
+    const prompt = pendingPrompts[0];
+    if (!prompt) return;
+    setPromptBusy(true);
+    setPromptError(null);
+    try {
+      const unlockResponse = await apiClient.POST(
+        '/api/hosts/{hostId}/vault/providers/{providerId}/unlock',
+        {
+          params: {
+            path: {
+              hostId: prompt.hostId,
+              providerId: details.providerId,
+            },
+          },
+          body: { token },
+        },
+      );
+      if (unlockResponse.error) {
+        throw new Error(
+          errorMessage(unlockResponse.error, 'Could not unlock the vault.'),
+        );
+      }
+      const resolution = await apiClient.POST(
+        '/api/prompts/{promptId}/resolve',
+        {
+          params: { path: { promptId: prompt.id } },
+          body: { kind: 'confirm', confirmed: true },
+        },
+      );
+      if (resolution.error) {
+        throw new Error(
+          errorMessage(resolution.error, 'Could not resume the job.'),
+        );
+      }
+      await loadPrompts();
+      if (selectedJobId === prompt.jobId) await loadDetail(prompt.jobId);
+    } catch (unlockError) {
+      setPromptError(
+        unlockError instanceof Error
+          ? unlockError.message
+          : String(unlockError),
       );
     } finally {
       setPromptBusy(false);
@@ -888,7 +1024,9 @@ export function JobsPage() {
           prompt={pendingPrompts[0]}
           busy={promptBusy}
           error={promptError}
+          canUnlockVault={user?.role === 'admin'}
           onResolve={resolvePrompt}
+          onUnlockVault={unlockVault}
         />
       )}
     </section>
@@ -902,6 +1040,7 @@ export const jobsPageInternals = {
   errorMessage,
   mergeLogLines,
   parseStoragePrompt,
+  parseVaultUnlockPrompt,
   formatStorageBytes,
   formatStorageTimestamp,
 };

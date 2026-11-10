@@ -13,3 +13,4 @@ export * from './prompts/index.js';
 export * from './plans/index.js';
 export * from './drift/index.js';
 export * from './scheduler/index.js';
+export * from './vault/index.js';

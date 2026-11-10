@@ -23,6 +23,7 @@ export interface CmdExecutionResult {
   readonly stdout: string;
   readonly stderr: string;
   readonly exitCode: number;
+  readonly errorCode?: string | undefined;
 }
 
 export type CmdExecutor = (
@@ -45,6 +46,41 @@ export interface CommandSecretProviderOptions {
   readonly executor?: CmdExecutor | undefined;
   /** Environment variables to pass to the spawned process */
   readonly env?: Record<string, string | undefined> | undefined;
+  /** Ephemeral environment, such as in-memory vault session tokens. */
+  readonly runtimeEnv?: (() => Record<string, string | undefined>) | undefined;
+}
+
+export type VaultProviderState = 'unlocked' | 'locked' | 'unavailable';
+
+export interface VaultProviderStatus {
+  readonly status: VaultProviderState;
+  readonly reason?: string | undefined;
+}
+
+export interface VaultProviderMetadata {
+  readonly id: string;
+  readonly name: string;
+  readonly commands: readonly string[];
+  readonly tokenLabel: string;
+  readonly helpText: string;
+}
+
+export interface VaultProvider extends VaultProviderMetadata {
+  status(): Promise<VaultProviderStatus>;
+  unlock(token: string): Promise<VaultProviderStatus>;
+  clear(): void;
+  environment(): Readonly<Record<string, string>>;
+}
+
+export interface CliVaultProviderOptions extends VaultProviderMetadata {
+  readonly tokenEnvVar: string;
+  readonly statusArgv: readonly string[];
+  readonly executor?: CmdExecutor | undefined;
+  readonly env?: Record<string, string | undefined> | undefined;
+  readonly timeoutMs?: number | undefined;
+  readonly maxOutputBytes?: number | undefined;
+  readonly evaluateStatus?:
+    ((result: CmdExecutionResult) => VaultProviderStatus) | undefined;
 }
 
 export interface SecretManagerOptions {
@@ -54,4 +90,5 @@ export interface SecretManagerOptions {
   readonly fs?: FileSystem | undefined;
   readonly cmdExecutor?: CmdExecutor | undefined;
   readonly env?: Record<string, string | undefined> | undefined;
+  readonly vaultProviders?: readonly VaultProvider[] | undefined;
 }

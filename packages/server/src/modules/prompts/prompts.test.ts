@@ -1,11 +1,12 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../../app.js';
 import { loadConfig } from '../../config.js';
 import { createDatabase, createSqliteRepositories } from '../../db/index.js';
 import { DurableJobQueue } from '../../jobs/queue.js';
+import type { PromptService } from '../../prompts/service.js';
 import {
   CSRF_COOKIE_NAME,
   CSRF_HEADER_NAME,
@@ -122,6 +123,7 @@ connection:
     handle,
     repos,
     queue,
+    admin,
     operator: session(operatorLogin.headers),
     viewer: session(viewerLogin.headers),
   };
@@ -134,6 +136,62 @@ afterEach(async () => {
 });
 
 describe('prompts API', () => {
+  it('requires an administrator to resolve vault unlock prompts', async () => {
+    const fixture = await createFixture();
+    try {
+      await fixture.repos.jobs.create({
+        id: 'vault-prompt-job',
+        hostId: 'pve-01',
+        vmid: null,
+        lane: 'host',
+        type: 'vault-dependent',
+        reason: 'manual',
+        status: 'waiting_input',
+        priority: 0,
+        createdAt: new Date(),
+      });
+      await fixture.repos.prompts.create({
+        id: 'vault-prompt',
+        jobId: 'vault-prompt-job',
+        kind: 'confirm',
+        status: 'pending',
+        message: 'Unlock the vault',
+        payloadJson: JSON.stringify({
+          type: 'vault_unlock',
+          providerId: 'op',
+        }),
+        optionsJson: null,
+        expectedText: null,
+        createdAt: new Date(),
+      });
+      const operator = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/prompts/vault-prompt/resolve',
+        headers: {
+          cookie: fixture.operator.cookie,
+          [CSRF_HEADER_NAME]: fixture.operator.csrf,
+        },
+        payload: { kind: 'confirm', confirmed: true },
+      });
+      expect(operator.statusCode).toBe(403);
+      expect(operator.json().message).toContain('Only administrators');
+
+      const admin = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/prompts/vault-prompt/resolve',
+        headers: {
+          cookie: fixture.admin.cookie,
+          [CSRF_HEADER_NAME]: fixture.admin.csrf,
+        },
+        payload: { kind: 'confirm', confirmed: true },
+      });
+      expect(admin.statusCode).toBe(200);
+    } finally {
+      await fixture.app.close();
+      fixture.handle.close();
+    }
+  });
+
   it('wires queue prompts through the app and resumes after REST resolution', async () => {
     const fixture = await createFixture();
     try {
@@ -242,6 +300,12 @@ describe('prompts API', () => {
       expect(list.json().prompts).toEqual([
         expect.objectContaining({ id: 'choice', hostId: 'pve-01' }),
       ]);
+      const visible = await fixture.app.inject({
+        method: 'GET',
+        url: '/api/prompts/choice',
+        headers: { cookie: fixture.operator.cookie },
+      });
+      expect(visible.statusCode).toBe(200);
       const denied = await fixture.app.inject({
         method: 'GET',
         url: '/api/prompts/denied',
@@ -254,6 +318,27 @@ describe('prompts API', () => {
         headers: { cookie: fixture.operator.cookie },
       });
       expect(missing.statusCode).toBe(404);
+      const missingResolution = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/prompts/missing/resolve',
+        headers: {
+          cookie: fixture.operator.cookie,
+          [CSRF_HEADER_NAME]: fixture.operator.csrf,
+        },
+        payload: { kind: 'confirm', confirmed: true },
+      });
+      expect(missingResolution.statusCode).toBe(404);
+
+      const deniedResolution = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/prompts/denied/resolve',
+        headers: {
+          cookie: fixture.operator.cookie,
+          [CSRF_HEADER_NAME]: fixture.operator.csrf,
+        },
+        payload: { kind: 'confirm', confirmed: true },
+      });
+      expect(deniedResolution.statusCode).toBe(403);
 
       const invalid = await fixture.app.inject({
         method: 'POST',
@@ -303,6 +388,31 @@ describe('prompts API', () => {
         payload: { kind: 'confirm', confirmed: true },
       });
       expect(expired.statusCode).toBe(410);
+
+      await fixture.repos.prompts.create({
+        id: 'unexpected',
+        jobId: 'job-1',
+        kind: 'confirm',
+        status: 'pending',
+        message: 'Unexpected',
+        createdAt: now,
+      });
+      const promptService = (
+        fixture.app as typeof fixture.app & { promptService: PromptService }
+      ).promptService;
+      vi.spyOn(promptService, 'resolve').mockRejectedValueOnce(
+        new Error('unexpected resolution failure'),
+      );
+      const unexpected = await fixture.app.inject({
+        method: 'POST',
+        url: '/api/prompts/unexpected/resolve',
+        headers: {
+          cookie: fixture.operator.cookie,
+          [CSRF_HEADER_NAME]: fixture.operator.csrf,
+        },
+        payload: { kind: 'confirm', confirmed: true },
+      });
+      expect(unexpected.statusCode).toBe(500);
     } finally {
       await fixture.app.close();
       fixture.handle.close();

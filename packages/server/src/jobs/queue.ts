@@ -12,6 +12,7 @@ import {
   type EnqueueJobInput,
   type JobExecutionContext,
   type JobHandler,
+  type JobPreflightHandler,
   type JobPromptHandler,
   type JobStatusEvent,
   type NamedJobPriority,
@@ -52,6 +53,7 @@ export class DurableJobQueue extends EventEmitter {
   private readonly hostConcurrency: Readonly<Record<string, number>>;
   private readonly handlers = new Map<string, JobHandler>();
   private promptHandler?: JobPromptHandler;
+  private preflightHandler?: JobPreflightHandler;
   private readonly running = new Map<string, RunningJob>();
   private readonly runningByHost = new Map<string, number>();
   private readonly guestLocks = new Set<string>();
@@ -94,6 +96,10 @@ export class DurableJobQueue extends EventEmitter {
 
   public setPromptHandler(handler: JobPromptHandler): void {
     this.promptHandler = handler;
+  }
+
+  public setPreflightHandler(handler: JobPreflightHandler): void {
+    this.preflightHandler = handler;
   }
 
   public async start(): Promise<number> {
@@ -440,6 +446,7 @@ export class DurableJobQueue extends EventEmitter {
           return resolution;
         },
       };
+      await this.preflightHandler?.(context);
       await handler(context);
 
       if (running.stopReason === 'cancelled') throw new JobCancelledError();

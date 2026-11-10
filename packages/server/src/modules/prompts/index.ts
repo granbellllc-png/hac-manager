@@ -41,6 +41,14 @@ const errorSchema = z.object({
   message: z.string(),
 });
 
+function isVaultUnlockPrompt(payload: unknown): boolean {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    (payload as Record<string, unknown>)['type'] === 'vault_unlock'
+  );
+}
+
 export const promptsModule: FastifyPluginAsyncZod<
   PromptsModuleOptions
 > = async (app, options) => {
@@ -134,6 +142,16 @@ export const promptsModule: FastifyPluginAsyncZod<
           statusCode: 404,
           error: 'Not Found',
           message: `Prompt '${request.params.promptId}' was not found`,
+        });
+      }
+      if (
+        isVaultUnlockPrompt(prompt.payload) &&
+        request.user?.role !== 'admin'
+      ) {
+        return reply.code(403).send({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: 'Only administrators may resolve vault unlock prompts',
         });
       }
       const allowed = await options.hostRegistry.listHosts(request.user);

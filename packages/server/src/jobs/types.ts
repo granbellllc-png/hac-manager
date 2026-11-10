@@ -33,6 +33,9 @@ export interface JobExecutionContext {
 }
 
 export type JobHandler = (context: JobExecutionContext) => Promise<void>;
+export type JobPreflightHandler = (
+  context: JobExecutionContext,
+) => Promise<void>;
 
 export interface JobPromptRequest {
   readonly id?: string | undefined;

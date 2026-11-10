@@ -24,8 +24,9 @@ HAC Manager (Homelab as Code) is a self-hosted web app and backend that manages 
 | ---------------------------------------------------- | ------------------------------------------------ | ------------------------------------- |
 | Standalone Proxmox hosts                             | Proxmox clusters                                 | Managing Git (commit, push, branches) |
 | LXC and VM lifecycle                                 | Web console (xterm.js)                           | Historical metrics and charts         |
-| YAML config with inheritance, tags, safe expressions | Interactive vault unlock UI                      | PostgreSQL support                    |
-| Secrets from env, `secrets.yaml`, external CLIs      | Personal API tokens                              | OIDC / SSO                            |
+| YAML config with inheritance, tags, safe expressions | Personal API tokens                              | PostgreSQL support                    |
+| Secrets from env, `secrets.yaml`, external CLIs      |                                                  | OIDC / SSO                            |
+| Headless vault unlock with memory-only tokens        |                                                  |                                       |
 | Drift detection and reconciliation                   | Docker Compose stacks module (design spike only) | Replacing Proxmox's own UI            |
 | File sync, `.env` rendering, conflict handling       | Optional auto-commit of UI changes (undecided)   | Bundling `op` / `bw` CLIs             |
 | Tasks cascade, guest baseline, SSH bootstrap         |                                                  |                                       |
@@ -111,7 +112,7 @@ Resolved plaintext is never written to Git-tracked files. _M2._
 
 **D-16. Secret CLIs are not bundled.** The app may run on bare metal, in an LXC or in Docker. Users install `op`/`bw` themselves (or extend the image). _M0 (docs)._
 
-**D-17. Interactive vault unlock is later.** v1 providers are env, `secrets.yaml` and `!cmd`. Providers can report a `locked` state; the UI unlock flow and graceful job degradation arrive in M13. Known limitation: desktop-integrated CLIs (for example 1Password desktop) do not work on servers; prefer service accounts. _M13._
+**D-17. Interactive vault unlock is headless and memory-only.** `!cmd` providers expose status and unlock operations. When a required provider is locked, a dependent job pauses in `waiting_input` and emits its existing durable prompt over SSE. An administrator submits a session or service-account token through a dedicated endpoint before resolving the prompt; the token is validated immediately, registered for redaction, held in process memory only and never written to jobs, prompts, audit records or SQLite. Scheduled/background work fails or backs off cleanly when a CLI is unavailable. Desktop-integrated unlock (for example 1Password desktop) is unsupported on servers; use service accounts or externally generated session tokens. _M13._
 
 **D-18. `.env` rendering uses `.env.yaml`.** A YAML map with tags renders to a dotenv file in the guest (mode 0600, escaping for dotenv and Compose `$`). A `template` filemapping whose source is `.env.yaml` names the destination; that destination must be called `.env`, must lie outside the data dir, and always receives mode 0600. Rendering happens once per sync and the plan carries only the rendered hash, size, mode and variable names. `compose.yaml` and app configs stay clean using `${VAR}`. The rendered file is never written to Git-tracked paths, and change detection uses a hash of the rendered output. _M9._
 

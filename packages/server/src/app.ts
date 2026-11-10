@@ -5,6 +5,7 @@ import swagger from '@fastify/swagger';
 import fastifyStatic from '@fastify/static';
 import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
+import { SecretManager } from '@hacm/core';
 import {
   validatorCompiler,
   serializerCompiler,
@@ -25,6 +26,7 @@ import { plansModule } from './modules/plans/index.js';
 import { jobsModule } from './modules/jobs/index.js';
 import { driftModule } from './modules/drift/index.js';
 import { storageModule } from './modules/storage/index.js';
+import { vaultModule } from './modules/vault/index.js';
 import { HostRegistry } from './hosts/registry.js';
 import { ConnectionManager } from './router/manager.js';
 import { LiveInventoryService } from './inventory/service.js';
@@ -37,6 +39,7 @@ import { PlanService } from './plans/service.js';
 import { DriftService } from './drift/service.js';
 import { StorageInvariantService } from './storage/service.js';
 import { DriftScheduler } from './scheduler/service.js';
+import { VaultService } from './vault/service.js';
 import {
   SessionService,
   SESSION_COOKIE_NAME,
@@ -66,6 +69,7 @@ export interface BuildAppOptions {
   readonly driftService?: DriftService;
   readonly storageInvariantService?: StorageInvariantService;
   readonly scheduler?: DriftScheduler;
+  readonly vaultService?: VaultService;
 }
 
 export async function buildApp(
@@ -240,8 +244,26 @@ export async function buildApp(
       : new ConnectionManager({
           dataDir: config.HACM_DATA_DIR,
           hostRegistry,
+          secretManager: new SecretManager({
+            dataDir: config.HACM_DATA_DIR,
+            ttlMs: config.HACM_SECRET_TTL_SECONDS * 1000,
+          }),
         });
   app.decorate('connectionManager', connectionManager);
+  const vaultService =
+    'vaultService' in configOrOptions && configOrOptions.vaultService
+      ? configOrOptions.vaultService
+      : new VaultService(
+          connectionManager.secretManager ??
+            new SecretManager({
+              dataDir: config.HACM_DATA_DIR,
+              ttlMs: config.HACM_SECRET_TTL_SECONDS * 1000,
+            }),
+          hostRegistry,
+          repositories,
+        );
+  jobQueue.setPreflightHandler((context) => vaultService.preflight(context));
+  app.decorate('vaultService', vaultService);
 
   const inventoryService =
     'inventoryService' in configOrOptions && configOrOptions.inventoryService
@@ -370,6 +392,10 @@ export async function buildApp(
   await app.register(promptsModule, {
     hostRegistry,
     promptService,
+  });
+  await app.register(vaultModule, {
+    hostRegistry,
+    vaultService,
   });
   await app.register(plansModule, {
     hostRegistry,

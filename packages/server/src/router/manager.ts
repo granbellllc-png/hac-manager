@@ -1,4 +1,5 @@
 import {
+  globalSecretRedactor,
   resolveConfigTags,
   Secret,
   SecretManager,
@@ -22,6 +23,26 @@ export interface ConnectionManagerOptions {
   readonly hostRegistry: HostRegistry;
   readonly secretManager?: SecretManager | undefined;
   readonly sshPool?: SshPool | undefined;
+}
+
+export class VaultLockedError extends Error {
+  public constructor(
+    public readonly hostId: string,
+    public readonly providerIds: readonly string[],
+  ) {
+    super(`Vault access is locked for host '${hostId}'`);
+    this.name = 'VaultLockedError';
+  }
+}
+
+export class SecretResolutionError extends Error {
+  public constructor(
+    public readonly hostId: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'SecretResolutionError';
+  }
 }
 
 export class ConnectionManager {
@@ -77,6 +98,47 @@ export class ConnectionManager {
         env: process.env,
       },
     );
+
+    if (resolution.report.locked.length > 0) {
+      const providerIds = new Set<string>();
+      for (const locked of resolution.report.locked) {
+        if (locked.tag !== 'cmd') continue;
+        const provider = this.secretManager.vaultProviderForCommand(locked.raw);
+        if (provider) providerIds.add(provider.id);
+      }
+      this.hostRegistry.updateRuntimeStatus(host.id, {
+        vault: {
+          status: 'locked',
+          error: 'Vault unlock is required',
+        },
+      });
+      throw new VaultLockedError(host.id, [...providerIds]);
+    }
+    if (
+      resolution.report.unresolved.length > 0 ||
+      resolution.report.errors.length > 0
+    ) {
+      const details = [
+        ...resolution.report.unresolved.map((item) => item.reason),
+        ...resolution.report.errors.map((item) => item.error),
+      ];
+      throw new SecretResolutionError(
+        host.id,
+        globalSecretRedactor.redact(
+          `Could not resolve connection credentials for host '${host.id}': ${details.join('; ')}`,
+        ),
+      );
+    }
+
+    const requiredProviders = this.secretManager.requiredVaultProviderIds(
+      host.connection,
+    );
+    this.hostRegistry.updateRuntimeStatus(host.id, {
+      vault: {
+        status: requiredProviders.length > 0 ? 'unlocked' : 'not_configured',
+        error: undefined,
+      },
+    });
 
     const resolvedConn = resolution.data;
 
@@ -157,6 +219,11 @@ export class ConnectionManager {
     });
 
     return result;
+  }
+
+  public async invalidateHost(hostId: string): Promise<void> {
+    this.routers.delete(hostId);
+    await this.sshPool.remove(hostId);
   }
 
   public async close(): Promise<void> {

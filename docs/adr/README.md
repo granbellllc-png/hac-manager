@@ -18,5 +18,6 @@ ADRs record technical choices and their consequences. [FEATURES.md](../FEATURES.
 | [0012](0012-exec-channels.md)             | SSH exec channels and scripts on stdin                |
 | [0013](0013-inheritance-and-merge.md)     | Inheritance, merge semantics and provenance tracking  |
 | [0014](0014-safe-expression-evaluator.md) | Custom AST-based safe expression engine for `!expr`   |
+| [0015](0015-headless-vault-unlock.md)     | Headless vault unlock with memory-only tokens         |
 
 Git management, cluster support and historical metrics are outside v1. v1 manages standalone hosts; clusters require a later design. These constraints follow FEATURES.md and must not be bypassed in an implementation.

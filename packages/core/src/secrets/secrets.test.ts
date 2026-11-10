@@ -5,6 +5,7 @@ import { CommandSecretProvider, parseCommandArgs } from './cmd-provider.js';
 import { EnvSecretProvider, parseDotenv } from './env-provider.js';
 import { SecretManager } from './manager.js';
 import { YamlSecretProvider } from './yaml-provider.js';
+import type { VaultProvider } from './types.js';
 
 describe('Secret Providers & TTL Cache', () => {
   describe('parseDotenv', () => {
@@ -283,6 +284,117 @@ values:
 
       const res = await manager.resolveCmd('bash -c "echo hacked"');
       expect(res.status).toBe('not_allowed');
+    });
+
+    it('discovers, unlocks, caches, and clears injected vault providers', async () => {
+      let token: string | undefined;
+      const status = vi.fn(async () =>
+        token
+          ? ({ status: 'unlocked' } as const)
+          : ({ status: 'locked', reason: 'locked' } as const),
+      );
+      const provider: VaultProvider = {
+        id: 'fixture',
+        name: 'Fixture Vault',
+        commands: ['fixture-vault'],
+        tokenLabel: 'Fixture token',
+        helpText: 'Fixture help',
+        status,
+        async unlock(value) {
+          token = value;
+          return { status: 'unlocked' };
+        },
+        clear() {
+          token = undefined;
+        },
+        environment() {
+          return token ? { FIXTURE_SESSION: token } : {};
+        },
+      };
+      const executor = vi.fn(async (_bin, _args, options) => ({
+        stdout: options.env?.['FIXTURE_SESSION'] ?? 'missing',
+        stderr: '',
+        exitCode: 0,
+      }));
+      const manager = new SecretManager({
+        dataDir: 'data',
+        allowlist: ['fixture-vault'],
+        cmdExecutor: executor,
+        vaultProviders: [provider],
+      });
+
+      expect(manager.listVaultProviders()).toEqual([
+        expect.objectContaining({ id: 'fixture', name: 'Fixture Vault' }),
+      ]);
+      expect(
+        manager.requiredVaultProviderIds({
+          nested: [
+            { tag: 'cmd', value: 'fixture-vault read secret' },
+            { tag: 'cmd', value: 'unknown read secret' },
+          ],
+        }),
+      ).toEqual(['fixture']);
+      await expect(manager.getVaultStatus('fixture')).resolves.toMatchObject({
+        status: 'locked',
+      });
+      await expect(manager.getVaultStatus('fixture')).resolves.toMatchObject({
+        status: 'locked',
+      });
+      expect(status).toHaveBeenCalledTimes(1);
+      await expect(
+        manager.unlockVault('fixture', 'fixture-token'),
+      ).resolves.toEqual({ status: 'unlocked' });
+      await expect(
+        manager.resolveCmd('fixture-vault read secret'),
+      ).resolves.toEqual({ status: 'success', output: 'fixture-token' });
+      manager.invalidateCmd('fixture-vault read secret');
+      token = undefined;
+      executor.mockResolvedValueOnce({
+        stdout: '',
+        stderr: 'vault is locked',
+        exitCode: 1,
+      });
+      await expect(
+        manager.resolveCmd('fixture-vault read secret'),
+      ).resolves.toMatchObject({ status: 'locked' });
+      await expect(manager.getVaultStatus('fixture')).resolves.toMatchObject({
+        status: 'locked',
+      });
+      expect(manager.clearVault('fixture')).toBe(true);
+      expect(manager.clearVault('missing')).toBe(false);
+      await expect(manager.getVaultStatus('missing')).resolves.toMatchObject({
+        status: 'unavailable',
+      });
+      await expect(
+        manager.unlockVault('missing', 'unused'),
+      ).resolves.toMatchObject({ status: 'unavailable' });
+    });
+
+    it('rejects duplicate vault provider identifiers', () => {
+      const provider: VaultProvider = {
+        id: 'duplicate',
+        name: 'Duplicate',
+        commands: [],
+        tokenLabel: 'Token',
+        helpText: 'Help',
+        async status() {
+          return { status: 'locked' };
+        },
+        async unlock() {
+          return { status: 'unlocked' };
+        },
+        clear() {},
+        environment() {
+          return {};
+        },
+      };
+      expect(
+        () =>
+          new SecretManager({
+            dataDir: 'data',
+            vaultProviders: [provider, provider],
+          }),
+      ).toThrow("Duplicate vault provider id 'duplicate'");
     });
   });
 });

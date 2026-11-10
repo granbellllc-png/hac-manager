@@ -69,6 +69,7 @@ function installApi(options?: {
   readonly failPrompts?: boolean;
   readonly failCancel?: boolean;
   readonly failResolution?: boolean;
+  readonly failUnlock?: boolean;
   readonly pagedLogs?: boolean;
 }) {
   let prompt = options?.prompt ?? null;
@@ -139,6 +140,13 @@ function installApi(options?: {
     ) {
       if (options?.failCancel) return Response.json({}, { status: 409 });
       return Response.json({ job: { ...baseJobs[0], status: 'cancelled' } });
+    }
+    if (
+      url.pathname.includes('/vault/providers/') &&
+      request.method === 'POST'
+    ) {
+      if (options?.failUnlock) return Response.json({}, { status: 400 });
+      return Response.json({ id: 'fixture', status: 'unlocked' });
     }
     if (url.pathname.includes('/api/prompts/') && request.method === 'POST') {
       if (options?.failResolution) return Response.json({}, { status: 400 });
@@ -212,6 +220,29 @@ describe('JobsPage', () => {
       recommendedResolution: 'keep-host-data',
     });
     expect(jobsPageInternals.parseStoragePrompt(null)).toBeNull();
+    expect(
+      jobsPageInternals.parseVaultUnlockPrompt({
+        type: 'vault_unlock',
+        providerId: 'op',
+        providerName: '1Password CLI',
+        tokenLabel: 'Service-account token',
+        helpText: 'Use a service account.',
+      }),
+    ).toEqual({
+      providerId: 'op',
+      providerName: '1Password CLI',
+      tokenLabel: 'Service-account token',
+      helpText: 'Use a service account.',
+    });
+    expect(
+      jobsPageInternals.parseVaultUnlockPrompt({ type: 'other' }),
+    ).toBeNull();
+    expect(
+      jobsPageInternals.parseVaultUnlockPrompt({
+        type: 'vault_unlock',
+        providerId: 1,
+      }),
+    ).toBeNull();
     expect(
       jobsPageInternals.parseStoragePrompt({
         status: 'ok',
@@ -464,6 +495,87 @@ describe('JobsPage', () => {
           '/api/prompts/prompt-storage/resolve',
       ),
     ).toBe(true);
+  });
+
+  it('unlocks a vault in memory before resolving the waiting job prompt', async () => {
+    const prompt = {
+      id: 'prompt-vault',
+      jobId: 'job-1',
+      hostId: 'pve-01',
+      kind: 'confirm',
+      status: 'pending',
+      message: 'Unlock 1Password CLI to continue',
+      payload: {
+        type: 'vault_unlock',
+        providerId: 'op',
+        providerName: '1Password CLI',
+        tokenLabel: '1Password service-account token',
+        helpText: 'Desktop-app unlock is unavailable on headless servers.',
+        storage: 'memory_only',
+      },
+      options: [],
+      createdAt: '2026-11-10T12:00:00.000Z',
+    };
+    const { requests } = installApi({ prompt });
+    const user = userEvent.setup();
+    renderJobs({ id: 'admin-1', username: 'admin', role: 'admin' });
+    expect(await screen.findByText(/held in server memory only/)).toBeVisible();
+    await user.type(
+      screen.getByLabelText('1Password service-account token'),
+      'fixture-ui-token',
+    );
+    await user.click(screen.getByRole('button', { name: 'Unlock and resume' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+    const unlockIndex = requests.findIndex(
+      (request) =>
+        new URL(request.url).pathname ===
+        '/api/hosts/pve-01/vault/providers/op/unlock',
+    );
+    const resolveIndex = requests.findIndex(
+      (request) =>
+        new URL(request.url).pathname === '/api/prompts/prompt-vault/resolve',
+    );
+    expect(unlockIndex).toBeGreaterThan(-1);
+    expect(resolveIndex).toBeGreaterThan(unlockIndex);
+  });
+
+  it('requires an administrator for vault prompts and surfaces unlock failures', async () => {
+    const prompt = {
+      id: 'prompt-vault-failure',
+      jobId: 'job-1',
+      hostId: 'pve-01',
+      kind: 'confirm',
+      status: 'pending',
+      message: 'Unlock Vault CLI to continue',
+      payload: {
+        type: 'vault_unlock',
+        providerId: 'vault',
+        providerName: 'Vault CLI',
+        tokenLabel: 'Vault token',
+        helpText: 'Supply a scoped token.',
+      },
+      options: [],
+      createdAt: '2026-11-10T12:00:00.000Z',
+    };
+    installApi({ prompt, failUnlock: true });
+    const operator = renderJobs();
+    expect(
+      await screen.findByText(/An administrator must unlock/),
+    ).toBeVisible();
+    operator.unmount();
+
+    installApi({ prompt, failUnlock: true });
+    const user = userEvent.setup();
+    renderJobs({ id: 'admin-1', username: 'admin', role: 'admin' });
+    await user.type(await screen.findByLabelText('Vault token'), 'bad-token');
+    await user.click(screen.getByRole('button', { name: 'Unlock and resume' }));
+    expect(
+      await within(screen.getByRole('dialog')).findByText(
+        'Could not unlock the vault.',
+      ),
+    ).toBeVisible();
   });
 
   it('shows empty, viewer, and API failure states', async () => {

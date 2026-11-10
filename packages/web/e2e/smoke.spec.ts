@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { installFixtureApi } from './fixture-api';
 
-test.beforeEach(async ({ page }) => {
-  await installFixtureApi(page);
+test.beforeEach(async ({ page }, testInfo) => {
+  await installFixtureApi(page, 'authenticated', {
+    vaultPrompt: testInfo.title.includes('vault unlock'),
+  });
 });
 
 test.afterEach(async ({ page }) => {
@@ -57,6 +59,30 @@ test('renders the responsive jobs queue and virtualized live log', async ({
     path: testInfo.outputPath('jobs.png'),
     fullPage: true,
   });
+});
+
+test('renders and resolves the memory-only vault unlock prompt', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/jobs');
+  await expect(
+    page.getByRole('heading', { name: 'Unlock 1Password CLI to continue' }),
+  ).toBeVisible();
+  await expect(page.getByText(/held in server memory only/)).toBeVisible();
+  await expect(
+    page.getByLabel('1Password service-account token'),
+  ).toHaveAttribute('type', 'password');
+  await page.screenshot({
+    path: testInfo.outputPath('vault-unlock.png'),
+    fullPage: true,
+  });
+  await page
+    .getByLabel('1Password service-account token')
+    .fill('fake-service-account-token');
+  await page.getByRole('button', { name: 'Unlock and resume' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Unlock 1Password CLI to continue' }),
+  ).toBeHidden();
 });
 
 test('renders SSH-only host detail and connection test feedback', async ({

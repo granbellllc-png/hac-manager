@@ -2,12 +2,16 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SecretManager } from '@hacm/core';
+import { SecretManager, type VaultProvider } from '@hacm/core';
 import { createDatabase, createSqliteRepositories } from '../db/index.js';
 import { HostRegistry } from '../hosts/registry.js';
 import { SshPool } from '../ssh/pool.js';
 import { HostConnectionRouter } from './router.js';
-import { ConnectionManager } from './manager.js';
+import {
+  ConnectionManager,
+  SecretResolutionError,
+  VaultLockedError,
+} from './manager.js';
 
 let directory: string;
 let database: ReturnType<typeof createDatabase>;
@@ -110,6 +114,65 @@ describe('connection manager credential and lifecycle boundaries', () => {
       'fixture-user',
     );
     expect(manager.sshPool.get('fixture')?.config.privateKey).toBeUndefined();
+    await manager.invalidateHost('fixture');
+    expect(manager.sshPool.get('fixture')).toBeUndefined();
+  });
+
+  it('refuses locked and unresolved connection credentials before creating transports', async () => {
+    await mkdir(join(directory, 'hosts/fixture'), { recursive: true });
+    await writeFile(
+      join(directory, 'hosts/fixture/host.yaml'),
+      'schema_version: 1\nid: fixture\nname: Fixture\ntype: proxmox\nindex: 1\nconnection:\n  ssh:\n    host: 192.0.2.10\n    password: !cmd "fixture-vault read password"\n',
+    );
+    await registry.sync();
+    const provider: VaultProvider = {
+      id: 'fixture',
+      name: 'Fixture Vault',
+      commands: ['fixture-vault'],
+      tokenLabel: 'Token',
+      helpText: 'Help',
+      async status() {
+        return { status: 'locked' };
+      },
+      async unlock() {
+        return { status: 'unlocked' };
+      },
+      clear() {},
+      environment() {
+        return {};
+      },
+    };
+    await manager.close();
+    manager = new ConnectionManager({
+      dataDir: directory,
+      hostRegistry: registry,
+      secretManager: new SecretManager({
+        dataDir: directory,
+        allowlist: ['fixture-vault'],
+        vaultProviders: [provider],
+        cmdExecutor: vi.fn(async () => ({
+          stdout: '',
+          stderr: 'vault is locked',
+          exitCode: 1,
+        })),
+      }),
+    });
+    await expect(manager.getRouter('fixture')).rejects.toBeInstanceOf(
+      VaultLockedError,
+    );
+    expect((await registry.getHost('fixture'))?.runtime.vault.status).toBe(
+      'locked',
+    );
+    expect(manager.sshPool.get('fixture')).toBeUndefined();
+
+    await writeFile(
+      join(directory, 'hosts/fixture/host.yaml'),
+      'schema_version: 1\nid: fixture\nname: Fixture\ntype: proxmox\nindex: 1\nconnection:\n  ssh:\n    host: 192.0.2.10\n    password: !secret missing\n',
+    );
+    await registry.sync();
+    await expect(manager.getRouter('fixture')).rejects.toBeInstanceOf(
+      SecretResolutionError,
+    );
   });
 
   it.each([

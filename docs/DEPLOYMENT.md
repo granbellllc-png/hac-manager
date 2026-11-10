@@ -37,6 +37,22 @@ USER node
 
 Use service accounts or tokens rather than desktop integrations on servers.
 
+When an `!cmd` provider is locked, a dependent job pauses and the Jobs page
+asks an administrator for the provider's session or service-account token.
+The server validates that token with the installed CLI and keeps it in process
+memory only. It is lost on restart and is never stored in SQLite, job payloads,
+prompts or audit records. The built-in headless adapters use:
+
+| CLI     | In-memory environment variable | Recommended input               |
+| ------- | ------------------------------ | ------------------------------- |
+| `op`    | `OP_SERVICE_ACCOUNT_TOKEN`     | 1Password service-account token |
+| `bw`    | `BW_SESSION`                   | Output from `bw unlock --raw`   |
+| `vault` | `VAULT_TOKEN`                  | Scoped HashiCorp Vault token    |
+
+The 1Password desktop-app integration cannot unlock a headless server. Prefer
+a service account with access limited to the vaults and items HAC Manager
+needs.
+
 ## systemd (bare metal or LXC)
 
 1. Install Node 22 LTS and pnpm, clone the repository to `/opt/hac-manager`, then `pnpm install --frozen-lockfile && pnpm build`.
