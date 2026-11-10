@@ -23,6 +23,14 @@ export {
   type FilemappingsFile,
 } from './filemappings.js';
 export { hostFileSchema, type HostFile } from './host.js';
+export {
+  hostBackupConfigSchema,
+  resticBackupConfigSchema,
+  vzdumpBackupConfigSchema,
+  type HostBackupConfig,
+  type ResticBackupConfig,
+  type VzdumpBackupConfig,
+} from './host-backup.js';
 export { secretsFileSchema, type SecretsFile } from './secrets.js';
 export { tasksFileSchema, type TasksFile } from './tasks.js';
 export {

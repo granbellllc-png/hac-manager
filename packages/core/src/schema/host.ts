@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { hostBackupConfigSchema } from './host-backup.js';
 import {
   includable,
   relativePath,
@@ -94,6 +95,9 @@ export const hostFileSchema = z.strictObject({
     .optional()
     .describe('Tags used by Tier-1 tasks to target this host (D-51).'),
   drift_schedule: driftScheduleSchema.optional(),
+  backup: hostBackupConfigSchema
+    .optional()
+    .describe('Tier-2 host backup files (D-57).'),
   extra: z.record(z.string(), z.unknown()).optional(),
 });
 

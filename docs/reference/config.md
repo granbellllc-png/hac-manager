@@ -44,6 +44,31 @@ Files: `hosts/*/host.yaml`
 | `drift_schedule` | object | no |  |  |
 | `drift_schedule.enabled` | boolean | no |  |  |
 | `drift_schedule.cron` | string | yes |  | Five-field UTC cron expression for scheduled drift checks (D-34). |
+| `backup` | object | no |  | Tier-2 host backup files (D-57). |
+| `backup.vzdump` | object | no |  |  |
+| `backup.vzdump.enabled` | boolean | no |  |  |
+| `backup.vzdump.path` | string | no |  |  |
+| `backup.vzdump.mode` | string | no |  |  |
+| `backup.vzdump.options` | object | no |  | Key/value pairs rendered as sorted `key: value` lines. |
+| `backup.restic` | object | no |  |  |
+| `backup.restic.enabled` | boolean | no |  |  |
+| `backup.restic.script_path` | string | no |  |  |
+| `backup.restic.cron_path` | string | no |  |  |
+| `backup.restic.schedule` | string | no |  |  |
+| `backup.restic.repository` | string | no |  |  |
+| `backup.restic.repository_file` | string | no |  |  |
+| `backup.restic.password_file` | string | yes |  |  |
+| `backup.restic.paths` | array of string | yes |  |  |
+| `backup.restic.paths[]` | string | yes |  |  |
+| `backup.restic.excludes` | array of string | no |  |  |
+| `backup.restic.excludes[]` | string | yes |  |  |
+| `backup.restic.tag` | string | no |  |  |
+| `backup.restic.keep_last` | integer \| string | no |  |  |
+| `backup.restic.keep_daily` | integer \| string | no |  |  |
+| `backup.restic.keep_weekly` | integer \| string | no |  |  |
+| `backup.restic.keep_monthly` | integer \| string | no |  |  |
+| `backup.restic.prune` | boolean | no |  |  |
+| `backup.restic.status_file` | string | no |  |  |
 | `extra` | object | no |  |  |
 
 ## `deployment`

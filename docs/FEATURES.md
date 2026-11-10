@@ -239,7 +239,7 @@ Tier 3 is skipped unless file sync, identity checks and invariant checks have al
 
 **D-56. One-click restore.** `pct restore` / `qmrestore` with typed confirmation `RESTORE <vmid>`, a warning that the archive contains the rootfs only and that `mp0` host data must be restored separately, and an offer to restore matching host data. Before any host data is replaced, the current copy is moved to a timestamped path and kept. The restored guest is started, identity-checked against its YAML stamp and name, and LXC guests with host data get a storage invariant check. _M12._
 
-**D-57. Host backup management.** Declarative Tier-2 management of `/etc/vzdump.conf` and restic scripts and cron, with status (last run, last success). Secrets via tags. _M12._
+**D-57. Host backup management.** Declarative Tier-2 management of `/etc/vzdump.conf` and a restic script plus `/etc/cron.d` fragment, configured under `backup` in `host.yaml`. Rendering is deterministic and sorted. Resolved `Secret` values are refused in managed files: credentials stay in root-only files referenced by absolute path (`password_file`, `repository_file`). Apply is idempotent and atomic (temporary sibling, `chmod`, `mv`), and content or mode drift on a managed file is visible in the plan. Status reports last run and last success from the restic status file the script writes and from the most recent `vzdump` tasks. _M12._
 
 ### 4.12 Drift
 
