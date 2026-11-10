@@ -7,7 +7,7 @@
     "vmid": 112,
     "resourceType": "file"
   },
-  "summary": "Sync 1 file mapping(s) to LXC 112",
+  "summary": "Sync 2 file mapping(s) to LXC 112",
   "changes": [
     {
       "id": "mapping-0",
@@ -28,10 +28,38 @@
         },
         "mappingType": "file"
       }
+    },
+    {
+      "id": "mapping-1",
+      "action": "create",
+      "summary": "Create /opt/example/.env from .env.yaml (rendered dotenv, sha256 3a4ba7a170e7…)",
+      "path": "/opt/example/.env",
+      "before": null,
+      "after": {
+        "hash": "3a4ba7a170e71eb573082607bd7de1a207c8f9ffac5b5e714daddbca6a2bd3e4",
+        "size": 122,
+        "mode": "0600",
+        "source": ".env.yaml",
+        "destination": "/opt/example/.env",
+        "target": {
+          "kind": "guest",
+          "path": "/opt/example/.env",
+          "guestPath": "/opt/example/.env"
+        },
+        "mappingType": "template",
+        "render": "dotenv",
+        "variables": [
+          "APP_NAME",
+          "APP_PORT",
+          "APP_URL",
+          "DB_PASSWORD",
+          "LOG_LEVEL"
+        ]
+      }
     }
   ],
   "warnings": [],
   "destructive": false,
-  "stateFingerprint": "62ec02da8279c4dea2aeac21685c1149a8371752733bf508c9479cb3b283e513",
+  "stateFingerprint": "1d94585a9b35a221c9fa4bc901b8d7ef1fae3f1b5b666fc9b9b5397cb2961ebd",
   "createdAt": "2026-11-10T12:00:00.000Z"
 }

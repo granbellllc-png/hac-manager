@@ -44,6 +44,10 @@ describe('Data Directory Discovery on examples/data', () => {
     expect(lxc?.name).toBe('example-lxc');
     expect(lxc?.folderName).toBe('112-example-lxc');
     expect(lxc?.filemappingsFile).toBeDefined();
+    expect(lxc?.envFile).toBeDefined();
+    expect(lxc?.relativeEnvFile).toBe(
+      'hosts/example-host/112-example-lxc/.env.yaml',
+    );
     expect(lxc?.appdataDir).toBeDefined();
     expect(lxc?.tasks).toHaveLength(1);
     expect(lxc?.tasks[0]?.tier).toBe(3);

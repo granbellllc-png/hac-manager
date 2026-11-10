@@ -395,6 +395,24 @@ export async function scanDataDir(
           );
         }
 
+        // .env.yaml
+        let envFile: string | undefined = undefined;
+        let relativeEnvFile: string | undefined = undefined;
+        const envFull = joinPath(guestFullDir, '.env.yaml');
+        const envStat = await tryStat(fs, envFull);
+        if (envStat && envStat.isFile()) {
+          envFile = envFull;
+          relativeEnvFile = joinPath(guestRelDir, '.env.yaml');
+          await loadAndValidateConfig(
+            fs,
+            envFull,
+            relativeEnvFile,
+            'env',
+            issues,
+            fileHashes,
+          );
+        }
+
         // appdata/
         let appdataDir: string | undefined = undefined;
         let relativeAppdataDir: string | undefined = undefined;
@@ -445,6 +463,7 @@ export async function scanDataDir(
           ...(filemappingsFile !== undefined
             ? { filemappingsFile, relativeFilemappingsFile }
             : {}),
+          ...(envFile !== undefined ? { envFile, relativeEnvFile } : {}),
           ...(appdataDir !== undefined
             ? { appdataDir, relativeAppdataDir }
             : {}),

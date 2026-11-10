@@ -704,7 +704,7 @@ ssh:
         },
       });
 
-      expect(filemappings.mappings).toHaveLength(1);
+      expect(filemappings.mappings).toHaveLength(2);
       expect(
         (filemappings.mappings[0] as { destination: string })?.destination,
       ).toBe('/etc/example.conf');

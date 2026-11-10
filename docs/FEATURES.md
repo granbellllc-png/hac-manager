@@ -74,6 +74,7 @@ HAC Manager (Homelab as Code) is a self-hosted web app and backend that manages 
     <vmid>-<name>/
       deployment.yaml
       filemappings.yaml
+      .env.yaml                        # tags rendered into the guest `.env` (D-18)
       appdata/                         # files synced into the guest
       tasks/                           # Tier 3
 ```
@@ -112,7 +113,7 @@ Resolved plaintext is never written to Git-tracked files. _M2._
 
 **D-17. Interactive vault unlock is later.** v1 providers are env, `secrets.yaml` and `!cmd`. Providers can report a `locked` state; the UI unlock flow and graceful job degradation arrive in M13. Known limitation: desktop-integrated CLIs (for example 1Password desktop) do not work on servers; prefer service accounts. _M13._
 
-**D-18. `.env` rendering uses `.env.yaml`.** A YAML map with tags renders to a dotenv file in the guest (mode 0600, escaping for dotenv and Compose `$`). `compose.yaml` and app configs stay clean using `${VAR}`. The rendered file is never written to Git-tracked paths, and change detection uses a hash of the rendered output. _M9._
+**D-18. `.env` rendering uses `.env.yaml`.** A YAML map with tags renders to a dotenv file in the guest (mode 0600, escaping for dotenv and Compose `$`). A `template` filemapping whose source is `.env.yaml` names the destination; that destination must be called `.env`, must lie outside the data dir, and always receives mode 0600. Rendering happens once per sync and the plan carries only the rendered hash, size, mode and variable names. `compose.yaml` and app configs stay clean using `${VAR}`. The rendered file is never written to Git-tracked paths, and change detection uses a hash of the rendered output. _M9._
 
 **D-19. `hacm init` scaffolds the data dir.** Creates layout and `.gitignore`, copies `*.example` to untracked counterparts if missing, never overwrites. _M2._
 

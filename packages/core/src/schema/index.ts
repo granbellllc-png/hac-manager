@@ -17,6 +17,7 @@ export {
   type GuestDeployment,
   type GuestDeploymentFile,
 } from './deployment.js';
+export { envFileSchema, envVariableName, type EnvFile } from './env.js';
 export {
   filemappingsFileSchema,
   type FilemappingsFile,

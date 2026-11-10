@@ -127,7 +127,7 @@ describe('CLI command integration', () => {
         '--json',
       ]),
     ).toBe(0);
-    expect(JSON.parse(stdout).exportedFiles).toHaveLength(6);
+    expect(JSON.parse(stdout).exportedFiles).toHaveLength(7);
     expect(
       await readFile(join(directory, 'docs/reference/config.md'), 'utf8'),
     ).toContain('Configuration reference');

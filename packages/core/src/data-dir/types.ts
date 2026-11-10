@@ -18,6 +18,9 @@ export interface DiscoveredGuest {
   readonly relativeDeploymentFile: string;
   readonly filemappingsFile?: string | undefined;
   readonly relativeFilemappingsFile?: string | undefined;
+  /** Tracked `.env.yaml`; rendered into the guest as `.env` (D-18). */
+  readonly envFile?: string | undefined;
+  readonly relativeEnvFile?: string | undefined;
   readonly appdataDir?: string | undefined;
   readonly relativeAppdataDir?: string | undefined;
   readonly tasks: readonly DiscoveredTaskFile[];

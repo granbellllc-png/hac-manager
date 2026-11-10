@@ -5,3 +5,8 @@ mappings:
     destination: /etc/example.conf
     mode: '0644'
     conflict: prompt
+  - type: template
+    source: .env.yaml
+    destination: /opt/example/.env
+    mode: '0600'
+    conflict: prompt

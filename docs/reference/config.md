@@ -323,6 +323,15 @@ Files: `hosts/*/{default-filemappings.yaml,*/filemappings.yaml}`
 | `mappings` | array of any \| string | yes |  |  |
 | `mappings[]` | any \| string | yes |  |  |
 
+## `env`
+
+Files: `hosts/*/*/.env.yaml`
+
+| Key | Type | Required | When | Description |
+| --- | ---- | -------- | ---- | ----------- |
+| `schema_version` | number | yes |  | Schema version of this file. |
+| `values` | object | yes |  | Environment variables rendered into the guest `.env` file. |
+
 ## `tasks`
 
 Files: `{global-tasks,hosts/*/tasks,hosts/*/*/tasks}/*.yaml`

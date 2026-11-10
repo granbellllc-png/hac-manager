@@ -1,5 +1,11 @@
 import { posix } from 'node:path';
 import { hashContent } from '../data-dir/hash.js';
+import {
+  assertEnvRenderTarget,
+  ENV_FILE_MODE,
+  EnvRenderError,
+  type RenderedEnvFile,
+} from '../env/render.js';
 import { createMutationPlan } from '../plans/plan.js';
 import type { MutationPlan, PlanChange } from '../plans/types.js';
 import { isTagValue } from '../schema/common.js';
@@ -27,6 +33,23 @@ export interface FileMappingRemoteEntry {
   readonly mode?: string | undefined;
 }
 
+/** A tracked `.env.yaml` template whose tags must be resolved before transfer. */
+export interface EnvTemplateSource {
+  /** Path inside the data dir, relative to the data dir root. */
+  readonly source: string;
+  readonly absolutePath: string;
+  /** Raw YAML text, so the caller can resolve tags with its own context. */
+  readonly text: string;
+}
+
+/**
+ * Renders `.env.yaml` into dotenv content. The server injects a resolver with
+ * the secret provider; the planner never reads secrets itself (D-15, D-18).
+ */
+export type RenderEnvTemplate = (
+  source: EnvTemplateSource,
+) => Promise<RenderedEnvFile>;
+
 export interface FileMappingPlanOptions {
   readonly dataDir: string;
   readonly hostId: string;
@@ -36,6 +59,8 @@ export interface FileMappingPlanOptions {
   readonly remote?:
     Readonly<Record<string, FileMappingRemoteEntry>> | undefined;
   readonly fs?: FileSystem | undefined;
+  /** Required for `template` mappings whose source is `.env.yaml` (D-18). */
+  readonly renderEnv?: RenderEnvTemplate | undefined;
   readonly planId?: string | undefined;
   readonly createdAt?: Date | undefined;
   /** Required by the plan model when a directory mapping deletes files. */
@@ -321,6 +346,9 @@ function remoteBefore(
 }
 
 interface PlannerContext {
+  readonly dataDir: string;
+  readonly fs: FileSystem;
+  readonly renderEnv: RenderEnvTemplate | undefined;
   readonly guest: GuestDeployment;
   readonly remote: Readonly<Record<string, FileMappingRemoteEntry>>;
   readonly changes: PlanChange[];
@@ -328,7 +356,117 @@ interface PlannerContext {
   readonly sources: FileMappingPlanState['sources'][number][];
 }
 
-function planSingleFile(
+/** A template mapping renders dotenv content only from a tracked `.env.yaml`. */
+function isEnvTemplateSource(source: string): boolean {
+  return posix.basename(source.replaceAll('\\', '/')) === '.env.yaml';
+}
+
+function isWithinDataDir(dataDir: string, target: string): boolean {
+  const root = normalizeDataDir(dataDir);
+  const normalized = target.replaceAll('\\', '/');
+  return normalized === root || normalized.startsWith(`${root}/`);
+}
+
+function normalizedMode(mode: string | undefined): string | undefined {
+  return mode === undefined ? undefined : mode.padStart(4, '0');
+}
+
+/**
+ * Plan a rendered `.env` from a `template` mapping whose source is `.env.yaml`
+ * (D-18). The change carries only the rendered hash, size, mode and variable
+ * names; plaintext exists inside the renderer and the transfer executor.
+ */
+async function planEnvTemplate(
+  context: PlannerContext,
+  options: {
+    readonly mappingIndex: number;
+    readonly mapping: {
+      readonly type: 'template';
+      readonly source: string;
+      readonly destination: string;
+      readonly mode?: string | undefined;
+      readonly owner?: unknown;
+      readonly group?: unknown;
+    };
+    readonly source: SourceFile;
+  },
+): Promise<void> {
+  const { mapping, mappingIndex, source } = options;
+  assertEnvRenderTarget(mapping.destination);
+
+  const target = mappingTarget(context.guest, mapping.destination);
+  for (const candidate of [mapping.destination, target.path]) {
+    if (isWithinDataDir(context.dataDir, candidate)) {
+      throw new EnvRenderError(
+        `Rendered .env content may not be written into the data dir ('${candidate}'). Select a guest path outside the tracked configuration (D-18).`,
+      );
+    }
+  }
+
+  const configuredMode = normalizedMode(mapping.mode);
+  if (configuredMode !== undefined && configuredMode !== ENV_FILE_MODE) {
+    throw new EnvRenderError(
+      `Mapping '${mapping.destination}' sets mode '${mapping.mode}'; rendered .env files are always ${ENV_FILE_MODE} (D-18).`,
+    );
+  }
+
+  if (!context.renderEnv) {
+    throw new EnvRenderError(
+      `Mapping ${mappingIndex} renders '${mapping.source}', which needs a tag resolution context. Pass renderEnv to planFilemappings.`,
+    );
+  }
+
+  const text = await context.fs.readFile(source.absolutePath, 'utf8');
+  const rendered = await context.renderEnv({
+    source: source.relativePath,
+    absolutePath: source.absolutePath,
+    text,
+  });
+
+  const previous = context.remote[mapping.destination];
+  context.sources.push({
+    path: source.relativePath,
+    hash: source.hash,
+    size: source.size,
+  });
+  if (
+    previous !== undefined &&
+    previous.hash === rendered.hash &&
+    normalizedMode(previous.mode) === ENV_FILE_MODE
+  ) {
+    return;
+  }
+
+  const hostOwner = hostOwnership(
+    context.guest,
+    target,
+    mapping.owner,
+    mapping.group,
+    context.warnings,
+  );
+  const action = previous === undefined ? 'create' : 'update';
+  context.changes.push({
+    id: `mapping-${mappingIndex}`,
+    action,
+    path: mapping.destination,
+    summary: `${action === 'create' ? 'Create' : 'Update'} ${mapping.destination} from ${source.relativePath} (rendered dotenv, sha256 ${rendered.hash.slice(0, 12)}…)`,
+    before: remoteBefore(previous),
+    after: {
+      hash: rendered.hash,
+      size: rendered.size,
+      mode: ENV_FILE_MODE,
+      source: source.relativePath,
+      destination: mapping.destination,
+      target,
+      mappingType: 'template',
+      render: 'dotenv',
+      variables: rendered.variables,
+      ...(hostOwner ? { hostOwner } : {}),
+    },
+  });
+}
+
+async function planSingleFile(
   context: PlannerContext,
   options: {
     readonly mappingIndex: number;
@@ -342,8 +480,16 @@ function planSingleFile(
     };
     readonly source: SourceFile;
   },
-): void {
+): Promise<void> {
   const { mapping, mappingIndex, source } = options;
+  if (mapping.type === 'template' && isEnvTemplateSource(mapping.source)) {
+    await planEnvTemplate(context, {
+      mappingIndex,
+      mapping: { ...mapping, type: 'template' },
+      source,
+    });
+    return;
+  }
   const target = mappingTarget(context.guest, mapping.destination);
   const hostOwner = hostOwnership(
     context.guest,
@@ -367,7 +513,7 @@ function planSingleFile(
     mapping.type === 'archive' ? archiveFormat(mapping.source) : undefined;
   if (mapping.type === 'template') {
     context.warnings.push(
-      `Mapping '${mapping.source}' is a template; the plan hashes the source, while secret rendering happens at apply time (D-48/D-60).`,
+      `Mapping '${mapping.source}' is a template but not a tracked .env.yaml; the plan hashes the source and does not render tags (D-48).`,
     );
   }
   context.changes.push({
@@ -494,6 +640,9 @@ export async function planFilemappings(
   const filemappings = filemappingsFileSchema.parse(options.filemappings);
   const fs = options.fs ?? defaultNodeFileSystem;
   const context: PlannerContext = {
+    dataDir: options.dataDir,
+    fs,
+    renderEnv: options.renderEnv,
     guest,
     remote: options.remote ?? {},
     changes: [],
@@ -546,7 +695,7 @@ export async function planFilemappings(
       );
       continue;
     }
-    planSingleFile(context, {
+    await planSingleFile(context, {
       mappingIndex: index,
       mapping,
       source: resolved.file,

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { hashContent } from '../data-dir/hash.js';
+import { renderEnvFile } from '../env/render.js';
 import { mergeGuestDeployment } from '../merge/guest-merge.js';
 import { mergeGuestFilemappings } from '../merge/guest-merge.js';
 import { PlanValidationError } from '../plans/types.js';
@@ -72,6 +73,16 @@ async function examplePlan(): Promise<FileMappingPlanOptions> {
     hostId: 'example-host',
     guest: merged.deployment,
     filemappings: mergedMappings.filemappings,
+    renderEnv: ({ text }) =>
+      renderEnvFile(loadYamlObject<unknown>(text), {
+        dataDir: examplesData,
+        secretProvider: {
+          resolveSecret: (key) =>
+            key === 'example_db_password'
+              ? { status: 'found' as const, value: 'example-secret-value' }
+              : { status: 'not_found' as const },
+        },
+      }),
     planId: 'plan-filemappings-example',
     createdAt: fixedCreatedAt,
   };
@@ -208,11 +219,179 @@ describe('planFilemappings', () => {
   it('matches the golden plan for examples/data', async () => {
     const plan = await planFilemappings(await examplePlan());
     expect(plan.operation).toBe('files.sync');
-    expect(plan.changes).toHaveLength(1);
+    expect(plan.changes).toHaveLength(2);
     expect(plan.warnings).toEqual([]);
+    expect(JSON.stringify(plan)).not.toContain('example-secret-value');
     expect(JSON.parse(await readFile(goldenPath, 'utf8'))).toEqual(
       JSON.parse(JSON.stringify(plan)),
     );
+  });
+
+  it('renders .env templates with the rendered hash and 0600', async () => {
+    const fs = new MemoryFileSystem();
+    fs.addFile(
+      '/data/hosts/pve-01/112-example/.env.yaml',
+      'schema_version: 1\nvalues:\n  APP_PORT: "8080"\n  DB_PASSWORD: !secret db\n',
+    );
+    const plan = await planFilemappings(
+      planOptions(
+        fs,
+        mappings([
+          {
+            type: 'template',
+            source: '.env.yaml',
+            destination: '/opt/app/.env',
+            mode: '0600',
+            conflict: 'prompt',
+          },
+        ]),
+        {
+          renderEnv: ({ text }) =>
+            renderEnvFile(loadYamlObject<unknown>(text), {
+              dataDir: '/data',
+              secretProvider: {
+                resolveSecret: () => ({
+                  status: 'found' as const,
+                  value: 's3cr3t-value',
+                }),
+              },
+            }),
+        },
+      ),
+    );
+
+    expect(plan.changes).toHaveLength(1);
+    const change = plan.changes[0]!;
+    expect(change).toMatchObject({
+      id: 'mapping-0',
+      action: 'create',
+      path: '/opt/app/.env',
+      after: {
+        mode: '0600',
+        render: 'dotenv',
+        mappingType: 'template',
+        variables: ['APP_PORT', 'DB_PASSWORD'],
+        target: { kind: 'guest', path: '/opt/app/.env' },
+      },
+    });
+    expect(JSON.stringify(plan)).not.toContain('s3cr3t-value');
+    expect(JSON.stringify(plan)).not.toContain('DB_PASSWORD="');
+    expect(JSON.stringify(plan)).toContain(
+      (change.after as { hash: string }).hash,
+    );
+  });
+
+  it('skips an unchanged rendered .env and re-creates a wrongly chmodded one', async () => {
+    const fs = new MemoryFileSystem();
+    const envYaml = 'schema_version: 1\nvalues:\n  APP_PORT: "8080"\n';
+    fs.addFile('/data/hosts/pve-01/112-example/.env.yaml', envYaml);
+    const renderEnv = ({ text }: { text: string }) =>
+      renderEnvFile(loadYamlObject<unknown>(text), { dataDir: '/data' });
+    const rendered = await renderEnv({ text: envYaml });
+    const mapping = {
+      type: 'template',
+      source: '.env.yaml',
+      destination: '/opt/app/.env',
+      conflict: 'prompt',
+    } as const;
+
+    const unchanged = await planFilemappings(
+      planOptions(fs, mappings([mapping]), {
+        renderEnv,
+        remote: {
+          '/opt/app/.env': { hash: rendered.hash, mode: '0600' },
+        },
+      }),
+    );
+    expect(unchanged.changes.map((change) => change.id)).toEqual(['noop']);
+
+    const wrongMode = await planFilemappings(
+      planOptions(fs, mappings([mapping]), {
+        renderEnv,
+        remote: {
+          '/opt/app/.env': { hash: rendered.hash, mode: '0644' },
+        },
+      }),
+    );
+    expect(wrongMode.changes).toHaveLength(1);
+    expect(wrongMode.changes[0]?.action).toBe('update');
+    expect(wrongMode.changes[0]?.summary).toContain('rendered dotenv');
+  });
+
+  it('rejects unsafe rendered .env targets', async () => {
+    const fs = new MemoryFileSystem();
+    fs.addFile(
+      '/data/hosts/pve-01/112-example/.env.yaml',
+      'schema_version: 1\nvalues:\n  APP_PORT: "8080"\n',
+    );
+    const renderEnv = ({ text }: { text: string }) =>
+      renderEnvFile(loadYamlObject<unknown>(text), { dataDir: '/data' });
+    const base = {
+      type: 'template',
+      source: '.env.yaml',
+      conflict: 'prompt',
+    } as const;
+
+    await expect(
+      planFilemappings(
+        planOptions(fs, mappings([{ ...base, destination: '/opt/app/env' }]), {
+          renderEnv,
+        }),
+      ),
+    ).rejects.toThrow("may only target a file named '.env'");
+
+    await expect(
+      planFilemappings(
+        planOptions(
+          fs,
+          mappings([{ ...base, destination: '/opt/app/.env', mode: '0644' }]),
+          { renderEnv },
+        ),
+      ),
+    ).rejects.toThrow('rendered .env files are always 0600');
+
+    await expect(
+      planFilemappings(
+        planOptions(fs, mappings([{ ...base, destination: '/opt/app/.env' }]), {
+          renderEnv: undefined,
+        }),
+      ),
+    ).rejects.toThrow('needs a tag resolution context');
+
+    const mountedFs = new MemoryFileSystem();
+    mountedFs.addFile(
+      '/data/hosts/pve-01/112-example/.env.yaml',
+      'schema_version: 1\nvalues:\n  APP_PORT: "8080"\n',
+    );
+    await expect(
+      planFilemappings(
+        planOptions(
+          mountedFs,
+          mappings([{ ...base, destination: '/data/.env' }]),
+          { renderEnv },
+        ),
+      ),
+    ).rejects.toThrow('may not be written into the data dir');
+  });
+
+  it('warns for a template that is not a tracked .env.yaml', async () => {
+    const fs = new MemoryFileSystem();
+    fs.addFile('/data/templates/app.conf.tpl', 'listen $PORT;\n');
+    const plan = await planFilemappings(
+      planOptions(
+        fs,
+        mappings([
+          {
+            type: 'template',
+            source: 'templates/app.conf.tpl',
+            destination: '/etc/app.conf',
+            conflict: 'prompt',
+          },
+        ]),
+      ),
+    );
+    expect(plan.changes).toHaveLength(1);
+    expect(plan.warnings.join('\n')).toContain('not a tracked .env.yaml');
   });
 
   it('warns when a source is missing and still returns a viewable plan', async () => {
@@ -401,7 +580,7 @@ describe('planFilemappings', () => {
     );
     expect(plan.warnings).toEqual(
       expect.arrayContaining([
-        expect.stringContaining('rendering happens at apply time'),
+        expect.stringContaining('not a tracked .env.yaml'),
         expect.stringContaining('unresolved !include'),
       ]),
     );

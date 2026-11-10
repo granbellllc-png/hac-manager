@@ -71,7 +71,7 @@ describe('CLI hacm', () => {
       tempSchemasDir,
     ]);
     expect(code).toBe(0);
-    expect(stdoutBuffer).toContain('Exported 6 JSON Schemas');
+    expect(stdoutBuffer).toContain('Exported 7 JSON Schemas');
     expect(stdoutBuffer).toContain(
       'yaml-language-server modeline documentation',
     );

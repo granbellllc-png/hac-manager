@@ -52,6 +52,7 @@ function kindOf(relative: string): ConfigKind | undefined {
   if (file === 'deployment.yaml') return 'deployment';
   if (file === 'default-filemappings.yaml' || file === 'filemappings.yaml')
     return 'filemappings';
+  if (file === '.env.yaml') return 'env';
   if (file === 'secrets.yaml.example') return 'secrets';
   if (parts.includes('tasks') || parts.includes('global-tasks')) {
     return file.endsWith('.yaml') ? 'tasks' : undefined;

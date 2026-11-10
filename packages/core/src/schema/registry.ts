@@ -3,6 +3,7 @@ import {
   deploymentDefaultsFileSchema,
   guestDeploymentFileSchema,
 } from './deployment.js';
+import { envFileSchema } from './env.js';
 import { filemappingsFileSchema } from './filemappings.js';
 import { hostFileSchema } from './host.js';
 import { secretsFileSchema } from './secrets.js';
@@ -14,6 +15,7 @@ export const configSchemas = {
   deployment: guestDeploymentFileSchema,
   'deployment-defaults': deploymentDefaultsFileSchema,
   filemappings: filemappingsFileSchema,
+  env: envFileSchema,
   tasks: tasksFileSchema,
   secrets: secretsFileSchema,
 } as const;
@@ -28,6 +30,7 @@ export const configFileGlobs: Readonly<Record<ConfigKind, string>> = {
   deployment: 'hosts/*/*/deployment.yaml',
   'deployment-defaults': 'hosts/*/default-deployment.yaml',
   filemappings: 'hosts/*/{default-filemappings.yaml,*/filemappings.yaml}',
+  env: 'hosts/*/*/.env.yaml',
   tasks: '{global-tasks,hosts/*/tasks,hosts/*/*/tasks}/*.yaml',
   secrets: 'secrets.yaml',
 };
