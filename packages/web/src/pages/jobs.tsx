@@ -72,6 +72,114 @@ type PromptResolution =
   | { readonly kind: 'confirm'; readonly confirmed: boolean }
   | { readonly kind: 'typed_confirmation'; readonly text: string };
 
+interface StorageSidePromptSummary {
+  readonly exists: boolean;
+  readonly fileCount: number;
+  readonly bytes: number;
+  readonly newestTimestamp?: string | undefined;
+}
+
+interface StoragePromptDetails {
+  readonly status: string;
+  readonly guestName: string;
+  readonly guestPath: string;
+  readonly hostPath: string;
+  readonly mounted: boolean;
+  readonly host: StorageSidePromptSummary;
+  readonly rootfs: StorageSidePromptSummary;
+  readonly staleDaemons: readonly {
+    readonly name: string;
+    readonly pid: number;
+  }[];
+  readonly recommendedResolution?: string | undefined;
+}
+
+const storageResolutionLabels: Readonly<Record<string, string>> = {
+  'keep-host-data': 'Keep Host Data',
+  'migrate-rootfs-to-host': 'Migrate Rootfs to Host',
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function parseStorageSide(value: unknown): StorageSidePromptSummary | null {
+  if (!isRecord(value)) return null;
+  if (
+    typeof value['exists'] !== 'boolean' ||
+    typeof value['fileCount'] !== 'number' ||
+    typeof value['bytes'] !== 'number'
+  ) {
+    return null;
+  }
+  return {
+    exists: value['exists'],
+    fileCount: value['fileCount'],
+    bytes: value['bytes'],
+    ...(typeof value['newestTimestamp'] === 'string'
+      ? { newestTimestamp: value['newestTimestamp'] }
+      : {}),
+  };
+}
+
+/** Parse the storage resolution payload without trusting the prompt JSON. */
+function parseStoragePrompt(value: unknown): StoragePromptDetails | null {
+  if (!isRecord(value)) return null;
+  const host = parseStorageSide(value['host']);
+  const rootfs = parseStorageSide(value['rootfs']);
+  if (
+    !host ||
+    !rootfs ||
+    typeof value['status'] !== 'string' ||
+    typeof value['guestName'] !== 'string' ||
+    typeof value['guestPath'] !== 'string' ||
+    typeof value['hostPath'] !== 'string' ||
+    typeof value['mounted'] !== 'boolean'
+  ) {
+    return null;
+  }
+  const staleDaemons = Array.isArray(value['staleDaemons'])
+    ? value['staleDaemons'].flatMap((daemon) =>
+        isRecord(daemon) &&
+        typeof daemon['name'] === 'string' &&
+        typeof daemon['pid'] === 'number'
+          ? [{ name: daemon['name'], pid: daemon['pid'] }]
+          : [],
+      )
+    : [];
+  return {
+    status: value['status'],
+    guestName: value['guestName'],
+    guestPath: value['guestPath'],
+    hostPath: value['hostPath'],
+    mounted: value['mounted'],
+    host,
+    rootfs,
+    staleDaemons,
+    ...(typeof value['recommendedResolution'] === 'string'
+      ? { recommendedResolution: value['recommendedResolution'] }
+      : {}),
+  };
+}
+
+function formatStorageBytes(value: number): string {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KiB`;
+  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MiB`;
+  return `${(value / 1024 ** 3).toFixed(2)} GiB`;
+}
+
+function formatStorageTimestamp(value: string | undefined): string {
+  if (!value) return 'no entries';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat(undefined, {
+        dateStyle: 'short',
+        timeStyle: 'medium',
+      }).format(date);
+}
+
 const activeStatuses = new Set<JobStatus>([
   'queued',
   'running',
@@ -136,6 +244,7 @@ function PromptModal({
   readonly onResolve: (resolution: PromptResolution) => Promise<void>;
 }) {
   const [typedText, setTypedText] = useState('');
+  const storage = parseStoragePrompt(prompt.payload);
   useEffect(() => setTypedText(''), [prompt.id]);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 sm:items-center">
@@ -160,6 +269,55 @@ function PromptModal({
             {error}
           </p>
         )}
+        {storage && (
+          <div className="mt-4 space-y-3 rounded-md border bg-muted/40 p-3 text-sm">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Storage {storage.status.replaceAll('-', ' ')} · mp0{' '}
+              {storage.mounted ? 'mounted' : 'not mounted'}
+            </p>
+            <p className="font-mono text-xs break-all">
+              {storage.guestPath} ← {storage.hostPath}
+            </p>
+            <dl className="grid gap-2 sm:grid-cols-2">
+              {(
+                [
+                  ['Host data', storage.host],
+                  ['Rootfs copy', storage.rootfs],
+                ] as const
+              ).map(([label, side]) => (
+                <div key={label} className="rounded border bg-background p-2">
+                  <dt className="text-xs font-semibold">{label}</dt>
+                  <dd className="text-xs text-muted-foreground">
+                    {side.exists
+                      ? `${side.fileCount} entries · ${formatStorageBytes(side.bytes)}`
+                      : 'missing'}
+                    <br />
+                    Newest: {formatStorageTimestamp(side.newestTimestamp)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            {storage.staleDaemons.length > 0 && (
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                Stale mount namespace:{' '}
+                {storage.staleDaemons
+                  .map((daemon) => `${daemon.name} (pid ${daemon.pid})`)
+                  .join(', ')}
+              </p>
+            )}
+            {storage.recommendedResolution && (
+              <p className="text-xs text-muted-foreground">
+                Recommended:{' '}
+                {storageResolutionLabels[storage.recommendedResolution] ??
+                  storage.recommendedResolution}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              The losing side is archived and renamed. It is never deleted
+              automatically.
+            </p>
+          </div>
+        )}
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           {prompt.kind === 'choice' &&
             prompt.options.map((option) => (
@@ -168,11 +326,25 @@ function PromptModal({
                 type="button"
                 variant="outline"
                 disabled={busy}
+                title={
+                  storage?.recommendedResolution &&
+                  storageResolutionLabels[storage.recommendedResolution] ===
+                    option
+                    ? 'Recommended by the storage invariant check'
+                    : undefined
+                }
                 onClick={() => {
                   void onResolve({ kind: 'choice', choice: option });
                 }}
               >
                 {option}
+                {storage?.recommendedResolution &&
+                  storageResolutionLabels[storage.recommendedResolution] ===
+                    option && (
+                    <span className="ml-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-300">
+                      recommended
+                    </span>
+                  )}
               </Button>
             ))}
           {prompt.kind === 'confirm' && (
@@ -729,4 +901,7 @@ export const jobsPageInternals = {
   formatTime,
   errorMessage,
   mergeLogLines,
+  parseStoragePrompt,
+  formatStorageBytes,
+  formatStorageTimestamp,
 };

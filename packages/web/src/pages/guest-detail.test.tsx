@@ -267,6 +267,48 @@ describe('GuestDetailPage', () => {
     expect(new URL(request.url).searchParams.get('type')).toBe('lxc');
   });
 
+  it('queues a storage invariant check and tracks its job', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    FakeEventSource.instances.length = 0;
+    const fetchFn = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const request = input as Request;
+      const path = new URL(request.url).pathname;
+      if (request.method === 'POST' && path.endsWith('/storage/check')) {
+        return Response.json(
+          {
+            job: {
+              id: 'job-storage',
+              hostId: 'fixture-host',
+              vmid: 112,
+              lane: 'guest',
+              type: 'guest.storage.invariant',
+              reason: 'manual',
+              status: 'queued',
+              priority: -50,
+              createdAt: '2026-11-10T12:00:00.000Z',
+            },
+          },
+          { status: 202 },
+        );
+      }
+      return Response.json(fixtureGuestDetail);
+    });
+    vi.stubGlobal('fetch', fetchFn);
+    const user = userEvent.setup();
+    renderDetail();
+
+    await screen.findByRole('heading', { name: 'Example LXC' });
+    await user.click(screen.getByRole('button', { name: 'Check storage' }));
+    expect(
+      await screen.findByText(/Storage check queued as job job-storage/),
+    ).toBeVisible();
+    const request = fetchFn.mock.calls.at(-1)?.[0] as Request;
+    expect(request.method).toBe('POST');
+    expect(new URL(request.url).pathname).toBe(
+      '/api/hosts/fixture-host/guests/112/storage/check',
+    );
+  });
+
   it('shows an orphan warning and missing live metrics without rendering YAML', async () => {
     installDetailApi(orphanDetail);
     renderDetail('/resources/fixture-host/212?type=not-a-type');

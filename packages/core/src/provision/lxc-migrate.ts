@@ -529,7 +529,7 @@ export function parseLxcPowerState(
   return undefined;
 }
 
-async function readPowerState(
+export async function readPowerState(
   transport: Transport,
   vmid: number,
 ): Promise<'running' | 'stopped' | undefined> {
@@ -539,7 +539,7 @@ async function readPowerState(
   return result.exitCode === 0 ? parseLxcPowerState(result.stdout) : undefined;
 }
 
-async function readLxcConfig(
+export async function readLxcConfig(
   transport: Transport,
   vmid: number,
 ): Promise<string> {
@@ -645,63 +645,57 @@ async function requireStopped(
   }
 }
 
-/**
- * Journaled, non-destructive rootfs-to-host migration (D-45). Every step is
- * idempotent where possible and the original data is never deleted. A failure
- * leaves either the untouched rootfs or the displaced copy in place.
- */
-export function createLxcMigrationSteps(
-  guest: GuestDeployment,
+/** Journaled `vzdump` snapshot taken before the guest is touched. */
+export function createLxcBackupStep(
+  plan: LxcMigrationPlan,
   options: LxcMigrationOptions,
-): readonly JournaledStep<undefined>[] {
-  const plan = planLxcMigration(guest, options);
+): JournaledStep<undefined> {
+  const argv = lxcMigrationBackupArgv(plan.vmid, options);
+  return {
+    name: `back up LXC ${plan.vmid} before rootfs migration`,
+    check: async ({ transport }) => {
+      if (!(await configExists(transport, plan.vmid))) {
+        throw new LxcMigrationError(
+          `LXC ${plan.vmid} does not exist on host '${plan.hostId}'.`,
+        );
+      }
+      return { status: 'required', detail: { argv } };
+    },
+    apply: async ({ transport, logger }) => {
+      const result = await transport.exec(argv, {
+        timeoutMs: 1_800_000,
+        onOutput: (stream, line) => {
+          void logger.info(`vzdump ${stream}: ${line}`);
+        },
+      });
+      if (result.exitCode !== 0) {
+        throw new LxcMigrationError(
+          `Backup of LXC ${plan.vmid} failed; nothing was migrated: ${
+            result.stderr.trim() || `exit code ${result.exitCode}`
+          }`,
+        );
+      }
+      return { backup: true };
+    },
+    verify: async ({ transport }) => {
+      if (!(await configExists(transport, plan.vmid))) {
+        throw new LxcMigrationError(
+          `LXC ${plan.vmid} disappeared while taking its pre-migration backup.`,
+        );
+      }
+      return { backup: true };
+    },
+    rollbackHint: `Inspect the vzdump log on ${plan.hostId}. The guest was not modified.`,
+  };
+}
+
+/** Stop the guest gracefully; migration never runs against a running guest. */
+export function createLxcStopStep(
+  plan: LxcMigrationPlan,
+): JournaledStep<undefined> {
   const { vmid } = plan;
-  const steps: JournaledStep<undefined>[] = [
-    createHostDirectoryStep(plan.hostDirectory),
-  ];
-
-  if (plan.backup) {
-    const argv = lxcMigrationBackupArgv(vmid, options);
-    steps.push({
-      name: `back up LXC ${vmid} before rootfs migration`,
-      check: async ({ transport }) => {
-        if (!(await configExists(transport, vmid))) {
-          throw new LxcMigrationError(
-            `LXC ${vmid} does not exist on host '${plan.hostId}'.`,
-          );
-        }
-        return { status: 'required', detail: { argv } };
-      },
-      apply: async ({ transport, logger }) => {
-        const result = await transport.exec(argv, {
-          timeoutMs: 1_800_000,
-          onOutput: (stream, line) => {
-            void logger.info(`vzdump ${stream}: ${line}`);
-          },
-        });
-        if (result.exitCode !== 0) {
-          throw new LxcMigrationError(
-            `Backup of LXC ${vmid} failed; nothing was migrated: ${
-              result.stderr.trim() || `exit code ${result.exitCode}`
-            }`,
-          );
-        }
-        return { backup: true };
-      },
-      verify: async ({ transport }) => {
-        if (!(await configExists(transport, vmid))) {
-          throw new LxcMigrationError(
-            `LXC ${vmid} disappeared while taking its pre-migration backup.`,
-          );
-        }
-        return { backup: true };
-      },
-      rollbackHint: `Inspect the vzdump log on ${plan.hostId}. The guest was not modified.`,
-    });
-  }
-
   const stopArgv = lxcMigrationStopArgv(vmid);
-  steps.push({
+  return {
     name: `stop LXC ${vmid} before rootfs migration`,
     check: async ({ transport }) => {
       const state = await readPowerState(transport, vmid);
@@ -747,41 +741,53 @@ export function createLxcMigrationSteps(
       return { state };
     },
     rollbackHint: `Start LXC ${vmid} again if the migration is aborted; its rootfs is unchanged.`,
-  });
+  };
+}
 
+/** Expose the rootfs at the storage-agnostic `pct mount` path. */
+export function createLxcMountStep(
+  plan: LxcMigrationPlan,
+): JournaledStep<undefined> {
+  const { vmid, rootfsMountPath } = plan;
   const mountArgv = lxcMigrationMountArgv(vmid);
-  steps.push({
+  return {
     name: `mount the rootfs of LXC ${vmid}`,
     check: async ({ transport }) =>
-      (await rootfsMounted(transport, plan.rootfsMountPath))
+      (await rootfsMounted(transport, rootfsMountPath))
         ? {
             status: 'satisfied',
-            detail: { mountPath: plan.rootfsMountPath },
+            detail: { mountPath: rootfsMountPath },
           }
-        : { status: 'required', detail: { mountPath: plan.rootfsMountPath } },
+        : { status: 'required', detail: { mountPath: rootfsMountPath } },
     apply: async ({ transport }) => {
-      if (await rootfsMounted(transport, plan.rootfsMountPath)) {
+      if (await rootfsMounted(transport, rootfsMountPath)) {
         return { changed: false };
       }
       const result = await transport.exec(mountArgv, { timeoutMs: 120_000 });
       if (result.exitCode !== 0) {
         throw commandFailure(vmid, mountArgv, result);
       }
-      return { mountPath: plan.rootfsMountPath };
+      return { mountPath: rootfsMountPath };
     },
     verify: async ({ transport }) => {
-      if (!(await rootfsMounted(transport, plan.rootfsMountPath))) {
+      if (!(await rootfsMounted(transport, rootfsMountPath))) {
         throw new LxcMigrationError(
-          `Rootfs of LXC ${vmid} is not mounted at '${plan.rootfsMountPath}' after pct mount.`,
+          `Rootfs of LXC ${vmid} is not mounted at '${rootfsMountPath}' after pct mount.`,
         );
       }
-      return { mountPath: plan.rootfsMountPath };
+      return { mountPath: rootfsMountPath };
     },
     rollbackHint: `Run 'pct unmount ${vmid}' on ${plan.hostId} if the migration is aborted while mounted.`,
-  });
+  };
+}
 
+/** Copy the rootfs data to the host directory without delete semantics. */
+export function createLxcRsyncStep(
+  plan: LxcMigrationPlan,
+): JournaledStep<undefined> {
+  const { vmid } = plan;
   const rsyncArgv = lxcMigrationRsyncArgv(plan);
-  steps.push({
+  return {
     name: `copy ${plan.guestPath} of LXC ${vmid} to ${plan.hostPath}`,
     check: async ({ transport }) => {
       const source = await pathExists(transport, plan.guestOptPath);
@@ -828,10 +834,16 @@ export function createLxcMigrationSteps(
       return { hostPath: plan.hostPath, copied: true };
     },
     rollbackHint: `The rootfs is untouched and '${plan.hostPath}' may be partially copied. Re-run the copy before displacing anything.`,
-  });
+  };
+}
 
+/** Shift guest ids into the host idmap and enforce the planned root ownership. */
+export function createLxcUidShiftStep(
+  plan: LxcMigrationPlan,
+): JournaledStep<undefined> {
+  const { vmid } = plan;
   const shiftArgv = lxcUidShiftArgv(plan);
-  steps.push({
+  return {
     name: `apply the guest idmap to ${plan.hostPath}`,
     check: async ({ transport }) => {
       const stat = await readHostDirectory(transport, plan.hostPath);
@@ -876,10 +888,16 @@ export function createLxcMigrationSteps(
       return { stat };
     },
     rollbackHint: `Re-run the shift script or chown '${plan.hostPath}' manually; the rootfs copy is still intact.`,
-  });
+  };
+}
 
+/** Rename the rootfs copy out of the way; it is never deleted here. */
+export function createLxcDisplaceGuestPathStep(
+  plan: LxcMigrationPlan,
+): JournaledStep<undefined> {
+  const { vmid } = plan;
   const displaceArgv = lxcMigrationDisplaceArgv(plan);
-  steps.push({
+  return {
     name: `displace ${plan.guestPath} of LXC ${vmid} without deleting it`,
     check: async ({ transport }) => {
       const source = await pathExists(transport, plan.guestOptPath);
@@ -934,38 +952,50 @@ export function createLxcMigrationSteps(
       return { displaced: plan.displacedPath };
     },
     rollbackHint: `Rename '${plan.displacedPath}' back to '${plan.guestOptPath}' on the mounted rootfs to undo the displacement.`,
-  });
+  };
+}
 
+/** Unmount the rootfs before changing the guest configuration. */
+export function createLxcUnmountStep(
+  plan: LxcMigrationPlan,
+): JournaledStep<undefined> {
+  const { vmid, rootfsMountPath } = plan;
   const unmountArgv = lxcMigrationUnmountArgv(vmid);
-  steps.push({
+  return {
     name: `unmount the rootfs of LXC ${vmid}`,
     check: async ({ transport }) =>
-      (await rootfsMounted(transport, plan.rootfsMountPath))
+      (await rootfsMounted(transport, rootfsMountPath))
         ? { status: 'required' }
         : { status: 'satisfied' },
     apply: async ({ transport }) => {
-      if (!(await rootfsMounted(transport, plan.rootfsMountPath))) {
+      if (!(await rootfsMounted(transport, rootfsMountPath))) {
         return { changed: false };
       }
       const result = await transport.exec(unmountArgv, { timeoutMs: 120_000 });
       if (result.exitCode !== 0) {
         throw commandFailure(vmid, unmountArgv, result);
       }
-      return { mountPath: plan.rootfsMountPath };
+      return { mountPath: rootfsMountPath };
     },
     verify: async ({ transport }) => {
-      if (await rootfsMounted(transport, plan.rootfsMountPath)) {
+      if (await rootfsMounted(transport, rootfsMountPath)) {
         throw new LxcMigrationError(
-          `Rootfs of LXC ${vmid} is still mounted at '${plan.rootfsMountPath}'.`,
+          `Rootfs of LXC ${vmid} is still mounted at '${rootfsMountPath}'.`,
         );
       }
       return { mounted: false };
     },
     rollbackHint: `Run 'pct unmount ${vmid}' on ${plan.hostId} before attaching mp0 or starting the guest.`,
-  });
+  };
+}
 
+/** Attach mp0 while stopped and refuse any hot-apply attempt. */
+export function createLxcAttachMp0Step(
+  plan: LxcMigrationPlan,
+): JournaledStep<undefined> {
+  const { vmid } = plan;
   const attachArgv = lxcMigrationAttachArgv(vmid, plan.mp0Value);
-  steps.push({
+  return {
     name: `attach mp0 to LXC ${vmid} while stopped`,
     check: async ({ transport }) => {
       const config = await readLxcConfig(transport, vmid);
@@ -1008,10 +1038,16 @@ export function createLxcMigrationSteps(
       return { mp0: plan.mp0Value };
     },
     rollbackHint: `Inspect 'pct config ${vmid}' on ${plan.hostId}; detach mp0 only while the guest is stopped.`,
-  });
+  };
+}
 
+/** Start the guest with the host-backed path. */
+export function createLxcStartStep(
+  plan: LxcMigrationPlan,
+): JournaledStep<undefined> {
+  const { vmid } = plan;
   const startArgv = lxcMigrationStartArgv(vmid);
-  steps.push({
+  return {
     name: `start LXC ${vmid} with host-backed ${plan.guestPath}`,
     check: async ({ transport }) => {
       const state = await readPowerState(transport, vmid);
@@ -1044,9 +1080,15 @@ export function createLxcMigrationSteps(
       return { state };
     },
     rollbackHint: `Inspect 'pct config ${vmid}' and the guest console. The displaced copy remains in the rootfs.`,
-  });
+  };
+}
 
-  steps.push({
+/** Final check that mp0 is effective, `[PENDING]` is empty and ownership matches. */
+export function createLxcFinalVerifyStep(
+  plan: LxcMigrationPlan,
+): JournaledStep<undefined> {
+  const { vmid } = plan;
+  return {
     name: `verify the host-backed ${plan.guestPath} of LXC ${vmid}`,
     check: async () => ({ status: 'required' }),
     apply: async ({ transport }) => {
@@ -1089,7 +1131,35 @@ export function createLxcMigrationSteps(
       return { stat, mp0: plan.mp0Value };
     },
     rollbackHint: `The original data is still at '${plan.displacedPath}' inside the rootfs; rename it back after unmounting.`,
-  });
+  };
+}
+
+/**
+ * Journaled, non-destructive rootfs-to-host migration (D-45). Every step is
+ * idempotent where possible and the original data is never deleted. A failure
+ * leaves either the untouched rootfs or the displaced copy in place.
+ */
+export function createLxcMigrationSteps(
+  guest: GuestDeployment,
+  options: LxcMigrationOptions,
+): readonly JournaledStep<undefined>[] {
+  const plan = planLxcMigration(guest, options);
+  const steps: JournaledStep<undefined>[] = [
+    createHostDirectoryStep(plan.hostDirectory),
+  ];
+
+  if (plan.backup) steps.push(createLxcBackupStep(plan, options));
+  steps.push(
+    createLxcStopStep(plan),
+    createLxcMountStep(plan),
+    createLxcRsyncStep(plan),
+    createLxcUidShiftStep(plan),
+    createLxcDisplaceGuestPathStep(plan),
+    createLxcUnmountStep(plan),
+    createLxcAttachMp0Step(plan),
+    createLxcStartStep(plan),
+    createLxcFinalVerifyStep(plan),
+  );
 
   return steps;
 }

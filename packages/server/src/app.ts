@@ -24,6 +24,7 @@ import { promptsModule } from './modules/prompts/index.js';
 import { plansModule } from './modules/plans/index.js';
 import { jobsModule } from './modules/jobs/index.js';
 import { driftModule } from './modules/drift/index.js';
+import { storageModule } from './modules/storage/index.js';
 import { HostRegistry } from './hosts/registry.js';
 import { ConnectionManager } from './router/manager.js';
 import { LiveInventoryService } from './inventory/service.js';
@@ -34,6 +35,7 @@ import { JobEventBroker } from './events/job-events.js';
 import { PromptService } from './prompts/service.js';
 import { PlanService } from './plans/service.js';
 import { DriftService } from './drift/service.js';
+import { StorageInvariantService } from './storage/service.js';
 import { DriftScheduler } from './scheduler/service.js';
 import {
   SessionService,
@@ -62,6 +64,7 @@ export interface BuildAppOptions {
   readonly promptService?: PromptService;
   readonly planService?: PlanService;
   readonly driftService?: DriftService;
+  readonly storageInvariantService?: StorageInvariantService;
   readonly scheduler?: DriftScheduler;
 }
 
@@ -289,6 +292,18 @@ export async function buildApp(
           connections: connectionManager,
         });
   app.decorate('driftService', driftService);
+  const storageInvariantService =
+    'storageInvariantService' in configOrOptions &&
+    configOrOptions.storageInvariantService
+      ? configOrOptions.storageInvariantService
+      : new StorageInvariantService({
+          repos: repositories,
+          queue: jobQueue,
+          hostRegistry,
+          connections: connectionManager,
+        });
+  storageInvariantService.registerQueueHandler();
+  app.decorate('storageInvariantService', storageInvariantService);
   const scheduler =
     'scheduler' in configOrOptions && configOrOptions.scheduler
       ? configOrOptions.scheduler
@@ -333,6 +348,10 @@ export async function buildApp(
   await app.register(driftModule, {
     driftService,
     planService,
+    hostRegistry,
+  });
+  await app.register(storageModule, {
+    storageInvariantService,
     hostRegistry,
   });
   await app.register(configEditorModule, {

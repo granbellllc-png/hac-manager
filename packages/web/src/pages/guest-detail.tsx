@@ -7,6 +7,7 @@ import {
   Cpu,
   EyeOff,
   FileCode2,
+  HardDrive,
   MemoryStick,
   ShieldAlert,
 } from 'lucide-react';
@@ -78,6 +79,9 @@ export function GuestDetailPage() {
   const [ignoring, setIgnoring] = useState(false);
   const [ignoreError, setIgnoreError] = useState<string | null>(null);
   const [ignoreFeedback, setIgnoreFeedback] = useState<string | null>(null);
+  const [checkingStorage, setCheckingStorage] = useState(false);
+  const [storageError, setStorageError] = useState<string | null>(null);
+  const [storageFeedback, setStorageFeedback] = useState<string | null>(null);
   const { user } = useAuth();
   const vmid = Number(vmidParam);
   const type = searchParams.get('type');
@@ -200,6 +204,38 @@ export function GuestDetailPage() {
     }
   };
 
+  const checkStorage = async () => {
+    if (!detail) return;
+    setCheckingStorage(true);
+    setStorageError(null);
+    setStorageFeedback(null);
+    try {
+      const result = await apiClient.POST(
+        '/api/hosts/{hostId}/guests/{vmid}/storage/check',
+        {
+          params: {
+            path: {
+              hostId: detail.summary.hostId,
+              vmid: detail.summary.vmid,
+            },
+          },
+        },
+      );
+      if (result.error || !result.data) {
+        setStorageError('Unable to queue the storage check.');
+        return;
+      }
+      setStorageFeedback(
+        `Storage check queued as job ${result.data.job.id}. The result appears in the job log; if the sides disagree you can choose which one to keep.`,
+      );
+      setTrackedJobId(result.data.job.id);
+    } catch {
+      setStorageError('Unable to queue the storage check.');
+    } finally {
+      setCheckingStorage(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4" aria-label="Loading guest">
@@ -303,6 +339,57 @@ export function GuestDetailPage() {
           setJobFeedback(`Waiting for job ${jobId} to finish…`);
         }}
       />
+
+      {detail.summary.type === 'lxc' && (
+        <section className="flex flex-col gap-3 rounded-lg border bg-card p-4">
+          <div className="flex gap-3">
+            <HardDrive
+              aria-hidden
+              className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground"
+            />
+            <div className="min-w-0">
+              <h2 className="font-semibold">Storage invariants</h2>
+              <p className="text-sm text-muted-foreground">
+                Compare the host-backed mp0 data with the raw rootfs copy. Split
+                brain and shadowed data stop file sync; choose which side to
+                keep and the other side is archived first.
+              </p>
+            </div>
+          </div>
+          <div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={checkingStorage || user?.role === 'viewer'}
+              title={
+                user?.role === 'viewer'
+                  ? 'Viewers have read-only access'
+                  : 'Queue a read-only storage invariant check'
+              }
+              onClick={() => void checkStorage()}
+            >
+              <HardDrive aria-hidden className="h-4 w-4" />
+              {checkingStorage ? 'Checking…' : 'Check storage'}
+            </Button>
+          </div>
+          {storageError && (
+            <p
+              role="alert"
+              className="rounded-md border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-700 dark:text-rose-300"
+            >
+              {storageError}
+            </p>
+          )}
+          {storageFeedback && (
+            <p
+              role="status"
+              className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300"
+            >
+              {storageFeedback}
+            </p>
+          )}
+        </section>
+      )}
 
       {jobFeedback && (
         <div

@@ -2550,6 +2550,207 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/hosts/{hostId}/guests/{vmid}/storage/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue a storage invariant check for one LXC guest */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    hostId: string;
+                    vmid: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            job: {
+                                id: string;
+                                hostId: string;
+                                vmid?: number;
+                                /** @enum {string} */
+                                lane: "guest" | "host";
+                                type: string;
+                                /** @enum {string} */
+                                reason: "manual" | "drift_push" | "drift_pull" | "schedule" | "conflict_resolution" | "orphan_action";
+                                /** @enum {string} */
+                                status: "queued" | "running" | "waiting_input" | "completed" | "failed" | "cancelled" | "interrupted";
+                                priority: number;
+                                triggeredBy?: string;
+                                createdAt: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/hosts/{hostId}/guests/{vmid}/storage/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue a storage resolution that archives the losing side before switching */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    hostId: string;
+                    vmid: number;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        resolution: "keep-host-data" | "migrate-rootfs-to-host";
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            job: {
+                                id: string;
+                                hostId: string;
+                                vmid?: number;
+                                /** @enum {string} */
+                                lane: "guest" | "host";
+                                type: string;
+                                /** @enum {string} */
+                                reason: "manual" | "drift_push" | "drift_pull" | "schedule" | "conflict_resolution" | "orphan_action";
+                                /** @enum {string} */
+                                status: "queued" | "running" | "waiting_input" | "completed" | "failed" | "cancelled" | "interrupted";
+                                priority: number;
+                                triggeredBy?: string;
+                                createdAt: string;
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            statusCode: number;
+                            error: string;
+                            message: string;
+                            confirmationText?: string;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/config/schema/deployment": {
         parameters: {
             query?: never;

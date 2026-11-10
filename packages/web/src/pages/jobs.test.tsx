@@ -187,6 +187,57 @@ describe('JobsPage', () => {
     ] as const) {
       expect(jobsPageInternals.statusClass(status)).toBeTruthy();
     }
+    expect(
+      jobsPageInternals.parseStoragePrompt({
+        status: 'split-brain',
+        guestName: 'example',
+        guestPath: '/opt',
+        hostPath: '/srv/opt',
+        mounted: false,
+        host: {
+          exists: true,
+          fileCount: 2,
+          bytes: 2048,
+          newestTimestamp: '2026-11-10T10:00:00.000Z',
+        },
+        rootfs: { exists: false, fileCount: 0, bytes: 0 },
+        staleDaemons: [{ name: 'dockerd', pid: 10 }, { bad: true }],
+        recommendedResolution: 'keep-host-data',
+      }),
+    ).toMatchObject({
+      status: 'split-brain',
+      hostPath: '/srv/opt',
+      mounted: false,
+      staleDaemons: [{ name: 'dockerd', pid: 10 }],
+      recommendedResolution: 'keep-host-data',
+    });
+    expect(jobsPageInternals.parseStoragePrompt(null)).toBeNull();
+    expect(
+      jobsPageInternals.parseStoragePrompt({
+        status: 'ok',
+        guestName: 'example',
+        guestPath: '/opt',
+        hostPath: '/srv/opt',
+        mounted: true,
+        host: { exists: true },
+        rootfs: { exists: false, fileCount: 0, bytes: 0 },
+      }),
+    ).toBeNull();
+    expect(jobsPageInternals.formatStorageBytes(512)).toBe('512 B');
+    expect(jobsPageInternals.formatStorageBytes(2048)).toBe('2.0 KiB');
+    expect(jobsPageInternals.formatStorageBytes(2 * 1024 ** 2)).toBe('2.0 MiB');
+    expect(jobsPageInternals.formatStorageBytes(2 * 1024 ** 3)).toBe(
+      '2.00 GiB',
+    );
+    expect(jobsPageInternals.formatStorageTimestamp(undefined)).toBe(
+      'no entries',
+    );
+    expect(jobsPageInternals.formatStorageTimestamp('not-a-date')).toBe(
+      'not-a-date',
+    );
+    expect(
+      jobsPageInternals.formatStorageTimestamp('2026-11-10T10:00:00.000Z'),
+    ).not.toBe('not-a-date');
     expect(jobsPageInternals.formatTime(undefined)).toBe('—');
     expect(jobsPageInternals.formatTime('2026-01-01T00:00:00.000Z')).not.toBe(
       '—',
@@ -362,6 +413,57 @@ describe('JobsPage', () => {
         new URL(request.url).pathname === `/api/prompts/${prompt.id}/resolve`,
     );
     expect(resolution).toBeDefined();
+  });
+
+  it('renders storage resolution details and marks the recommended side', async () => {
+    const prompt = {
+      id: 'prompt-storage',
+      jobId: 'job-1',
+      hostId: 'pve-01',
+      vmid: 112,
+      kind: 'choice',
+      status: 'pending',
+      message: 'Storage split-brain detected for LXC 112',
+      payload: {
+        vmid: 112,
+        guestName: 'adguard',
+        status: 'split-brain',
+        guestPath: '/opt',
+        hostPath: '/opt/server-data/pve-01/adguard/opt',
+        mounted: false,
+        host: {
+          exists: true,
+          fileCount: 2,
+          bytes: 2048,
+          newestTimestamp: '2026-11-10T10:00:00.000Z',
+        },
+        rootfs: { exists: false, fileCount: 0, bytes: 0 },
+        staleDaemons: [{ name: 'dockerd', pid: 10 }],
+        recommendedResolution: 'keep-host-data',
+      },
+      options: ['Keep Host Data', 'Migrate Rootfs to Host'],
+      createdAt: '2026-11-10T12:00:00.000Z',
+    };
+    const { requests } = installApi({ prompt });
+    const user = userEvent.setup();
+    renderJobs();
+
+    expect(await screen.findByRole('dialog')).toBeVisible();
+    expect(screen.getByText(/Storage split brain/)).toBeVisible();
+    expect(screen.getByText(/2 entries/)).toBeVisible();
+    expect(screen.getByText(/Stale mount namespace: dockerd/)).toBeVisible();
+    expect(screen.getByText(/Recommended: Keep Host Data/)).toBeVisible();
+    await user.click(screen.getByRole('button', { name: /Keep Host Data/ }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+    expect(
+      requests.some(
+        (request) =>
+          new URL(request.url).pathname ===
+          '/api/prompts/prompt-storage/resolve',
+      ),
+    ).toBe(true);
   });
 
   it('shows empty, viewer, and API failure states', async () => {
