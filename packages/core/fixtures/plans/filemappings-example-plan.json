@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "plan-filemappings-example",
+  "operation": "files.sync",
+  "target": {
+    "hostId": "example-host",
+    "vmid": 112,
+    "resourceType": "file"
+  },
+  "summary": "Sync 1 file mapping(s) to LXC 112",
+  "changes": [
+    {
+      "id": "mapping-0",
+      "action": "create",
+      "summary": "Create /etc/example.conf from appdata/example.conf (sha256 186fbf76210b…)",
+      "path": "/etc/example.conf",
+      "before": null,
+      "after": {
+        "hash": "186fbf76210bb43d4abb985d450dff663d58429ea5890079f516a24338935c5d",
+        "size": 92,
+        "mode": "0644",
+        "source": "appdata/example.conf",
+        "destination": "/etc/example.conf",
+        "target": {
+          "kind": "guest",
+          "path": "/etc/example.conf",
+          "guestPath": "/etc/example.conf"
+        },
+        "mappingType": "file"
+      }
+    }
+  ],
+  "warnings": [],
+  "destructive": false,
+  "stateFingerprint": "62ec02da8279c4dea2aeac21685c1149a8371752733bf508c9479cb3b283e513",
+  "createdAt": "2026-11-10T12:00:00.000Z"
+}

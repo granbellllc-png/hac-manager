@@ -9,6 +9,8 @@ export interface FileStat {
 
 export interface FileSystem {
   readFile(path: string, encoding: 'utf8'): Promise<string>;
+  /** Optional binary read used to hash archives and other non-UTF-8 files. */
+  readBinary?(path: string): Promise<Uint8Array>;
   writeFile(
     path: string,
     content: string,
@@ -27,6 +29,10 @@ export const defaultNodeFileSystem: FileSystem = {
   async readFile(path, encoding) {
     const fs = await import('node:fs/promises');
     return fs.readFile(path, encoding);
+  },
+  async readBinary(path) {
+    const fs = await import('node:fs/promises');
+    return fs.readFile(path);
   },
   async writeFile(path, content, options) {
     const fs = await import('node:fs/promises');

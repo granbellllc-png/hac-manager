@@ -51,4 +51,5 @@ export * from './plans/index.js';
 export * from './guest/index.js';
 export * from './provision/index.js';
 export * from './storage/index.js';
+export * from './filemappings/index.js';
 export * from './drift/index.js';
